@@ -163,6 +163,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     sentryDsn: env.EXPO_PUBLIC_SENTRY_DSN,
     /** The build includes Firebase phone sign-in (D-166). */
     firebasePhoneAuth: FIREBASE,
+    e2e: env.EXPO_PUBLIC_E2E === '1',
     // The EAS project (expo.dev, @touchgrass2026s-team/touchgrass). Not a secret; an env value overrides it.
     eas: { projectId: env.EXPO_PUBLIC_EAS_PROJECT_ID ?? EAS_PROJECT_ID },
   },

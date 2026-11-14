@@ -145,11 +145,14 @@ export function Sheet({
   onClose,
   children,
   testID,
+  footer,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   testID?: string;
+  /** Pinned under the scrolling content (e.g. Reset / Show plans), always in reach (D-198). */
+  footer?: ReactNode;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -179,6 +182,11 @@ export function Sheet({
             },
           ]}
         >
+          <View
+            style={[styles.handle, { backgroundColor: theme.colors.border }]}
+            accessible={false}
+            importantForAccessibility="no"
+          />
           <Text variant="heading" accessibilityRole="header">
             {title}
           </Text>
@@ -190,6 +198,7 @@ export function Sheet({
           >
             {children}
           </ScrollView>
+          {footer ? <View style={styles.sheetFooter}>{footer}</View> : null}
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
@@ -497,7 +506,9 @@ const styles = StyleSheet.create({
   grow: { flexGrow: 1, flexShrink: 1 },
   backdrop: { flex: 1 },
   sheet: { borderWidth: 1, padding: 20, gap: 12, maxHeight: '88%' },
-  sheetBody: { flexGrow: 0 },
+  sheetBody: { flexGrow: 0, flexShrink: 1 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginTop: -8 },
+  sheetFooter: { flexDirection: 'row', gap: 12, paddingTop: 8 },
   sheetContent: { gap: 12 },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthName: { textAlign: 'center', flexGrow: 1 },

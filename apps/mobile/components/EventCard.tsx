@@ -1,13 +1,14 @@
 import { type EventSummary, type FeedItem, genderOnly } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowRight, Calendar, Check, Compass, EyeOff, Heart, Lock, People } from './icons';
+import { ArrowRight, Calendar, Check, EyeOff, Heart, Lock, People } from './icons';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { localized } from '../src/features/catalog/api';
 import { capacityLabel, formatWhen, locationLabel, rsvpLabel } from '../src/features/events/format';
 import { useTheme } from '../src/theme/theme';
 import { Avatar } from './Avatar';
+import { PlanArt } from './PlanArt';
 import { AnimatedPressable, Icon, Pill, Text, usePressScale } from './ui';
 
 type FeedExtras = Pick<FeedItem, 'preview' | 'via' | 'reasons' | 'distanceMeters' | 'weather'>;
@@ -155,12 +156,7 @@ export function EventCard({
             />
           </>
         ) : (
-          <LinearGradient
-            colors={[theme.colors.surfaceAlt, theme.colors.surface]}
-            style={[StyleSheet.absoluteFill, styles.placeholder]}
-          >
-            <Icon icon={Compass} size={40} color={theme.colors.textMuted} strokeWidth={1.4} />
-          </LinearGradient>
+          <PlanArt seed={event.id} />
         )}
         <View style={styles.topRow}>
           <View style={styles.pills}>

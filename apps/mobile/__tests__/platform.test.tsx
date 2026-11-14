@@ -83,6 +83,7 @@ describe('theme and config', () => {
       webUrl: 'http://localhost:3000',
       // Off unless the build has the Firebase config files (D-166).
       firebasePhoneAuth: false,
+      e2e: false,
       appVersion: '0.1.0',
     });
   });

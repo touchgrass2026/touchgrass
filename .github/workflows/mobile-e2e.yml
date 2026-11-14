@@ -52,6 +52,8 @@ jobs:
         env:
           # adb reverse (below) maps the emulator's localhost to the runner, so API and presigned S3 URLs just work.
           EXPO_PUBLIC_API_URL: http://localhost:4000
+          # The first-launch app guide would cover the dock the flows tap (D-198).
+          EXPO_PUBLIC_E2E: '1'
         run: |
           npx expo prebuild --platform android --no-install
           cd android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon

@@ -7,6 +7,7 @@ import { readAppEnvironment } from '../../../src/config';
 import { useLogout } from '../../../src/features/auth/api';
 import { openLegal } from '../../../src/features/legal/links';
 import { useTutorial } from '../../../src/features/me/api';
+import { resetDockGuide } from '../../../components/DockGuide';
 import { useSettingsStore } from '../../../src/stores/settings-store';
 
 export default function SettingsScreen() {
@@ -79,6 +80,8 @@ export default function SettingsScreen() {
         onPress={() =>
           void tutorial.mutateAsync(false).then(
             () => {
+              // The dock guide comes back too, after the tutorial (D-198).
+              void resetDockGuide().catch(() => undefined);
               router.push('/tutorial');
             },
             () => undefined,

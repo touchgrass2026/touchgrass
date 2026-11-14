@@ -6,6 +6,8 @@ export interface SegmentedTabsProps<K extends string> {
   tabs: { key: K; label: string; badge?: number }[];
   value: K;
   onChange: (key: K) => void;
+  /** testID of each segment is `${testIDPrefix}-${key}` (default "tab"). */
+  testIDPrefix?: string;
 }
 
 /**
@@ -13,7 +15,12 @@ export interface SegmentedTabsProps<K extends string> {
  * loose pills that wrapped onto uneven lines. Labels shrink to fit one line, or take two at large text sizes;
  * counts sit in a small badge. Accessible as a tab list.
  */
-export function SegmentedTabs<K extends string>({ tabs, value, onChange }: SegmentedTabsProps<K>) {
+export function SegmentedTabs<K extends string>({
+  tabs,
+  value,
+  onChange,
+  testIDPrefix = 'tab',
+}: SegmentedTabsProps<K>) {
   const theme = useTheme();
   return (
     <View
@@ -47,7 +54,7 @@ export function SegmentedTabs<K extends string>({ tabs, value, onChange }: Segme
                 backgroundColor: selected ? theme.colors.primary : 'transparent',
               },
             ]}
-            testID={`tab-${tab.key}`}
+            testID={`${testIDPrefix}-${tab.key}`}
           >
             <Text
               variant="label"

@@ -29,6 +29,7 @@ import { useTrustedContacts } from '../src/features/safety/api';
 import { PersonRow } from './PersonRow';
 import { useTrack } from '../src/features/analytics/analytics';
 import { Button, FadeIn, IconText, Pop, Text, TextField } from './ui';
+import { PlanArt } from './PlanArt';
 import { useFlag } from '../src/features/app-config/use-flag';
 
 /**
@@ -207,7 +208,15 @@ export function EventDetailView({
               accessible={false}
               importantForAccessibility="no"
             />
-          ) : null}
+          ) : (
+            // No cover photo: the same artwork the cards show, so the plan never opens on a bare card.
+            <View
+              style={[styles.cover, styles.coverArt, { borderRadius: theme.radii.lg }]}
+              testID="event-art"
+            >
+              <PlanArt seed={event.id} category={event.category?.slug} iconSize={48} />
+            </View>
+          )}
           <Text variant="caption" tone="primary">
             {formatWhen(event.startsAt, i18n.language, event.timezone)} –{' '}
             {formatTime(event.endsAt, i18n.language, event.timezone)}
@@ -799,6 +808,7 @@ const styles = StyleSheet.create({
   popStart: { alignSelf: 'flex-start' },
   wrap: { gap: 12 },
   cover: { width: '100%', aspectRatio: 1.6 },
+  coverArt: { overflow: 'hidden' },
   hero: { borderWidth: 1, padding: 12, gap: 8, overflow: 'hidden' },
   map: { height: 180 },
   banner: { gap: 8, padding: 12, borderWidth: 2 },

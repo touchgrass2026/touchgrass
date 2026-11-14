@@ -15,8 +15,8 @@ import {
 import { formatWhen, locationLabel } from '../../src/features/events/format';
 import { useScreenReader } from '../../src/hooks/use-screen-reader';
 import { useTheme } from '../../src/theme/theme';
-import { Compass } from '../icons';
-import { AnimatedPressable, Icon, Pill, Text, usePressScale } from '../ui';
+import { PlanArt } from '../PlanArt';
+import { AnimatedPressable, Pill, Text, usePressScale } from '../ui';
 
 const GAP = 12;
 const PEEK = 28;
@@ -197,12 +197,7 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
           accessibilityIgnoresInvertColors
         />
       ) : (
-        <LinearGradient
-          colors={['#1F3A26', '#0F172A', '#000000']}
-          style={[StyleSheet.absoluteFill, styles.placeholder]}
-        >
-          <Icon icon={Compass} size={44} color="#E5FB46" strokeWidth={1.4} />
-        </LinearGradient>
+        <PlanArt seed={item.id} iconSize={44} />
       )}
       <LinearGradient
         colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.85)']}

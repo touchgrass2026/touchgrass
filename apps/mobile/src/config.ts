@@ -9,6 +9,8 @@ const Extra = z.object({
   playStoreUrl: z.url().optional(),
   sentryDsn: z.string().optional(),
   firebasePhoneAuth: z.boolean().default(false),
+  /** Automated UI test builds (Maestro): skip the first-launch app guide that would cover the dock. */
+  e2e: z.boolean().default(false),
   eas: z.object({ projectId: z.string() }).optional(),
 });
 

@@ -1,20 +1,12 @@
 import type { EventSummary } from '@touchgrass/shared';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { formatWhen } from '../../src/features/events/format';
 import { useTheme } from '../../src/theme/theme';
-import { Compass, People } from '../icons';
-import {
-  AnimatedPressable,
-  FadeIn,
-  Icon,
-  IconText,
-  staggerDelay,
-  Text,
-  usePressScale,
-} from '../ui';
+import { People } from '../icons';
+import { PlanArt } from '../PlanArt';
+import { AnimatedPressable, FadeIn, IconText, staggerDelay, Text, usePressScale } from '../ui';
 
 const TILE = 152;
 const GAP = 12;
@@ -109,12 +101,7 @@ function PlanTile({
             accessibilityIgnoresInvertColors
           />
         ) : (
-          <LinearGradient
-            colors={['#1F3A26', '#0F172A']}
-            style={[StyleSheet.absoluteFill, styles.placeholder]}
-          >
-            <Icon icon={Compass} size={30} color="#E5FB46" strokeWidth={1.4} />
-          </LinearGradient>
+          <PlanArt seed={item.id} iconSize={30} />
         )}
       </View>
       <Text variant="label" numberOfLines={2}>

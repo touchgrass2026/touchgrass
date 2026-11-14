@@ -259,7 +259,9 @@ describe('Discover tab (F-DSC-01..08)', () => {
     expect(screen.getByTestId('all-plans-rail')).toBeOnTheScreen();
     expect(screen.queryByTestId('category-rail')).toBeNull();
     // A filter narrows what goes into the rows; the layout stays.
-    await fireEvent.press(screen.getByTestId('toggle-soloFriendly'));
+    await fireEvent.press(screen.getByTestId('more-filters'));
+    await fireEvent(await screen.findByTestId('toggle-soloFriendly'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('filters-apply'));
     await waitFor(() =>
       expect(
         api.calls.some(
@@ -291,12 +293,17 @@ describe('Discover tab (F-DSC-01..08)', () => {
     await renderWithProviders(<DiscoverScreen />, { fetchFn: api.fetch });
     expect(await screen.findByText(/Nothing matches yet/)).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('when-tonight'));
-    await fireEvent.press(screen.getByTestId('toggle-free'));
+    // Everything else lives in the Filters sheet (D-198): segmented sort and distance, switch rows,
+    // and a multi-select dropdown for mood.
     await fireEvent.press(screen.getByTestId('more-filters'));
+    expect(await screen.findByTestId('filters-panel')).toBeOnTheScreen();
+    await fireEvent(screen.getByTestId('toggle-free'), 'valueChange', true);
     await fireEvent.press(screen.getByTestId('sort-nearest'));
     await fireEvent.press(screen.getByTestId('radius-25'));
-    await fireEvent.press(screen.getByTestId('toggle-stepFree'));
+    await fireEvent(screen.getByTestId('toggle-stepFree'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('filter-vibe'));
     await fireEvent.press(await screen.findByTestId(`filter-vibe-${vibesFixture[0]?.id ?? ''}`));
+    await fireEvent.press(screen.getByTestId('filter-vibe-done'));
     await waitFor(() => {
       const last = new URL(urls[urls.length - 1] ?? 'http://x').searchParams;
       expect(Object.fromEntries(last)).toMatchObject({
@@ -309,7 +316,7 @@ describe('Discover tab (F-DSC-01..08)', () => {
       });
     });
     expect(screen.getByTestId('more-filters')).toHaveTextContent('Filters (5)');
-    await fireEvent.press(screen.getByRole('button', { name: 'Clear filters' }));
+    await fireEvent.press(screen.getByTestId('clear-filters'));
     await waitFor(() =>
       expect(new URL(urls[urls.length - 1] ?? 'http://x').searchParams.get('when')).toBeNull(),
     );

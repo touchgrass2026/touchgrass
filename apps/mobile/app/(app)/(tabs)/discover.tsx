@@ -10,7 +10,7 @@ import { Search } from '../../../components/icons';
 import { BRAND } from '@touchgrass/shared';
 import { Avatar } from '../../../components/Avatar';
 import { BrandLogo } from '../../../components/BrandLogo';
-import { ChipGroup } from '../../../components/ChipGroup';
+import { FiltersSheet } from '../../../components/explore/FiltersSheet';
 import { DiscoverMap } from '../../../components/DiscoverMap';
 import { FeedSkeleton } from '../../../components/FeedSkeleton';
 import { AllPlansRail } from '../../../components/explore/AllPlansRail';
@@ -23,7 +23,6 @@ import {
   Chip,
   EmptyState,
   ErrorState,
-  FadeIn,
   Icon,
   IconButton,
   OfflineState,
@@ -32,14 +31,11 @@ import {
 } from '../../../components/ui';
 import { useMe } from '../../../src/features/me/api';
 import { useTheme } from '../../../src/theme/theme';
-import { localized, useInterests, useVibeTags } from '../../../src/features/catalog/api';
 import { useFeed, useFeedClick } from '../../../src/features/discovery/api';
 import {
   activeFilterCount,
   DEFAULT_FILTERS,
   type DiscoverFilters,
-  TOGGLES,
-  type Toggle,
 } from '../../../src/features/discovery/filters';
 import { buildSections } from '../../../src/features/discovery/sections';
 import { flatten } from '../../../src/features/social/api';
@@ -49,15 +45,13 @@ import { NotificationBell } from '../../../components/NotificationBell';
 import { useFlag } from '../../../src/features/app-config/use-flag';
 
 const WHENS: FeedWhen[] = ['any', 'tonight', 'tomorrow', 'weekend'];
-const RADII = [2, 5, 10, 25, 50];
-const QUICK: Toggle[] = ['free', 'soloFriendly', 'squadGoing', 'smallGroup'];
 
 /**
  * Explore / Discover (F-DSC-01..08), in the matcha layout (D-144): brand header, search and list/map toggle,
  * the Free now radar, one scrolling row of filter chips, and photo-led plan cards.
  */
 export default function DiscoverScreen() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const router = useRouter();
   const theme = useTheme();
   const me = useMe();
@@ -70,8 +64,6 @@ export default function DiscoverScreen() {
   const mapEnabled = useFlag('map_view');
   const feed = useFeed(filters, location);
   const click = useFeedClick();
-  const interests = useInterests();
-  const vibes = useVibeTags();
 
   useEffect(() => {
     void (async () => {
@@ -280,6 +272,18 @@ export default function DiscoverScreen() {
         contentContainerStyle={styles.chips}
         testID="discover-chips"
       >
+        {/* Filters first, with a count; the full set lives in a bottom sheet (D-198). */}
+        <Button
+          label={
+            nFilters > 0 ? `${t('discover.filters')} (${String(nFilters)})` : t('discover.filters')
+          }
+          variant={nFilters > 0 ? 'primary' : 'secondary'}
+          accessibilityState={{ expanded: showFilters }}
+          onPress={() => {
+            setShowFilters(true);
+          }}
+          testID="more-filters"
+        />
         {WHENS.map((w) => (
           <Chip
             key={w}
@@ -292,111 +296,15 @@ export default function DiscoverScreen() {
             testID={`when-${w}`}
           />
         ))}
-        {QUICK.map((k) => (
-          <Chip
-            key={k}
-            label={t(`discover.${k}`)}
-            selected={filters[k]}
-            onToggle={() => {
-              set(k, !filters[k]);
-            }}
-            testID={`toggle-${k}`}
-          />
-        ))}
-        <Button
-          label={
-            nFilters > 0 ? `${t('discover.filters')} (${String(nFilters)})` : t('discover.filters')
-          }
-          variant="secondary"
-          accessibilityState={{ expanded: showFilters }}
-          onPress={() => {
-            setShowFilters((s) => !s);
-          }}
-          testID="more-filters"
-        />
       </ScrollView>
       {showFilters ? (
-        <FadeIn style={styles.panel} testID="filters-panel" distance={-8}>
-          <Text variant="label">{t('discover.sortLabel')}</Text>
-          <View style={styles.row}>
-            {(['recommended', 'soonest', 'nearest'] as const).map((s) => (
-              <Chip
-                key={s}
-                kind="radio"
-                label={t(`discover.sort_${s}`)}
-                selected={filters.sort === s}
-                onToggle={() => {
-                  set('sort', s);
-                }}
-                testID={`sort-${s}`}
-              />
-            ))}
-          </View>
-          <View style={styles.row}>
-            {RADII.map((km) => (
-              <Chip
-                key={km}
-                kind="radio"
-                label={t('discover.distance', { km })}
-                selected={filters.radiusKm === km}
-                onToggle={() => {
-                  set('radiusKm', km);
-                }}
-                testID={`radius-${String(km)}`}
-              />
-            ))}
-          </View>
-          <View style={styles.row}>
-            {TOGGLES.filter((k) => !QUICK.includes(k)).map((k) => (
-              <Chip
-                key={k}
-                label={t(`discover.${k}`)}
-                selected={filters[k]}
-                onToggle={() => {
-                  set(k, !filters[k]);
-                }}
-                testID={`toggle-${k}`}
-              />
-            ))}
-          </View>
-          <ChipGroup
-            label={t('discover.category')}
-            options={(interests.data?.items ?? []).map((i) => ({
-              id: i.id,
-              label: localized(i.name, i18n.language),
-            }))}
-            selected={filters.categoryId ? [filters.categoryId] : []}
-            onChange={(ids) => {
-              set('categoryId', ids[0] ?? null);
-            }}
-            mode="single"
-            testIDPrefix="filter-category"
-          />
-          <ChipGroup
-            label={t('discover.vibes')}
-            options={(vibes.data?.items ?? []).map((v) => ({
-              id: v.id,
-              label: localized(v.name, i18n.language),
-            }))}
-            selected={filters.vibeTagIds}
-            onChange={(ids) => {
-              set('vibeTagIds', ids);
-            }}
-            mode="multi"
-            max={5}
-            testIDPrefix="filter-vibe"
-          />
-          {nFilters > 0 ? (
-            <Button
-              label={t('discover.clearFilters')}
-              variant="ghost"
-              onPress={() => {
-                setFilters(DEFAULT_FILTERS);
-              }}
-              testID="clear-filters"
-            />
-          ) : null}
-        </FadeIn>
+        <FiltersSheet
+          filters={filters}
+          onChange={setFilters}
+          onClose={() => {
+            setShowFilters(false);
+          }}
+        />
       ) : null}
       {body}
     </Screen>
