@@ -10,13 +10,15 @@ export interface ScreenProps {
   testID?: string;
   /** Lets a screen scroll a field into view (e.g. a search whose results open below it). */
   scrollRef?: RefObject<ScrollViewInstance | null>;
+  /** Pinned under the scrolling content, above the safe area (e.g. a form's main action). */
+  footer?: ReactNode;
 }
 
 /** Room between blocks on a screen: generous, so each section reads on its own (D-151). */
 const SECTION_GAP = 22;
 
 /** Base screen: safe area, themed background, offline banner, scroll so 200% text never clips. */
-export function Screen({ children, scroll = true, testID, scrollRef }: ScreenProps) {
+export function Screen({ children, scroll = true, testID, scrollRef, footer }: ScreenProps) {
   const theme = useTheme();
   const content = (
     <View
@@ -25,7 +27,7 @@ export function Screen({ children, scroll = true, testID, scrollRef }: ScreenPro
         {
           paddingHorizontal: theme.spacing.xl - 4,
           paddingTop: theme.spacing.md,
-          paddingBottom: theme.spacing.xxxl,
+          paddingBottom: footer ? theme.spacing.xl : theme.spacing.xxxl,
           gap: SECTION_GAP,
         },
       ]}
@@ -55,6 +57,22 @@ export function Screen({ children, scroll = true, testID, scrollRef }: ScreenPro
       ) : (
         content
       )}
+      {footer ? (
+        <View
+          style={[
+            styles.footer,
+            {
+              backgroundColor: theme.colors.background,
+              borderTopColor: theme.colors.border,
+              paddingHorizontal: theme.spacing.xl - 4,
+              paddingVertical: theme.spacing.md,
+              gap: theme.spacing.sm,
+            },
+          ]}
+        >
+          {footer}
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -63,4 +81,5 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   grow: { flexGrow: 1 },
   content: { flexGrow: 1 },
+  footer: { borderTopWidth: StyleSheet.hairlineWidth },
 });

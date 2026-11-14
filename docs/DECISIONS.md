@@ -851,3 +851,15 @@ The admin Waitlist filter has a third view, **Invited, not joined** (`?status=in
 - **Chats list**: group chats carry a small outlined tag, "Crew" or "Plan".
 - **Chat header**: the name is the title (with "Crew chat"/"Plan chat" under it); Mute and New poll are round icon buttons (new `poll` glyph), so actions never look like the title.
 - **Polls like WhatsApp**: creating one stacks the options in one box with dividers and no gaps, a new row appears as you type, × removes one; in the chat each option is a row with a round tick, its count and a thin bar.
+
+## D-199 Plot is one image-led page
+
+A tester found Plot unprofessional (a long stack of boxed fields and walls of chips) and did not want a step-by-step wizard. Plot now follows the single-page pattern of the best-liked event apps:
+
+- **Cover first**: a large 16:9 cover area (`CoverPicker`); empty, it is one "Add a cover photo" target; set, the photo fills it with small Change and Remove buttons. Covers are cropped 16:9 (`pickImage(aspect)`), still sent as `coverMediaId` only when changed.
+- **The name is the heading**: typed straight in under the cover, with an underline instead of a box.
+- **One card of setting rows** (`components/plot/Settings.tsx`: icon, label, value in muted text, chevron; errors on the row): Category, When (date and time pills that open the existing calendar and time sheets, plus Tonight/Tomorrow/This weekend), Duration, Where (place search, saved places and the map in a sheet, which stays above the keyboard), Who can come, How many, and Price for approved hosts. Each row opens a sheet; non-hosts see the paid-plans note under the card.
+- **Details** is always visible (it was hidden under More options) and lifts itself above the keyboard.
+- **More options** is one row, folded by default, showing how many options are on; inside: Mood, the switches (solo-friendly, small group, mystery with its reveal time, +1s (off and disabled for paid plans), indoors, accessibility, group chat).
+- **Pinned main button** (`Screen` gained `footer`): "Publish plan" / "Save changes", disabled until the plan has a name, a category (new plans), a place and a valid time, with a line saying what is missing. Other validation still runs on submit and lands on the matching row.
+- Row icons are ink only: the lime accent stays on the main action and selected states.

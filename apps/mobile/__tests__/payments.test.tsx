@@ -698,6 +698,8 @@ describe('hosting (F-HST-01/02, F-PAY-03)', () => {
     await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
     // Plans start free; approved hosts switch to Paid to set a price.
     expect(screen.queryByTestId('plot-price')).toBeNull();
+    // Price is a setting row that opens its own sheet (D-199).
+    await fireEvent.press(await screen.findByTestId('plot-price-row'));
     await fireEvent.press(await screen.findByRole('tab', { name: 'Paid' }));
     await fireEvent.changeText(await screen.findByTestId('plot-price'), '500');
     expect(screen.getByTestId('plot-host-share')).toHaveTextContent(
@@ -707,6 +709,8 @@ describe('hosting (F-HST-01/02, F-PAY-03)', () => {
     expect(screen.getByTestId('plot-partial-pct')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('plot-refund-none'));
     expect(screen.queryByTestId('plot-cutoff')).toBeNull();
+    await fireEvent.press(screen.getByTestId('plot-price-done'));
+    expect(screen.getByTestId('plot-price-row')).toHaveAccessibleName('Price, ₹500');
   });
 
   it('everyone else sees no price field', async () => {
@@ -721,6 +725,7 @@ describe('hosting (F-HST-01/02, F-PAY-03)', () => {
       expect(api.callsTo('GET', '/v1/host/status')).toHaveLength(1);
     });
     expect(screen.queryByTestId('plot-price')).toBeNull();
+    expect(screen.queryByTestId('plot-price-row')).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Paid' })).toBeNull();
     expect(screen.getByTestId('plot-paid-hint')).toBeOnTheScreen();
   });
