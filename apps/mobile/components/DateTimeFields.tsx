@@ -98,7 +98,7 @@ export function FieldShell({
   const theme = useTheme();
   return (
     <View style={styles.wrap}>
-      <Text variant="overline" tone="muted" style={styles.upper}>
+      <Text variant="overline" tone="muted">
         {label}
       </Text>
       <Pressable
@@ -431,7 +431,7 @@ export function TimeField({ label, value, onChange, testID }: TimeFieldProps) {
           }}
           testID={testID ? `${testID}-sheet` : undefined}
         >
-          <Text variant="overline" tone="muted" style={styles.upper}>
+          <Text variant="overline" tone="muted">
             {t('events.hour')}
           </Text>
           <View style={styles.options} accessibilityRole="radiogroup">
@@ -448,7 +448,7 @@ export function TimeField({ label, value, onChange, testID }: TimeFieldProps) {
               />
             ))}
           </View>
-          <Text variant="overline" tone="muted" style={styles.upper}>
+          <Text variant="overline" tone="muted">
             {t('events.minute')}
           </Text>
           <View style={styles.options} accessibilityRole="radiogroup">
@@ -494,7 +494,6 @@ export function TimeField({ label, value, onChange, testID }: TimeFieldProps) {
 
 const styles = StyleSheet.create({
   wrap: { gap: 8 },
-  upper: { textTransform: 'uppercase' },
   field: {
     borderWidth: 1.5,
     paddingHorizontal: 14,

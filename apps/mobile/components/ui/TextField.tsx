@@ -14,7 +14,7 @@ export function TextField({ label, hint, error, style, ...rest }: TextFieldProps
   const theme = useTheme();
   return (
     <View style={styles.wrap}>
-      <Text variant="overline" tone="muted" style={styles.upper}>
+      <Text variant="overline" tone="muted">
         {label}
       </Text>
       <TextInput
@@ -62,5 +62,4 @@ const FIELD_HEIGHT = 46;
 const styles = StyleSheet.create({
   wrap: { gap: 8 },
   input: { borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 11 },
-  upper: { textTransform: 'uppercase' },
 });

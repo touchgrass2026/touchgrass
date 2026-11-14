@@ -113,8 +113,8 @@ export const typography = {
   body: { fontSize: 15, lineHeight: 22, fontWeight: '400', letterSpacing: 0 },
   label: { fontSize: 14, lineHeight: 19, fontWeight: '600', letterSpacing: 0.1 },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '500', letterSpacing: 0.1 },
-  /** Small uppercase section labels ("FREE NOW"). */
-  overline: { fontSize: 10.5, lineHeight: 14, fontWeight: '600', letterSpacing: 1.4 },
+  /** Section labels, sentence case at normal tracking (D-198: no tracked all-caps labels). */
+  overline: { fontSize: 13, lineHeight: 18, fontWeight: '600', letterSpacing: 0.1 },
 } as const;
 export const motion = { fast: 150, normal: 250, slow: 400, signalPulse: 2400 } as const;
 /** Minimum touch target (pt) for F-A11Y-01. */

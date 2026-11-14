@@ -15,13 +15,13 @@ import {
 import { Icon } from './ui';
 
 /** Deep, brand-friendly gradients (dark enough for white text over them). */
-const PALETTES: readonly [string, string][] = [
-  ['#1F3A26', '#0B130E'],
-  ['#3B2A5C', '#120C1F'],
-  ['#1E3A5F', '#0A1422'],
-  ['#5C2A33', '#1F0C10'],
-  ['#2F4A3A', '#0E1A14'],
-  ['#4A3B1E', '#18120A'],
+const PALETTES: readonly [string, string, string][] = [
+  ['#3E6B47', '#1F3A26', '#0B130E'],
+  ['#6A4F9A', '#3B2A5C', '#120C1F'],
+  ['#3A679C', '#1E3A5F', '#0A1422'],
+  ['#9A4A57', '#5C2A33', '#1F0C10'],
+  ['#55806A', '#2F4A3A', '#0E1A14'],
+  ['#86703E', '#4A3B1E', '#18120A'],
 ];
 
 function hash(s: string): number {
@@ -46,7 +46,8 @@ function glyphFor(category: string | null | undefined): GlyphIcon {
 
 /**
  * Artwork for a plan without a cover photo (D-198): one look everywhere (cards, rails, the plan screen),
- * a gradient picked from the plan id, soft rings and an icon that fits its category.
+ * a lit three-stop gradient picked from the plan id, a soft pool of light (no line patterns) and a quiet
+ * icon that fits its category. The accent stays off it: the card's own action carries the accent.
  */
 export function PlanArt({
   seed,
@@ -61,23 +62,34 @@ export function PlanArt({
   const palette = PALETTES[hash(seed) % PALETTES.length] ?? PALETTES[0];
   return (
     <LinearGradient
-      colors={palette ?? ['#1F3A26', '#0B130E']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+      colors={palette ?? ['#3E6B47', '#1F3A26', '#0B130E']}
+      locations={[0, 0.45, 1]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
       style={[StyleSheet.absoluteFill, styles.center]}
       accessible={false}
       importantForAccessibility="no-hide-descendants"
     >
-      <View style={[styles.ring, styles.ringBig]} />
-      <View style={[styles.ring, styles.ringSmall]} />
-      <Icon icon={glyphFor(category)} size={iconSize} color="#E5FB46" strokeWidth={1.4} />
+      <View style={styles.light} />
+      <Icon
+        icon={glyphFor(category)}
+        size={iconSize}
+        color="rgba(255,255,255,0.82)"
+        strokeWidth={1.4}
+      />
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  ring: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
-  ringBig: { width: 260, height: 260, borderRadius: 130, right: -80, top: -90 },
-  ringSmall: { width: 140, height: 140, borderRadius: 70, left: -40, bottom: -50 },
+  light: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    left: -110,
+    top: -170,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
 });

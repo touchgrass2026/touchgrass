@@ -199,7 +199,7 @@ export function PickList({
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
   list: { borderWidth: 1, overflow: 'hidden' },
-  heading: { paddingHorizontal: 14, paddingVertical: 8, textTransform: 'uppercase' },
+  heading: { paddingHorizontal: 14, paddingVertical: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
   grow: { flexGrow: 1, flexShrink: 1 },
   mark: { width: 22, height: 22, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },

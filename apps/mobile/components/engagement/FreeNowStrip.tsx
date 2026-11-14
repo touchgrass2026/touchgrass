@@ -35,7 +35,7 @@ export function FreeNowStrip() {
           <Pulse>
             <Icon icon={Zap} size={13} color={theme.colors.primary} strokeWidth={2.4} />
           </Pulse>
-          <Text variant="overline" tone="muted" accessibilityRole="header" style={styles.upper}>
+          <Text variant="overline" tone="muted" accessibilityRole="header">
             {t('free.title')}
           </Text>
         </View>
@@ -141,7 +141,6 @@ export function FreeNowStrip() {
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  upper: { textTransform: 'uppercase' },
   title: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   row: { gap: 18, alignItems: 'flex-start', paddingVertical: 2 },
   person: { alignItems: 'center', gap: 4, width: 64, minHeight: 44 },

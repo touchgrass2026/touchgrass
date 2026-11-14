@@ -82,7 +82,7 @@ export function DockGuide({
             {t('guide.progress', { current: step + 1, total: DOCK_GUIDE_STEPS.length })}
           </Text>
           <Text variant="heading">{t(`guide.${key}Title`)}</Text>
-          <Text tone="muted">{t(`guide.${key}Body`)}</Text>
+          <Text>{t(`guide.${key}Body`)}</Text>
           <View style={styles.actions}>
             <Button
               label={t('guide.skip')}
