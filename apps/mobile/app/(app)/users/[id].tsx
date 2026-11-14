@@ -64,21 +64,17 @@ export default function UserProfileScreen() {
     );
   }
   const p = profile.data;
-  const meta = [
-    p.age !== null ? t('profile.age', { age: p.age }) : null,
-    p.pronouns,
-    p.neighbourhoodName,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const meta = [p.pronouns, p.neighbourhoodName].filter(Boolean).join(' · ');
   return (
     <Screen testID="user-profile">
       <ProfileCard
         displayName={p.displayName}
+        age={p.age}
         subtitle={meta || null}
         bio={p.bio}
         photos={p.photos}
         interests={p.interests}
+        customInterests={p.customInterests}
         vibeTags={p.vibeTags}
         stats={p.stats}
         verified={p.verified}
@@ -86,7 +82,7 @@ export default function UserProfileScreen() {
         hostRating={p.hostRating}
       />
       {p.sharedInterestIds.length > 0 ? (
-        <Text tone="primary">
+        <Text tone="muted">
           {t('profile.sharedInterests', { count: p.sharedInterestIds.length })}
         </Text>
       ) : null}

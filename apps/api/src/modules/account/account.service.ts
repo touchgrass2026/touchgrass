@@ -68,6 +68,7 @@ export class AccountService implements OnModuleInit {
       export: async (userId) => ({
         profile: await this.profiles.get(userId),
         interestIds: await this.profiles.interestIdsOf(userId),
+        customInterests: await this.profiles.customInterestsOf(userId),
         vibeTagIds: await this.profiles.vibeTagIdsOf(userId),
         photos: await this.profiles.photos(userId, true),
       }),

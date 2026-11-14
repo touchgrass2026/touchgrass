@@ -51,6 +51,7 @@ export class MeService {
       visibility: profile.visibility,
       photos,
       interests: await this.interests.interestsByIds(interestIds),
+      customInterests: profile.customInterests,
       vibeTags: await this.interests.vibeTagsByIds(vibeIds),
       stats: stats.get(userId) ?? { eventsAttended: 0, eventsHosted: 0, reliabilityTier: 'new' },
       onboarding: {

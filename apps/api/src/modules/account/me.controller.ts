@@ -78,7 +78,9 @@ export class MeController {
     @CurrentUser() user: AuthPrincipal,
     @Body(new ZodPipe(SetInterestsBody)) body: Dto.SetInterestsBody,
   ): Promise<z.infer<typeof InterestList>> {
-    return { items: await this.profiles.setInterests(user.userId, body.interestIds) };
+    return {
+      items: await this.profiles.setInterests(user.userId, body.interestIds, body.customInterests),
+    };
   }
 
   @Put('vibe-tags')

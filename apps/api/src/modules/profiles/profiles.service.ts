@@ -40,6 +40,20 @@ import { HostRatingReader } from '../feedback/host-rating-reader.js';
 import { SocialGraphService } from '../social/graph/social-graph.service.js';
 
 export type ProfileRow = typeof profiles.$inferSelect;
+
+/** Typed interests with spaces tidied and repeats (ignoring case) dropped, first spelling kept. */
+export function tidyCustom(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const text = raw.trim().replace(/\s+/g, ' ');
+    const key = text.toLocaleLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+}
 export type ProfileUpdateResult = { kind: 'updated' } | { kind: 'underage' };
 
 /** Owns profiles, profile photos, user interests and user vibe tags. */
@@ -170,20 +184,41 @@ export class ProfilesService {
     return { kind: 'updated' };
   }
 
-  async setInterests(userId: string, ids: string[]): Promise<Interest[]> {
+  /**
+   * Replaces the listed interests and, when given, the member's own (D-199). Both count toward the limits;
+   * leaving `custom` out keeps the ones already saved. Typed interests are labels, so a flagged one is refused.
+   */
+  async setInterests(userId: string, ids: string[], custom?: string[]): Promise<Interest[]> {
     const unique = [...new Set(ids)];
-    if (unique.length < LIMITS.profile.minInterests)
+    const own =
+      custom === undefined ? (await this.getOrThrow(userId)).customInterests : tidyCustom(custom);
+    const total = unique.length + own.length;
+    if (total < LIMITS.profile.minInterests)
       throw new AppError(
         'VALIDATION_FAILED',
         `Pick at least ${LIMITS.profile.minInterests} interests`,
       );
+    if (total > LIMITS.profile.maxInterests || own.length > LIMITS.profile.maxCustomInterests)
+      throw new AppError('VALIDATION_FAILED', `At most ${LIMITS.profile.maxInterests} interests`);
     if (!(await this.interests.allActiveInterests(unique)))
       throw new AppError('VALIDATION_FAILED', 'Unknown interest');
+    if (custom !== undefined && own.some((text) => this.moderation.screen(text).flagged))
+      throw new AppError('VALIDATION_FAILED', 'Pick a different interest', [
+        { path: 'customInterests', message: 'Pick a different interest', code: 'custom' },
+      ]);
     await this.db.transaction(async (tx) => {
       await tx.delete(userInterests).where(eq(userInterests.userId, userId));
-      await tx.insert(userInterests).values(unique.map((interestId) => ({ userId, interestId })));
+      if (unique.length > 0)
+        await tx.insert(userInterests).values(unique.map((interestId) => ({ userId, interestId })));
+      if (custom !== undefined)
+        await tx.update(profiles).set({ customInterests: own }).where(eq(profiles.userId, userId));
     });
     return this.interests.interestsByIds(unique);
+  }
+
+  /** The member's own interests (D-199). */
+  async customInterestsOf(userId: string): Promise<string[]> {
+    return (await this.get(userId))?.customInterests ?? [];
   }
 
   async setVibeTags(userId: string, ids: string[]): Promise<VibeTag[]> {
@@ -295,7 +330,7 @@ export class ProfilesService {
       verification: profile.onboardingCompletedAt !== null || verification,
       dateOfBirth: profile.dateOfBirth !== null,
       city: profile.cityId !== null,
-      interests: interestIds.length >= LIMITS.profile.minInterests,
+      interests: interestIds.length + profile.customInterests.length >= LIMITS.profile.minInterests,
     };
     return { ...state, complete: Object.values(state).every(Boolean) };
   }
@@ -401,6 +436,7 @@ export class ProfilesService {
         spokenLanguages: [],
         photos: photos.slice(0, 1),
         interests: [],
+        customInterests: [],
         vibeTags: [],
         sharedInterestIds: [],
         mutualFriends: await this.mutualFriends(viewerId, targetId),
@@ -426,6 +462,7 @@ export class ProfilesService {
       spokenLanguages: profile.spokenLanguages,
       photos,
       interests: await this.interests.interestsByIds(targetInterests),
+      customInterests: profile.customInterests,
       vibeTags: await this.interests.vibeTagsByIds(vibeIds),
       sharedInterestIds: targetInterests.filter((id) => viewerSet.has(id)),
       mutualFriends,

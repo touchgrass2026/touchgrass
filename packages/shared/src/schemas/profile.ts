@@ -25,9 +25,28 @@ export const UpdateProfileBody = z
   .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field' });
 export type UpdateProfileBody = z.infer<typeof UpdateProfileBody>;
 
-export const SetInterestsBody = z.object({
-  interestIds: z.array(z.uuid()).min(P.minInterests).max(P.maxInterests),
-});
+/** An interest in the member's own words, for when it is not in the list (2–30 characters). */
+export const CustomInterest = z.string().trim().min(P.customInterestMin).max(P.customInterestMax);
+
+/**
+ * Listed interests plus, optionally, the member's own (D-199). Both count toward the interest limits. Leaving
+ * `customInterests` out keeps the ones already saved (onboarding only sends listed ones).
+ */
+export const SetInterestsBody = z
+  .object({
+    interestIds: z.array(z.uuid()).max(P.maxInterests),
+    customInterests: z.array(CustomInterest).max(P.maxCustomInterests).optional(),
+  })
+  .refine(
+    (b) => {
+      const n = b.interestIds.length + (b.customInterests?.length ?? 0);
+      return n >= P.minInterests && n <= P.maxInterests;
+    },
+    {
+      message: `Pick ${String(P.minInterests)} to ${String(P.maxInterests)} interests`,
+      path: ['interestIds'],
+    },
+  );
 export const SetVibeTagsBody = z.object({ vibeTagIds: z.array(z.uuid()).max(P.maxVibeTags) });
 export const SetPhotosBody = z.object({ mediaAssetIds: z.array(z.uuid()).min(0).max(P.maxPhotos) });
 
@@ -80,6 +99,8 @@ export const MeResponse = z.object({
   visibility: ProfileVisibility,
   photos: z.array(ProfilePhoto),
   interests: z.array(Interest),
+  /** Interests in the member's own words (D-199). */
+  customInterests: z.array(z.string()).default([]),
   vibeTags: z.array(VibeTag),
   stats: ProfileStats,
   onboarding: OnboardingState,
@@ -100,6 +121,8 @@ export const PublicProfile = z.object({
   spokenLanguages: z.array(z.string()),
   photos: z.array(MediaVariants),
   interests: z.array(Interest),
+  /** Interests in their own words (D-199). */
+  customInterests: z.array(z.string()).default([]),
   vibeTags: z.array(VibeTag),
   sharedInterestIds: z.array(z.uuid()),
   mutualFriends: z.object({

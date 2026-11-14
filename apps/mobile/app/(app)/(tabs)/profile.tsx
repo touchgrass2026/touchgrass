@@ -1,12 +1,15 @@
+import { ageInYears } from '@touchgrass/shared';
 import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { BackButton } from '../../../components/BackButton';
 import { ProfileCard } from '../../../components/ProfileCard';
 import { StreakCard } from '../../../components/engagement/StreakCard';
 import { PlanRail } from '../../../components/explore/PlanRail';
 import {
   Award,
+  ChevronRight,
   Gear,
   type GlyphIcon,
   Link,
@@ -18,7 +21,6 @@ import {
   Trophy,
 } from '../../../components/icons';
 import {
-  AnimatedPressable,
   Button,
   ErrorState,
   FadeIn,
@@ -26,9 +28,7 @@ import {
   IconButton,
   LoadingState,
   Screen,
-  staggerDelay,
   Text,
-  usePressScale,
 } from '../../../components/ui';
 import { useFlag } from '../../../src/features/app-config/use-flag';
 import { useMyEvents } from '../../../src/features/events/api';
@@ -50,9 +50,9 @@ type Shortcut = {
 };
 
 /**
- * Your profile (F-ACC-05, D-159): who you are, one clear "Edit profile" with share and settings beside it,
- * your streak, your next plans as a sideways row, and everything else as a tidy grid of tiles instead of a
- * stack of buttons.
+ * Your profile (F-ACC-05, D-199): back, share and settings as small header buttons; your photos, name and
+ * details as others see them; one clear "Edit profile"; your streak and next plans; then everything else as
+ * grouped rows (icon, label, chevron), like a settings list.
  */
 export default function MyProfileScreen() {
   const { t } = useTranslation();
@@ -83,58 +83,72 @@ export default function MyProfileScreen() {
   }
   const m = me.data;
   const plans = flatten(upcoming.data);
-  const shortcuts: Shortcut[] = [
-    { path: '/invites', label: t('profile.invites'), icon: Send, testID: 'open-invites', on: true },
-    { path: '/hosting', label: t('hosting.title'), icon: Ticket, testID: 'open-hosting', on: true },
-    { path: '/badges', label: t('badges.title'), icon: Award, testID: 'open-badges', on: true },
+  const groups: { title: string; items: Shortcut[] }[] = [
     {
-      path: '/challenges',
-      label: t('challenges.title'),
-      icon: Trophy,
-      testID: 'open-challenges',
-      on: flags.challenges,
+      title: t('profile.uiGroupActivity'),
+      items: [
+        {
+          path: '/hosting',
+          label: t('hosting.title'),
+          icon: Ticket,
+          testID: 'open-hosting',
+          on: true,
+        },
+        { path: '/badges', label: t('badges.title'), icon: Award, testID: 'open-badges', on: true },
+        {
+          path: '/challenges',
+          label: t('challenges.title'),
+          icon: Trophy,
+          testID: 'open-challenges',
+          on: flags.challenges,
+        },
+        {
+          path: '/recaps',
+          label: t('recap.title'),
+          icon: Repeat,
+          testID: 'open-recaps',
+          on: flags.recaps,
+        },
+      ],
     },
     {
-      path: '/recaps',
-      label: t('recap.title'),
-      icon: Repeat,
-      testID: 'open-recaps',
-      on: flags.recaps,
+      title: t('profile.uiGroupFriends'),
+      items: [
+        {
+          path: '/invites',
+          label: t('profile.invites'),
+          icon: Send,
+          testID: 'open-invites',
+          on: true,
+        },
+        {
+          path: '/referrals',
+          label: t('referrals.title'),
+          icon: Link,
+          testID: 'open-referrals',
+          on: flags.referrals,
+        },
+      ],
     },
     {
-      path: '/referrals',
-      label: t('referrals.title'),
-      icon: Link,
-      testID: 'open-referrals',
-      on: flags.referrals,
+      title: t('profile.uiGroupSupport'),
+      items: [
+        {
+          path: '/safety',
+          label: t('safety.title'),
+          icon: Shield,
+          testID: 'open-safety',
+          on: true,
+        },
+      ],
     },
-    { path: '/safety', label: t('safety.title'), icon: Shield, testID: 'open-safety', on: true },
   ];
 
   return (
     <Screen testID="my-profile">
-      <FadeIn>
-        <ProfileCard
-          displayName={m.displayName ?? ''}
-          subtitle={m.pronouns}
-          bio={m.bio}
-          photos={m.photos.flatMap((p) => (p.urls ? [p.urls] : []))}
-          interests={m.interests}
-          vibeTags={m.vibeTags}
-          stats={m.stats}
-          verified={m.verified}
-        />
-      </FadeIn>
-      <View style={styles.actions}>
+      <View style={styles.header}>
         <BackButton testID="profile-back" />
-        <Button
-          label={t('profile.edit')}
-          onPress={() => {
-            router.push('/profile-edit');
-          }}
-          style={styles.grow}
-          testID="edit-profile"
-        />
+        <View style={styles.grow} />
         <IconButton
           icon={<Icon icon={ShareIcon} size={18} />}
           label={t('share.shareProfile')}
@@ -152,6 +166,27 @@ export default function MyProfileScreen() {
           testID="open-settings"
         />
       </View>
+      <FadeIn style={styles.top}>
+        <ProfileCard
+          displayName={m.displayName ?? ''}
+          age={m.dateOfBirth ? ageInYears(m.dateOfBirth, new Date()) : null}
+          subtitle={m.pronouns}
+          bio={m.bio}
+          photos={m.photos.flatMap((p) => (p.urls ? [p.urls] : []))}
+          interests={m.interests}
+          customInterests={m.customInterests}
+          vibeTags={m.vibeTags}
+          stats={m.stats}
+          verified={m.verified}
+        />
+        <Button
+          label={t('profile.edit')}
+          onPress={() => {
+            router.push('/profile-edit');
+          }}
+          testID="edit-profile"
+        />
+      </FadeIn>
       <StreakCard />
       {plans.length > 0 ? (
         <PlanRail
@@ -164,83 +199,125 @@ export default function MyProfileScreen() {
           }}
         />
       ) : null}
-      <View style={styles.grid}>
-        {shortcuts
-          .filter((s) => s.on)
-          .map((s, i) => (
-            <FadeIn key={s.path} delay={staggerDelay(i, 40, 8)} style={styles.cell}>
-              <ShortcutTile
+      {groups.map((g) => {
+        const items = g.items.filter((s) => s.on);
+        if (items.length === 0) return null;
+        return (
+          <RowGroup key={g.title} title={g.title}>
+            {items.map((s, i) => (
+              <ShortcutRow
+                key={s.path}
                 label={s.label}
                 icon={s.icon}
                 testID={s.testID}
+                first={i === 0}
                 onPress={() => {
                   router.push(s.path);
                 }}
               />
-            </FadeIn>
-          ))}
-      </View>
+            ))}
+          </RowGroup>
+        );
+      })}
     </Screen>
   );
 }
 
-function ShortcutTile({
+function RowGroup({ title, children }: { title: string; children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.group}>
+      <Text variant="label" tone="muted" accessibilityRole="header">
+        {title}
+      </Text>
+      <View
+        style={[
+          styles.groupBox,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+            borderRadius: theme.radii.md,
+          },
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function ShortcutRow({
   label,
   icon,
   testID,
+  first,
   onPress,
 }: {
   label: string;
   icon: GlyphIcon;
   testID: string;
+  first: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const press = usePressScale(0.96);
+  const { t } = useTranslation();
   return (
-    <AnimatedPressable
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={t('a11y.opensScreen', { screen: label })}
       onPress={onPress}
-      onPressIn={press.onPressIn}
-      onPressOut={press.onPressOut}
       testID={testID}
-      style={[
-        styles.tile,
+      style={({ pressed }) => [
+        styles.row,
         {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          borderRadius: theme.radii.lg,
+          minHeight: theme.minTouchTarget + 8,
+          backgroundColor: pressed ? theme.colors.surfaceAlt : 'transparent',
         },
-        press.scaleStyle,
       ]}
     >
-      <View style={[styles.tileIcon, { backgroundColor: theme.colors.surfaceAlt }]}>
-        <Icon icon={icon} size={18} color={theme.colors.primary} />
+      <View style={[styles.rowIcon, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <Icon icon={icon} size={18} color={theme.colors.text} />
       </View>
-      <Text variant="label" numberOfLines={2}>
-        {label}
-      </Text>
-    </AnimatedPressable>
+      <View
+        style={[
+          styles.rowBody,
+          first
+            ? null
+            : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border },
+        ]}
+      >
+        <Text style={styles.grow} numberOfLines={2}>
+          {label}
+        </Text>
+        <Icon icon={ChevronRight} size={16} color={theme.colors.textMuted} />
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grow: { flex: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  cell: { width: '47%', flexGrow: 1 },
-  tile: {
-    minHeight: 84,
-    padding: 14,
-    gap: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  tileIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  top: { gap: 16 },
+  group: { gap: 8 },
+  groupBox: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: 14 },
+  rowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
+  },
+  rowBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 14,
+    paddingVertical: 12,
   },
 });

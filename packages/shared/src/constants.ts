@@ -39,6 +39,10 @@ export const LIMITS = {
     minPhotos: 3,
     minInterests: 3,
     maxInterests: 15,
+    /** Interests typed by the member (D-199); they count toward maxInterests. */
+    maxCustomInterests: 5,
+    customInterestMin: 2,
+    customInterestMax: 30,
     bioMaxLength: 300,
     maxVibeTags: 5,
     displayNameMin: 2,
