@@ -16,3 +16,6 @@ android/
 *.tsbuildinfo
 .DS_Store
 apps/web/e2e/.auth/
+
+# Agent worktrees (local only)
+.claude/worktrees/
