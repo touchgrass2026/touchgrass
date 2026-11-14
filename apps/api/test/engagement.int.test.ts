@@ -178,6 +178,22 @@ async function newCrew(admin: Member, body: Record<string, unknown> = {}): Promi
   return res.body as CrewDetail;
 }
 
+describe('crews in their own words (D-197)', () => {
+  it('a crew can name its activity when it is not in the list; it needs one or the other', async () => {
+    const admin = await verifiedMember(h);
+    const res = await api(admin).post('/v1/crews', {
+      name: 'Box cricketers',
+      activity: 'Box cricket',
+    });
+    expect(res.status).toBe(201);
+    expect((res.body as CrewDetail).activity).toBe('Box cricket');
+    expect((res.body as CrewDetail).interestId).toBeNull();
+    // Neither a listed interest nor its own words: refused.
+    const none = await api(admin).post('/v1/crews', { name: 'Mystery crew' });
+    expect(none.status).toBe(400);
+  });
+});
+
 describe('crews in search (F-DSC-09)', () => {
   it('finds your crews and open ones, never invite-only crews you are not in', async () => {
     const admin = await verifiedMember(h);

@@ -1,0 +1,1 @@
+ALTER TABLE crews DROP COLUMN IF EXISTS activity;

@@ -71,6 +71,11 @@ export default function ChatsScreen() {
             const line = preview(t, c);
             const label = [
               c.title,
+              c.kind === 'crew'
+                ? t('chat.kindCrew')
+                : c.kind === 'event'
+                  ? t('chat.kindPlan')
+                  : null,
               line,
               c.unreadCount > 0 ? t('chat.unread', { count: c.unreadCount }) : null,
               c.muted ? t('chat.muted') : null,
@@ -111,6 +116,20 @@ export default function ChatsScreen() {
                     <Text variant="caption" tone="muted">
                       {formatTime(c.lastMessage.createdAt, i18n.language)}
                     </Text>
+                  ) : null}
+                  {c.kind !== 'direct' ? (
+                    // What kind of group this is, at a glance (D-197).
+                    <View
+                      style={[
+                        styles.kindTag,
+                        { borderColor: theme.colors.primary, borderRadius: theme.radii.pill },
+                      ]}
+                      testID={`conv-kind-${c.id}`}
+                    >
+                      <Text variant="caption" tone="primary" style={styles.kindText}>
+                        {c.kind === 'crew' ? t('chat.kindCrew') : t('chat.kindPlan')}
+                      </Text>
+                    </View>
                   ) : null}
                   {c.unreadCount > 0 ? (
                     <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
@@ -154,6 +173,8 @@ export default function ChatsScreen() {
 }
 
 const styles = StyleSheet.create({
+  kindTag: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1 },
+  kindText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { flexShrink: 1 },
   row: {

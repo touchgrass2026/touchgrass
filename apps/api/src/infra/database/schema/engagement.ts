@@ -33,6 +33,8 @@ export const crews = pgTable('crews', {
   name: text('name').notNull(),
   description: text('description').notNull().default(''),
   interestId: uuid('interest_id'),
+  /** Free-text activity when it is not in the interest list (D-197). */
+  activity: text('activity'),
   coverMediaId: uuid('cover_media_id'),
   joinPolicy: text('join_policy', { enum: ['request', 'invite_only'] })
     .notNull()

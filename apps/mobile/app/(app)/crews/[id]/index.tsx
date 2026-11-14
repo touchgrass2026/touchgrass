@@ -91,6 +91,11 @@ function CrewView({ crew }: { crew: CrewDetail }) {
       <Text variant="title" accessibilityRole="header">
         {crew.name}
       </Text>
+      {crew.activity ? (
+        <Text variant="label" tone="primary" testID="crew-activity">
+          {crew.activity}
+        </Text>
+      ) : null}
       {crew.description ? <Text>{crew.description}</Text> : null}
       {crew.held ? (
         <Text tone="muted" accessibilityRole="alert" testID="crew-held">

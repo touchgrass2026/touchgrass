@@ -841,3 +841,13 @@ The admin Waitlist filter has a third view, **Invited, not joined** (`?status=in
 - **Cover photo when plotting.** Plot has an optional cover photo (uploaded as `event_cover`, awaited until ready, sent only when changed).
 - **Hosts scan, they don't check in.** The plan screen never shows a host their own check-in code or self check-in; they get Scan check-ins.
 - **One tap opens a result with the keyboard up** (horizontal card rows let taps through), and Plot's place suggestions scroll above the keyboard.
+
+## D-197 Squad and Chats polish from testers (15 Nov)
+
+- **Add to squad turns into "Requested"** and stays (tap again to cancel), instead of the card vanishing when suggestions refresh; `SquadActions` keeps what was just done until the server agrees, and the Squad screen keeps people it just requested in "Suggested".
+- **Tabs are a segmented control**: one rounded track, equal-width segments, the selected one filled, counts in a small badge (`SegmentedTabs`, used across the app). "People you might know" is now "Suggested"; Crews is a header action next to the Squad title.
+- **Contacts**: every contact is reachable (the list stopped at the first 200, around "C"); a search box and "Show more" in steps of 100.
+- **Start a crew**: dropdowns instead of chip walls. "What does the crew do?" is a searchable list; when nothing matches, "Use “…”" makes what was typed the crew's activity (`crews.activity`, migration `0024`; a crew needs a listed interest or its own activity; sessions of a crew in its own words have no category). "Who can join" is a dropdown too. `PickList`/`SelectField` gained `onCreate` for this.
+- **Chats list**: group chats carry a small outlined tag, "Crew" or "Plan".
+- **Chat header**: the name is the title (with "Crew chat"/"Plan chat" under it); Mute and New poll are round icon buttons (new `poll` glyph), so actions never look like the title.
+- **Polls like WhatsApp**: creating one stacks the options in one box with dividers and no gaps, a new row appears as you type, × removes one; in the chat each option is a row with a round tick, its count and a thin bar.

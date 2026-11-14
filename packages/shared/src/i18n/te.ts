@@ -16,6 +16,7 @@ export const te: Translation = {
     crew: 'క్రూ',
   },
   common: {
+    useTyped: '“{{text}}” పెట్టు',
     choose: 'ఎంచుకోవడానికి నొక్కు',
     search: 'వెతుకు',
     noMatches: 'ఏమీ దొరకలేదు. వేరే పదంతో వెతుకు.',
@@ -940,10 +941,12 @@ export const te: Translation = {
     },
   },
   squad: {
+    showMoreContacts: 'ఇంకా చూపించు ({{count}} మిగిలాయి)',
+    searchContacts: 'కాంటాక్ట్స్\u200cలో వెతుకు',
     title: 'నీ స్క్వాడ్',
     tabSquad: 'స్క్వాడ్',
     tabRequests: 'రిక్వెస్ట్‌లు',
-    tabSuggestions: 'నీకు తెలిసినవాళ్ళు కావొచ్చు',
+    tabSuggestions: 'సూచనలు',
     tabActivity: 'యాక్టివిటీ',
     empty:
       'నీ స్క్వాడ్‌లో ఇంకా ఎవరూ లేరు. కాంటాక్ట్స్‌లో ఫ్రెండ్స్‌ని వెతుకు, లేదా ఏదైనా ప్లాన్‌కి వెళ్ళు.',
@@ -1414,6 +1417,12 @@ export const te: Translation = {
     },
   },
   chat: {
+    removeOption: 'ఆప్షన్ {{n}} తీసేయ్',
+    pollOptions: 'ఆప్షన్లు',
+    kindPlanChat: 'ప్లాన్ చాట్',
+    kindCrewChat: 'క్రూ చాట్',
+    kindPlan: 'ప్లాన్',
+    kindCrew: 'క్రూ',
     someone: 'ఎవరో',
     photoFrom: '{{name}} పంపిన ఫోటో',
     title: 'చాట్స్',
@@ -1786,6 +1795,9 @@ export const te: Translation = {
     pingHint: 'నీకు ఇప్పుడు కలవాలని ఉందని {{name}}కి తెలుస్తుంది.',
   },
   crews: {
+    activitySearch: 'వెతుకు లేదా నీదే టైప్ చెయ్',
+    activityPlaceholder: 'ఒకటి ఎంచుకో లేదా టైప్ చెయ్',
+    activity: 'క్రూ ఏం చేస్తుంది?',
     title: 'క్రూలు',
     mine: 'నీ క్రూలు',
     discover: 'క్రూ వెతుకు',

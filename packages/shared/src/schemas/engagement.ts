@@ -42,21 +42,32 @@ export type CrewRole = z.infer<typeof CrewRole>;
 export const CrewMemberStatus = z.enum(['active', 'requested', 'invited']);
 export type CrewMemberStatus = z.infer<typeof CrewMemberStatus>;
 
+const CrewActivity = z.string().trim().min(2).max(40);
+
 const CrewFields = z.object({
   name: z.string().trim().min(C.nameMinLength).max(C.nameMaxLength),
   description: z.string().trim().max(C.descriptionMaxLength).default(''),
-  /** What the crew does; its sessions use it as their category. */
-  interestId: z.uuid(),
+  /** What the crew does, from the interest list; its sessions use it as their category. */
+  interestId: z.uuid().nullable().default(null),
+  /** Or in the founder's own words, when it is not in the list (D-197). */
+  activity: CrewActivity.nullable().default(null),
   coverMediaId: z.uuid().nullable().default(null),
   joinPolicy: CrewJoinPolicy.default('request'),
 });
-export const CreateCrewBody = CrewFields;
+export const CreateCrewBody = CrewFields.refine(
+  (b) => b.interestId !== null || b.activity !== null,
+  {
+    message: 'Pick what the crew does',
+    path: ['interestId'],
+  },
+);
 export type CreateCrewBody = z.infer<typeof CreateCrewBody>;
 export const UpdateCrewBody = z
   .object({
     name: CrewFields.shape.name,
     description: z.string().trim().max(C.descriptionMaxLength),
-    interestId: z.uuid(),
+    interestId: z.uuid().nullable(),
+    activity: CrewActivity.nullable(),
     coverMediaId: z.uuid().nullable(),
     joinPolicy: CrewJoinPolicy,
   })
@@ -114,6 +125,8 @@ export const CrewSummary = z.object({
   description: z.string(),
   cover: MediaVariants.nullable(),
   interestId: z.uuid().nullable(),
+  /** Free-text activity, shown instead of the interest name when set (D-197). */
+  activity: z.string().nullable().optional(),
   joinPolicy: CrewJoinPolicy,
   memberCount: z.number().int(),
   nextSession: z.object({ eventId: z.uuid(), startsAt: z.iso.datetime() }).nullable(),

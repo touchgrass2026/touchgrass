@@ -1,5 +1,5 @@
 import type { RelationshipStatus } from '@touchgrass/shared';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { type SquadAction, useSquadAction } from '../src/features/social/api';
@@ -11,15 +11,37 @@ export function SquadActions({
   userId,
   relationship,
   compact = false,
+  onChange,
 }: {
   userId: string;
   relationship: RelationshipStatus;
   compact?: boolean;
+  /** Told when this person's status changes here (e.g. so a list keeps someone just requested). */
+  onChange?: (next: RelationshipStatus) => void;
 }) {
   const { t } = useTranslation();
   const action = useSquadAction();
+  // What the server said, overridden by what was just done here, so "Add to squad" turns into "Requested"
+  // at once (like Instagram) instead of the row vanishing when lists refresh.
+  const [override, setOverride] = useState<RelationshipStatus | null>(null);
+  useEffect(() => {
+    setOverride(null);
+  }, [relationship]);
+  const current = override ?? relationship;
   const run = (a: SquadAction): void => {
-    action.mutate({ action: a, userId });
+    action.mutate(
+      { action: a, userId },
+      {
+        onSuccess: () => {
+          const next: RelationshipStatus | null =
+            a === 'request' ? 'request_sent' : a === 'cancel' ? 'none' : null;
+          if (next) {
+            setOverride(next);
+            onChange?.(next);
+          }
+        },
+      },
+    );
   };
   const variant = compact ? 'ghost' : 'primary';
   const failure = action.isError ? (
@@ -33,7 +55,7 @@ export function SquadActions({
       {failure}
     </>
   );
-  switch (relationship) {
+  switch (current) {
     case 'self':
       return null;
     case 'none':
@@ -51,8 +73,9 @@ export function SquadActions({
     case 'request_sent':
       return withError(
         <Button
-          label={t('squad.cancelRequest')}
-          variant="ghost"
+          label={t('squad.requested')}
+          variant="secondary"
+          accessibilityHint={t('squad.cancelRequest')}
           loading={action.isPending}
           onPress={() => {
             run('cancel');

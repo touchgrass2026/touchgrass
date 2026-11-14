@@ -27,6 +27,11 @@ export interface PickListProps {
   emptyText?: string;
   /** Lists longer than this get a search box. */
   searchFrom?: number;
+  /**
+   * When set, a search that matches no option exactly offers "Use “…”": what was typed becomes the choice
+   * (D-197). Called with the trimmed text.
+   */
+  onCreate?: (text: string) => void;
 }
 
 const fold = (s: string): string => s.toLocaleLowerCase().normalize('NFKD');
@@ -46,6 +51,7 @@ export function PickList({
   searchLabel,
   emptyText,
   searchFrom = 9,
+  onCreate,
 }: PickListProps) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -65,6 +71,12 @@ export function PickList({
     }
     return out;
   }, [options, query]);
+
+  const typed = query.trim();
+  const canCreate =
+    onCreate !== undefined &&
+    typed.length >= 2 &&
+    !options.some((o) => fold(o.label) === fold(typed));
 
   return (
     <View style={styles.wrap}>
@@ -90,7 +102,23 @@ export function PickList({
           },
         ]}
       >
-        {groups.length === 0 ? (
+        {canCreate ? (
+          <Pressable
+            testID={`${testIDPrefix}-create`}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.useTyped', { text: typed })}
+            onPress={() => {
+              onCreate(typed);
+              setQuery('');
+            }}
+            style={[styles.row, { minHeight: theme.minTouchTarget + 4 }]}
+          >
+            <Text style={styles.grow} tone="primary" numberOfLines={2}>
+              {t('common.useTyped', { text: typed })}
+            </Text>
+          </Pressable>
+        ) : null}
+        {groups.length === 0 && !canCreate ? (
           <Text tone="muted" style={styles.empty} testID={`${testIDPrefix}-empty`}>
             {emptyText ?? t('common.noMatches')}
           </Text>

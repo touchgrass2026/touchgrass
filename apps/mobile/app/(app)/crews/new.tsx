@@ -2,11 +2,13 @@ import { type CrewJoinPolicy, CreateCrewBody, LIMITS } from '@touchgrass/shared'
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChipGroup } from '../../../components/ChipGroup';
+import { SelectField } from '../../../components/SelectField';
 import { Button, Screen, Text, TextField } from '../../../components/ui';
 import { localized, useInterests } from '../../../src/features/catalog/api';
 import { useCreateCrew } from '../../../src/features/engagement/api';
 import { errorMessage } from '../../../src/lib/errors';
+
+const CUSTOM = 'custom';
 
 /** Start a crew (F-ENG-02): name, what it does, who can join. */
 export default function NewCrewScreen() {
@@ -17,9 +19,17 @@ export default function NewCrewScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [interestId, setInterestId] = useState<string | null>(null);
+  // What the crew does in the founder's own words, when it is not in the list (D-197).
+  const [activity, setActivity] = useState<string | null>(null);
   const [policy, setPolicy] = useState<CrewJoinPolicy>('request');
   const [error, setError] = useState<string | null>(null);
-  const parsed = CreateCrewBody.safeParse({ name, description, interestId, joinPolicy: policy });
+  const parsed = CreateCrewBody.safeParse({
+    name,
+    description,
+    interestId,
+    activity,
+    joinPolicy: policy,
+  });
   const save = async (): Promise<void> => {
     if (!parsed.success) return;
     setError(null);
@@ -47,31 +57,43 @@ export default function NewCrewScreen() {
         multiline
         testID="crew-description"
       />
-      <ChipGroup
-        label={t('events.category')}
-        mode="single"
-        options={(interests.data?.items ?? []).map((i) => ({
-          id: i.id,
-          label: localized(i.name, i18n.language),
-        }))}
-        selected={interestId ? [interestId] : []}
-        onChange={(next) => {
-          setInterestId(next[0] ?? null);
+      {/* Dropdowns instead of walls of chips (D-197); anything typed that is not listed becomes the activity. */}
+      <SelectField
+        label={t('crews.activity')}
+        placeholder={t('crews.activityPlaceholder')}
+        searchLabel={t('crews.activitySearch')}
+        options={[
+          ...(activity ? [{ id: CUSTOM, label: activity }] : []),
+          ...(interests.data?.items ?? []).map((i) => ({
+            id: i.id,
+            label: localized(i.name, i18n.language),
+          })),
+        ]}
+        value={activity ? CUSTOM : interestId}
+        onChange={(id) => {
+          if (id === CUSTOM) return;
+          setActivity(null);
+          setInterestId(id);
         }}
-        testIDPrefix="crew-interest"
+        onCreate={(text) => {
+          setInterestId(null);
+          setActivity(text.slice(0, 40));
+        }}
+        testID="crew-interest"
       />
-      <ChipGroup
+      <SelectField
         label={t('crews.joinPolicy')}
-        mode="single"
+        placeholder={t('crews.policyRequest')}
         options={[
           { id: 'request', label: t('crews.policyRequest') },
           { id: 'invite_only', label: t('crews.policyInvite') },
         ]}
-        selected={[policy]}
-        onChange={(next) => {
-          if (next[0] === 'request' || next[0] === 'invite_only') setPolicy(next[0]);
+        value={policy}
+        onChange={(id) => {
+          if (id === 'request' || id === 'invite_only') setPolicy(id);
         }}
-        testIDPrefix="crew-policy"
+        searchFrom={99}
+        testID="crew-policy"
       />
       {error ? (
         <Text tone="danger" accessibilityRole="alert">

@@ -117,13 +117,16 @@ describe('Squad tab (F-SOC-02..04)', () => {
 
   it('shows suggestion reasons, adds with an idempotency key and dismisses', async () => {
     await renderWithProviders(<SquadScreen />, { fetchFn: api.fetch });
-    await fireEvent.press(screen.getByRole('tab', { name: 'People you might know' }));
+    await fireEvent.press(screen.getByRole('tab', { name: 'Suggested' }));
     expect(await screen.findByText('Mutual friends · Shared interests')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Add to squad' }));
     await waitFor(() => expect(api.callsTo('POST', '/v1/social/requests')).toHaveLength(1));
     expect(api.callsTo('POST', '/v1/social/requests')[0]?.headers['idempotency-key']).toMatch(
       /^req-/,
     );
+    // Like Instagram: the person stays listed and the button now reads "Requested" (it used to vanish).
+    expect(await screen.findByRole('button', { name: 'Requested' })).toBeOnTheScreen();
+    expect(screen.getByText('Mutual friends · Shared interests')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(api.calls.some((c) => c.path.endsWith('/dismiss'))).toBe(true));
   });
@@ -148,7 +151,7 @@ describe('Squad tab (F-SOC-02..04)', () => {
     expect(await screen.findByText(/^No one in your squad yet/)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Find friends from contacts' }));
     expect(mockRouter.push).toHaveBeenCalledWith('/contacts');
-    await fireEvent.press(screen.getByRole('tab', { name: 'People you might know' }));
+    await fireEvent.press(screen.getByRole('tab', { name: 'Suggested' }));
     expect(await screen.findByTestId('state-error')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('tab', { name: 'Activity' }));
     expect(await screen.findByText(/Quiet for now/)).toBeOnTheScreen();
@@ -203,6 +206,33 @@ describe('Contacts (F-SOC-01)', () => {
       message: expect.stringContaining('http://web.test') as string,
       title: 'Rohan (not here)',
     });
+  });
+
+  it('every contact is reachable, not just the first 200 (search and show more)', async () => {
+    // 250 contacts: the old screen stopped at the 200th, around the letter C.
+    const many = Array.from({ length: 249 }, (_, i) => ({
+      fullName: `Aa ${String(i).padStart(3, '0')}`,
+      phones: [{ number: `+9198${String(10_000_000 + i)}` }],
+    }));
+    jest
+      .mocked(Contacts.Contact.getAllDetails)
+      .mockResolvedValueOnce([
+        ...many,
+        { fullName: 'Zara Last', phones: [{ number: '+919000099999' }] },
+      ] as never);
+    api.on('POST', '/v1/social/contacts/match', { status: 200, body: { items: [] } });
+    await renderWithProviders(<ContactsScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByRole('button', { name: 'Check my contacts' }));
+    expect(await screen.findByText('Invite to TouchGrass (250)')).toBeOnTheScreen();
+    expect(screen.queryByText('Zara Last')).toBeNull();
+    // Search finds someone near the end of the alphabet.
+    await fireEvent.changeText(screen.getByTestId('contacts-search'), 'zara');
+    expect(await screen.findByText('Zara Last')).toBeOnTheScreen();
+    // And paging gets there too.
+    await fireEvent.changeText(screen.getByTestId('contacts-search'), '');
+    await fireEvent.press(screen.getByTestId('contacts-more'));
+    await fireEvent.press(screen.getByTestId('contacts-more'));
+    expect(await screen.findByText('Zara Last')).toBeOnTheScreen();
   });
 
   it('explains when permission is denied', async () => {
@@ -274,7 +304,7 @@ describe('Profiles: squad actions, block and report (F-SOC-05)', () => {
 
   it.each([
     ['none', 'Add to squad'],
-    ['request_sent', 'Cancel request'],
+    ['request_sent', 'Requested'],
     ['request_received', 'Accept'],
     ['squad', 'Remove from squad'],
   ])('relationship %s shows "%s"', async (relationship, label) => {

@@ -14,6 +14,10 @@ export interface SelectFieldProps {
   searchLabel?: string;
   error?: string | null;
   testID?: string;
+  /** Lets people type their own option when it is not in the list (D-197). */
+  onCreate?: (text: string) => void;
+  /** Hide the search box for short lists (default: search from 9 options). */
+  searchFrom?: number;
 }
 
 /**
@@ -29,6 +33,8 @@ export function SelectField({
   searchLabel,
   error,
   testID,
+  onCreate,
+  searchFrom = 0,
 }: SelectFieldProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -66,7 +72,15 @@ export function SelectField({
               setOpen(false);
             }}
             testIDPrefix={testID ?? 'select'}
-            searchFrom={0}
+            searchFrom={searchFrom}
+            onCreate={
+              onCreate
+                ? (text) => {
+                    onCreate(text);
+                    setOpen(false);
+                  }
+                : undefined
+            }
           />
         </Sheet>
       ) : null}

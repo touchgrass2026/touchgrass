@@ -93,3 +93,4 @@ export const Book = glyph('book');
 export const Grid = glyph('grid');
 export const ShareIcon = glyph('share');
 export const Gear = glyph('gear');
+export const Poll = glyph('poll');

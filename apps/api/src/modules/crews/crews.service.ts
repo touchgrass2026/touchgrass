@@ -295,6 +295,7 @@ export class CrewsService {
         description: r.description,
         cover: covers.get(r.id) ?? null,
         interestId: r.interestId,
+        activity: r.activity,
         joinPolicy: r.joinPolicy,
         memberCount: counts.get(r.id) ?? 0,
         nextSession: n ? { eventId: n.eventId, startsAt: n.occurrenceAt.toISOString() } : null,
@@ -534,7 +535,7 @@ export class CrewsService {
   async create(userId: string, body: CreateCrewBody, now: Date = new Date()): Promise<CrewDetail> {
     if (body.coverMediaId) await this.assertCover(userId, body.coverMediaId);
     await this.sanctions.assertCanPost(userId, now);
-    const screen = this.moderation.screen(body.name, body.description);
+    const screen = this.moderation.screen(body.name, body.description, body.activity ?? '');
     const user = await this.users.findById(userId);
     const id = uuidv7();
     await this.db.transaction(async (tx) => {
@@ -545,6 +546,7 @@ export class CrewsService {
         name: body.name,
         description: body.description,
         interestId: body.interestId,
+        activity: body.activity,
         coverMediaId: body.coverMediaId,
         joinPolicy: body.joinPolicy,
         createdBy: userId,
@@ -742,7 +744,7 @@ export class CrewsService {
     now: Date = new Date(),
   ): Promise<CrewDetail> {
     const crew = await this.requireAdmin(adminId, crewId);
-    if (!crew.interestId)
+    if (!crew.interestId && !crew.activity)
       throw new AppError('NOT_ELIGIBLE', 'Pick what the crew does first', {
         reason: 'BAD_RECURRENCE',
       });
@@ -807,7 +809,12 @@ export class CrewsService {
           .from(crewRecurrence)
           .where(eq(crewRecurrence.crewId, crewId));
         const crew = await this.crewOrThrow(crewId);
-        if (!rec?.active || !rec.hostUserId || crew.status !== 'active' || !crew.interestId)
+        if (
+          !rec?.active ||
+          !rec.hostUserId ||
+          crew.status !== 'active' ||
+          (!crew.interestId && !crew.activity)
+        )
           return 0;
         const host = await this.membership(crewId, rec.hostUserId);
         if (!canManage(host)) return 0;
@@ -825,7 +832,8 @@ export class CrewsService {
           const body = CreateEventBody.parse({
             title: rec.title || crew.name,
             description: crew.description,
-            categoryInterestId: crew.interestId,
+            // A crew in its own words has no listed category; its sessions go without one.
+            ...(crew.interestId ? { categoryInterestId: crew.interestId } : {}),
             where,
             startsAt: at.toISOString(),
             endsAt: new Date(at.getTime() + rec.durationMinutes * 60_000).toISOString(),

@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Photo, Send } from '../../../../components/icons';
+import { Bell, BellOff, Photo, Poll, Send } from '../../../../components/icons';
 import { fontFamilyFor } from '../../../../src/theme/fonts';
 import { MessageBubble } from '../../../../components/chat/MessageBubble';
 import {
@@ -22,6 +22,7 @@ import {
   ErrorState,
   FadeIn,
   Icon,
+  IconButton,
   LoadingState,
   OfflineBanner,
   Text,
@@ -253,30 +254,42 @@ export default function ThreadScreen() {
         style={styles.screen}
       >
         <OfflineBanner />
+        {/* The name leads; actions are small round icons, so they never read like the title (D-197). */}
         <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-          <Text variant="heading" accessibilityRole="header" style={styles.grow} numberOfLines={1}>
-            {c.title}
-          </Text>
-          <Button
-            label={c.muted ? t('chat.unmute') : t('chat.mute')}
-            variant="ghost"
-            loading={mute.isPending}
-            onPress={() => {
-              if (c.muted) mute.mutateAsync('off').catch(fail);
-              else setMuteOpen(true);
-            }}
-            testID="mute"
-          />
+          <View style={styles.grow}>
+            <Text
+              variant="title"
+              accessibilityRole="header"
+              style={styles.chatTitle}
+              numberOfLines={1}
+            >
+              {c.title}
+            </Text>
+            {c.kind !== 'direct' ? (
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {c.kind === 'crew' ? t('chat.kindCrewChat') : t('chat.kindPlanChat')}
+              </Text>
+            ) : null}
+          </View>
           {c.canCreatePoll ? (
-            <Button
+            <IconButton
+              icon={<Icon icon={Poll} size={20} />}
               label={t('chat.newPoll')}
-              variant="ghost"
               onPress={() => {
                 router.push({ pathname: '/chats/[id]/poll', params: { id } });
               }}
               testID="new-poll"
             />
           ) : null}
+          <IconButton
+            icon={<Icon icon={c.muted ? BellOff : Bell} size={20} />}
+            label={c.muted ? t('chat.unmute') : t('chat.mute')}
+            onPress={() => {
+              if (c.muted) mute.mutateAsync('off').catch(fail);
+              else setMuteOpen(true);
+            }}
+            testID="mute"
+          />
         </View>
         {banner}
         <FlatList
@@ -581,6 +594,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
+  chatTitle: { fontSize: 20, lineHeight: 26 },
   banner: { padding: 16, gap: 8 },
   list: { paddingHorizontal: 16, paddingVertical: 8 },
   typing: { paddingHorizontal: 16 },

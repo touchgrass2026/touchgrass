@@ -352,8 +352,11 @@ describe('crews (F-ENG-02)', () => {
     const save = screen.getByTestId('crew-save');
     await fireEvent.changeText(screen.getByTestId('crew-name'), 'Sunday Run Club');
     expect(save).toBeDisabled();
+    // Dropdowns (D-197): open, pick.
+    await fireEvent.press(screen.getByTestId('crew-interest'));
     await fireEvent.press(await screen.findByRole('radio', { name: 'Interest 0' }));
-    await fireEvent.press(screen.getByRole('radio', { name: 'Invite only' }));
+    await fireEvent.press(screen.getByTestId('crew-policy'));
+    await fireEvent.press(await screen.findByRole('radio', { name: 'Invite only' }));
     await fireEvent.press(save);
     await waitFor(() =>
       expect(mockRouter.replace).toHaveBeenCalledWith({
@@ -366,6 +369,23 @@ describe('crews (F-ENG-02)', () => {
       interestId: ids.interests[0],
       joinPolicy: 'invite_only',
     });
+  });
+
+  it('a crew can be about something not in the list: what is typed becomes its activity', async () => {
+    api.on('POST', '/v1/crews', { status: 201, body: crewDetail() });
+    await renderWithProviders(<NewCrewScreen />, { fetchFn: api.fetch });
+    await fireEvent.changeText(screen.getByTestId('crew-name'), 'Box cricketers');
+    await fireEvent.press(screen.getByTestId('crew-interest'));
+    await fireEvent.changeText(await screen.findByTestId('crew-interest-search'), 'Box cricket');
+    await fireEvent.press(screen.getByTestId('crew-interest-create'));
+    await fireEvent.press(screen.getByTestId('crew-save'));
+    await waitFor(() =>
+      expect(api.callsTo('POST', '/v1/crews')[0]?.body).toMatchObject({
+        name: 'Box cricketers',
+        activity: 'Box cricket',
+        interestId: null,
+      }),
+    );
   });
 
   it('admins see the schedule, approve requests, manage roles and open the chat', async () => {

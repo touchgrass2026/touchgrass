@@ -1,4 +1,5 @@
-import type { ActivityItem } from '@touchgrass/shared';
+import type { ActivityItem, Suggestion } from '@touchgrass/shared';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -59,6 +60,13 @@ export default function SquadScreen() {
   const suggestions = useSuggestions();
   const activity = useActivity();
   const dismiss = useSquadAction();
+  // People requested from "Suggested" stay on the list showing "Requested" (the server stops suggesting them).
+  const [requested, setRequested] = useState<Map<string, Suggestion>>(new Map());
+  const suggestionItems = (() => {
+    const live = suggestions.data?.items ?? [];
+    const ids = new Set(live.map((s) => s.person.id));
+    return [...live, ...[...requested.values()].filter((s) => !ids.has(s.person.id))];
+  })();
   const open = (id: string): void => {
     router.push({ pathname: '/users/[id]', params: { id } });
   };
@@ -136,10 +144,9 @@ export default function SquadScreen() {
     if (suggestions.isPending) body = <LoadingState />;
     else if (suggestions.isError)
       body = <QueryState error={suggestions.error} onRetry={() => void suggestions.refetch()} />;
-    else if (suggestions.data.items.length === 0)
-      body = <EmptyState body={t('squad.suggestionsEmpty')} />;
+    else if (suggestionItems.length === 0) body = <EmptyState body={t('squad.suggestionsEmpty')} />;
     else
-      body = suggestions.data.items.map((s) => (
+      body = suggestionItems.map((s) => (
         <PersonRow
           key={s.person.id}
           person={s.person}
@@ -149,7 +156,19 @@ export default function SquadScreen() {
           }}
           actions={
             <>
-              <SquadActions userId={s.person.id} relationship="none" compact />
+              <SquadActions
+                userId={s.person.id}
+                relationship={requested.has(s.person.id) ? 'request_sent' : 'none'}
+                compact
+                onChange={(next) => {
+                  setRequested((m) => {
+                    const copy = new Map(m);
+                    if (next === 'request_sent') copy.set(s.person.id, s);
+                    else copy.delete(s.person.id);
+                    return copy;
+                  });
+                }}
+              />
               <Button
                 label={t('squad.dismiss')}
                 variant="ghost"
@@ -198,15 +217,20 @@ export default function SquadScreen() {
 
   return (
     <Screen testID="squad-screen">
-      <Text variant="title">{t('squad.title')}</Text>
-      <Button
-        label={t('crews.title')}
-        variant="secondary"
-        onPress={() => {
-          router.push('/crews');
-        }}
-        testID="open-crews"
-      />
+      {/* Title with Crews as a compact header action (it was a full-width bar). */}
+      <View style={styles.header}>
+        <Text variant="title" style={styles.grow}>
+          {t('squad.title')}
+        </Text>
+        <Button
+          label={t('crews.title')}
+          variant="secondary"
+          onPress={() => {
+            router.push('/crews');
+          }}
+          testID="open-crews"
+        />
+      </View>
       {section !== 'suggestions' && (suggestions.data?.items.length ?? 0) > 0 ? (
         <SuggestionStrip
           items={suggestions.data?.items.slice(0, 10) ?? []}
@@ -238,3 +262,8 @@ export default function SquadScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  grow: { flex: 1 },
+});

@@ -6,13 +6,15 @@ import { Share } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { PersonRow } from '../../components/PersonRow';
 import { SquadActions } from '../../components/SquadActions';
-import { Button, EmptyState, ListRow, Screen, Text } from '../../components/ui';
+import { Button, EmptyState, ListRow, Screen, Text, TextField } from '../../components/ui';
 import { readAppEnvironment } from '../../src/config';
 import { useMyInvites } from '../../src/features/me/api';
 import { useMatchContacts } from '../../src/features/social/api';
 import { type LocalContact, readHashedContacts } from '../../src/features/social/contacts';
 import { inviteUrl } from '../../src/features/social/invite-link';
 import { errorMessage } from '../../src/lib/errors';
+
+const PAGE = 100;
 
 /** Friends from contacts (F-SOC-01): hashed matching, add matches, invite everyone else via WhatsApp/SMS. */
 export default function ContactsScreen() {
@@ -23,6 +25,10 @@ export default function ContactsScreen() {
   const [denied, setDenied] = useState(false);
   const [local, setLocal] = useState<LocalContact[] | null>(null);
   const [matches, setMatches] = useState<ContactMatch[]>([]);
+  // Every contact is reachable: search by name, or page through in steps (it used to stop at the first 200,
+  // around the letter C).
+  const [query, setQuery] = useState('');
+  const [shown, setShown] = useState(PAGE);
 
   const scan = useMutation({
     mutationFn: async () => {
@@ -40,6 +46,10 @@ export default function ContactsScreen() {
 
   const matchedHashes = new Set(matches.map((m) => m.hash));
   const others = (local ?? []).filter((c) => !matchedHashes.has(c.hash));
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? others.filter((c) => c.name.toLowerCase().includes(q) || c.e164.includes(q))
+    : others;
   const invite = (c: LocalContact): void => {
     void Share.share({
       message: t('squad.inviteMessage', {
@@ -91,8 +101,24 @@ export default function ContactsScreen() {
               />
             ))
           )}
-          {others.length > 0 ? <Text variant="heading">{t('squad.inviteContacts')}</Text> : null}
-          {others.slice(0, 200).map((c) => (
+          {others.length > 0 ? (
+            <>
+              <Text variant="heading">
+                {t('squad.inviteContacts')} ({others.length})
+              </Text>
+              <TextField
+                label={t('squad.searchContacts')}
+                value={query}
+                onChangeText={(v) => {
+                  setQuery(v);
+                  setShown(PAGE);
+                }}
+                autoCorrect={false}
+                testID="contacts-search"
+              />
+            </>
+          ) : null}
+          {filtered.slice(0, shown).map((c) => (
             <ListRow
               key={c.hash}
               label={c.name}
@@ -103,6 +129,16 @@ export default function ContactsScreen() {
               testID={`invite-${c.hash.slice(0, 8)}`}
             />
           ))}
+          {filtered.length > shown ? (
+            <Button
+              label={t('squad.showMoreContacts', { count: filtered.length - shown })}
+              variant="secondary"
+              onPress={() => {
+                setShown((n) => n + PAGE);
+              }}
+              testID="contacts-more"
+            />
+          ) : null}
         </>
       ) : null}
     </Screen>

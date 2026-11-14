@@ -70,36 +70,45 @@ export function PollCard({
               if (poll.multi) onVote(selected ? mine.filter((x) => x !== o.id) : [...mine, o.id]);
               else onVote(selected ? [] : [o.id]);
             }}
-            style={[
-              styles.option,
-              {
-                minHeight: theme.minTouchTarget,
-                borderColor: selected ? theme.colors.primary : theme.colors.border,
-                borderRadius: theme.radii.sm,
-              },
-            ]}
+            style={[styles.option, { minHeight: theme.minTouchTarget }]}
           >
-            <View
-              style={[
-                styles.bar,
-                {
-                  width: `${String(Math.round((o.votes / total) * 100))}%`,
-                  backgroundColor: theme.colors.primary,
-                },
-              ]}
-            />
+            {/* WhatsApp-style row: a round tick, the option, its count; a thin bar underneath. */}
             <View style={styles.optionRow}>
-              {selected ? (
-                <Icon icon={Check} size={15} color={theme.colors.primary} strokeWidth={2.6} />
-              ) : null}
+              <View
+                style={[
+                  styles.tick,
+                  {
+                    borderRadius: poll.multi ? 6 : 11,
+                    borderColor: selected ? theme.colors.primary : theme.colors.textMuted,
+                    backgroundColor: selected ? theme.colors.primary : 'transparent',
+                  },
+                ]}
+              >
+                {selected ? (
+                  <Icon icon={Check} size={13} color={theme.colors.onPrimary} strokeWidth={3} />
+                ) : null}
+              </View>
               <Text style={styles.optionText}>{o.text}</Text>
+              <Text variant="label" tone="muted">
+                {o.votes}
+              </Text>
             </View>
-            <Text variant="caption" tone="muted">
-              {o.votes}
-              {!poll.anonymous && o.voters.length > 0
-                ? ` · ${o.voters.map((v) => v.displayName).join(', ')}`
-                : ''}
-            </Text>
+            <View style={[styles.track, { backgroundColor: theme.colors.border }]}>
+              <View
+                style={[
+                  styles.fill,
+                  {
+                    width: `${String(Math.round((o.votes / total) * 100))}%`,
+                    backgroundColor: theme.colors.primary,
+                  },
+                ]}
+              />
+            </View>
+            {!poll.anonymous && o.voters.length > 0 ? (
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {o.voters.map((v) => v.displayName).join(', ')}
+              </Text>
+            ) : null}
           </Pressable>
         );
       })}
@@ -275,8 +284,11 @@ export function MessageBubble({
 }
 
 const styles = StyleSheet.create({
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  optionText: { flexShrink: 1 },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tick: { width: 22, height: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  track: { height: 4, borderRadius: 2, overflow: 'hidden', marginLeft: 32 },
+  fill: { height: 4, borderRadius: 2 },
+  optionText: { flex: 1 },
   row: { alignItems: 'flex-start', gap: 2, marginVertical: 4 },
   mineRow: { alignItems: 'flex-end' },
   bubble: { maxWidth: '85%', paddingHorizontal: 12, paddingVertical: 8, gap: 4, borderWidth: 1 },
@@ -285,7 +297,6 @@ const styles = StyleSheet.create({
   image: { width: 220, height: 220 },
   deleted: { fontStyle: 'italic' },
   reactions: { paddingHorizontal: 8 },
-  poll: { gap: 8, padding: 8, borderWidth: 1, minWidth: 240 },
-  option: { borderWidth: 2, padding: 8, justifyContent: 'center', overflow: 'hidden' },
-  bar: { position: 'absolute', left: 0, top: 0, bottom: 0, opacity: 0.15 },
+  poll: { gap: 2, padding: 12, borderWidth: 1, minWidth: 260 },
+  option: { paddingVertical: 6, justifyContent: 'center', gap: 6 },
 });
