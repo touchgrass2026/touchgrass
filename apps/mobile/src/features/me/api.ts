@@ -59,8 +59,12 @@ export function useSetInterests() {
   const { client } = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (interestIds: string[]) =>
-      client.request('/v1/me/interests', InterestList, { method: 'PUT', body: { interestIds } }),
+    /** Listed ids only (onboarding keeps any typed ones), or both lists from Edit profile (D-199). */
+    mutationFn: (input: string[] | { interestIds: string[]; customInterests: string[] }) =>
+      client.request('/v1/me/interests', InterestList, {
+        method: 'PUT',
+        body: Array.isArray(input) ? { interestIds: input } : input,
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ME_KEY }),
   });
 }

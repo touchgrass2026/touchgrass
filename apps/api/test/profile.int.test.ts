@@ -373,6 +373,79 @@ describe('profiles and privacy (F-ACC-05)', () => {
     expect(res.body.photos[0].md).toContain('md.webp');
   });
 
+  it('keeps interests in the member own words, counted toward the limits (D-199)', async () => {
+    const a = await signIn(h);
+    const b = await signIn(h);
+    await onboard(h, a.accessToken);
+    await onboard(h, b.accessToken);
+    const put = (body: Record<string, unknown>) =>
+      request(h.http)
+        .put('/v1/me/interests')
+        .set(...bearer(a.accessToken))
+        .send(body);
+    const [first, ...more] = await interestIds(h, 15);
+
+    // Two listed plus one typed meets the minimum; repeats and spacing are tidied.
+    await put({
+      interestIds: [first, more[0]],
+      customInterests: ['  Carrom   nights ', 'carrom nights', 'Kite flying'],
+    }).expect(200);
+    const me = await request(h.http)
+      .get('/v1/me')
+      .set(...bearer(a.accessToken))
+      .expect(200);
+    expect(me.body.customInterests).toEqual(['Carrom nights', 'Kite flying']);
+    expect(me.body.interests).toHaveLength(2);
+    expect(me.body.onboarding.interests).toBe(true);
+
+    // Leaving them out (as onboarding does) keeps them, and they still count toward the maximum.
+    await put({ interestIds: [first, ...more.slice(0, 12)] }).expect(200);
+    expect(
+      (
+        await request(h.http)
+          .get('/v1/me')
+          .set(...bearer(a.accessToken))
+      ).body.customInterests,
+    ).toEqual(['Carrom nights', 'Kite flying']);
+    const tooMany = await put({ interestIds: [first, ...more.slice(0, 13)] }).expect(400);
+    expect(tooMany.body.error.code).toBe('VALIDATION_FAILED');
+    await put({ interestIds: [first], customInterests: ['Carrom'] }).expect(400);
+    await put({ interestIds: [first, more[0]], customInterests: ['x'.repeat(31)] }).expect(400);
+    await put({
+      interestIds: [],
+      customInterests: ['One', 'Two', 'Three', 'Four', 'Five', 'Six'],
+    }).expect(400);
+
+    // They are labels on the profile, so a flagged one is refused rather than held.
+    const flagged = await put({
+      interestIds: [first, more[0]],
+      customInterests: ['Bhenchod club'],
+    }).expect(400);
+    expect(flagged.body.error.code).toBe('VALIDATION_FAILED');
+
+    const seen = await request(h.http)
+      .get(`/v1/users/${a.user.id}/profile`)
+      .set(...bearer(b.accessToken))
+      .expect(200);
+    expect(seen.body.customInterests).toEqual(['Carrom nights', 'Kite flying']);
+
+    const exported = await request(h.http)
+      .get('/v1/me/export')
+      .set(...bearer(a.accessToken))
+      .expect(200);
+    expect(exported.body.profile.customInterests).toEqual(['Carrom nights', 'Kite flying']);
+
+    // Clearing them works too, as long as enough listed interests remain.
+    await put({ interestIds: [first, ...more.slice(0, 2)], customInterests: [] }).expect(200);
+    expect(
+      (
+        await request(h.http)
+          .get('/v1/me')
+          .set(...bearer(a.accessToken))
+      ).body.customInterests,
+    ).toEqual([]);
+  });
+
   it('squad-only and friends-of-friends profiles show strangers only a limited card', async () => {
     const a = await signIn(h);
     const b = await signIn(h);
@@ -393,6 +466,7 @@ describe('profiles and privacy (F-ACC-05)', () => {
         bio: '',
         age: null,
         interests: [],
+        customInterests: [],
         neighbourhoodName: null,
       });
       expect(res.body.photos.length).toBeLessThanOrEqual(1);

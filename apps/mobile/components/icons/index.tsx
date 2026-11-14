@@ -94,3 +94,4 @@ export const Grid = glyph('grid');
 export const ShareIcon = glyph('share');
 export const Gear = glyph('gear');
 export const Poll = glyph('poll');
+export const ChevronRight = glyph('chevronRight');

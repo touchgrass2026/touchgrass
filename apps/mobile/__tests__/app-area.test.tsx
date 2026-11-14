@@ -71,15 +71,24 @@ describe('Tutorial (F-ACC-04)', () => {
 
 describe('My profile (F-ACC-05)', () => {
   it('shows profile, stats tier and navigation to edit and invites', async () => {
+    api.on('GET', '/v1/me', {
+      status: 200,
+      body: meFixture({ dateOfBirth: '1998-05-20', customInterests: ['Carrom nights'] }),
+    });
     await renderWithProviders(<MyProfileScreen />, { fetchFn: api.fetch });
     expect(await screen.findByRole('header', { name: 'Priya R.' })).toBeOnTheScreen();
+    expect(screen.getByTestId('profile-age')).toHaveTextContent(/^\d{2}$/);
     expect(screen.getByLabelText('Reliability: New here')).toBeOnTheScreen();
     expect(screen.getByText('Interest 0')).toBeOnTheScreen();
+    // Interests in their own words sit with the listed ones (D-199).
+    expect(screen.getByText('Carrom nights')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Photo 1 of 1')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Edit profile' }));
     expect(mockRouter.push).toHaveBeenCalledWith('/profile-edit');
     await fireEvent.press(screen.getByRole('button', { name: 'Invite friends' }));
     expect(mockRouter.push).toHaveBeenCalledWith('/invites');
-    // Settings and share sit beside Edit; the rest is a grid of tiles (D-159).
+    // Share and settings are header buttons; the rest is a grouped list of rows (D-199).
+    expect(screen.getByRole('header', { name: 'Your activity' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('open-settings'));
     expect(mockRouter.push).toHaveBeenCalledWith('/settings');
     await fireEvent.press(screen.getByTestId('open-hosting'));
@@ -108,9 +117,15 @@ describe('Edit profile', () => {
     await renderWithProviders(<ProfileEditScreen />, { fetchFn: api.fetch });
     await fireEvent.changeText(await screen.findByTestId('edit-bio'), 'Biryani over everything');
     await fireEvent.changeText(screen.getByTestId('edit-languages'), 'English, Telugu, Hindi,');
+    // Interests are a dropdown: a field opening a sheet with a checklist (D-199).
+    expect(screen.queryByRole('checkbox', { name: 'Interest 3' })).toBeNull();
+    await fireEvent.press(screen.getByTestId('edit-interest'));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Interest 3' }));
+    await fireEvent.press(screen.getByTestId('edit-interest-done'));
+    expect(screen.queryByTestId('edit-interest-sheet')).toBeNull();
+    expect(screen.getByTestId('edit-interest-tags')).toHaveTextContent(/Interest 3/);
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.getByText('Done')).toBeOnTheScreen());
+    await waitFor(() => expect(screen.getByText('Saved')).toBeOnTheScreen());
     expect(api.callsTo('PATCH', '/v1/me/profile')[0]?.body).toEqual({
       displayName: 'Priya R.',
       bio: 'Biryani over everything',
@@ -119,6 +134,63 @@ describe('Edit profile', () => {
     });
     expect(api.callsTo('PUT', '/v1/me/interests')[0]?.body).toEqual({
       interestIds: [...ids.interests.slice(0, 3), ids.interests[3]],
+      customInterests: [],
+    });
+  });
+
+  it('adds an interest typed in when it is not listed (D-199)', async () => {
+    api
+      .on('PATCH', '/v1/me/profile', { status: 200, body: meFixture() })
+      .on('PUT', '/v1/me/interests', {
+        status: 200,
+        body: { items: interestsFixture.slice(0, 2) },
+      });
+    await renderWithProviders(<ProfileEditScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByTestId('edit-interest'));
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Interest 2' }));
+    await fireEvent.changeText(screen.getByTestId('edit-interest-search'), '  Carrom ');
+    await fireEvent.press(screen.getByRole('button', { name: 'Use “Carrom”' }));
+    // The typed one is now a ticked option under "Your own".
+    expect(screen.getByRole('checkbox', { name: 'Carrom' })).toBeChecked();
+    expect(screen.getByText('Your own')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('edit-interest-done'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.callsTo('PUT', '/v1/me/interests')).toHaveLength(1));
+    expect(api.callsTo('PUT', '/v1/me/interests')[0]?.body).toEqual({
+      interestIds: ids.interests.slice(0, 2),
+      customInterests: ['Carrom'],
+    });
+  });
+
+  it('keeps saved typed interests and counts them toward the minimum', async () => {
+    api.on('GET', '/v1/me', {
+      status: 200,
+      body: meFixture({ interests: interestsFixture.slice(0, 2), customInterests: ['Kites'] }),
+    });
+    await renderWithProviders(<ProfileEditScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByTestId('edit-interest'));
+    expect(screen.getByRole('checkbox', { name: 'Kites' })).toBeChecked();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Kites' }));
+    await fireEvent.press(screen.getByTestId('edit-interest-done'));
+    // Two left: below the minimum of three, so saving is off until another is picked.
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('picks the mood from a dropdown too', async () => {
+    api
+      .on('PATCH', '/v1/me/profile', { status: 200, body: meFixture() })
+      .on('PUT', '/v1/me/vibe-tags', { status: 200, body: { items: vibesFixture.slice(0, 2) } });
+    await renderWithProviders(<ProfileEditScreen />, { fetchFn: api.fetch });
+    expect(screen.queryByRole('checkbox', { name: 'Vibe 1' })).toBeNull();
+    await fireEvent.press(await screen.findByTestId('edit-vibe'));
+    // No typing your own mood: the list has no "Use ..." row.
+    expect(screen.queryByTestId('edit-vibe-search')).toBeNull();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Vibe 1' }));
+    await fireEvent.press(screen.getByTestId('edit-vibe-done'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.callsTo('PUT', '/v1/me/vibe-tags')).toHaveLength(1));
+    expect(api.callsTo('PUT', '/v1/me/vibe-tags')[0]?.body).toEqual({
+      vibeTagIds: ids.vibes.slice(0, 2),
     });
   });
 
@@ -215,7 +287,8 @@ describe('Other profiles (privacy-filtered)', () => {
   it('shows age, area, shared interests and verification', async () => {
     api.on('GET', `/v1/users/${ids.other}/profile`, { status: 200, body: profile() });
     await renderWithProviders(<UserProfileScreen />, { fetchFn: api.fetch });
-    expect(await screen.findByText('27 · Madhapur')).toBeOnTheScreen();
+    expect(await screen.findByTestId('profile-age')).toHaveTextContent('27');
+    expect(screen.getByText('Madhapur')).toBeOnTheScreen();
     expect(screen.getByText('1 shared interests')).toBeOnTheScreen();
     expect(screen.getByLabelText('Verified')).toBeOnTheScreen();
   });

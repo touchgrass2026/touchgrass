@@ -152,6 +152,8 @@ export const profiles = pgTable('profiles', {
   cityId: uuid('city_id').references(() => cities.id),
   neighbourhoodId: uuid('neighbourhood_id').references(() => neighbourhoods.id),
   spokenLanguages: text('spoken_languages').array().notNull().default([]),
+  /** Interests in the member's own words (D-199); they count toward the interest limits. */
+  customInterests: text('custom_interests').array().notNull().default([]),
   visibility: text('visibility', { enum: ['everyone', 'friends_of_friends', 'squad_only'] })
     .notNull()
     .default('everyone'),
