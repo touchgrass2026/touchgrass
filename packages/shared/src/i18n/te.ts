@@ -16,6 +16,7 @@ export const te: Translation = {
     crew: 'క్రూ',
   },
   common: {
+    selectedSummary: '{{first}} +{{count}} ఇంకా',
     useTyped: '“{{text}}” పెట్టు',
     choose: 'ఎంచుకోవడానికి నొక్కు',
     search: 'వెతుకు',

@@ -16,6 +16,7 @@ export const hi: Translation = {
     crew: 'क्रू',
   },
   common: {
+    selectedSummary: '{{first}} +{{count}} और',
     useTyped: '“{{text}}” रखो',
     choose: 'चुनने के लिए दबाओ',
     search: 'खोजो',

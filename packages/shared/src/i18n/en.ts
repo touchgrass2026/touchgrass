@@ -19,6 +19,7 @@ export const en = {
     crew: 'Crew',
   },
   common: {
+    selectedSummary: '{{first}} +{{count}} more',
     useTyped: 'Use “{{text}}”',
     continue: 'Continue',
     choose: 'Tap to choose',

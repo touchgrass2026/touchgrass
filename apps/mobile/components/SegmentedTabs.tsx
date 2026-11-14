@@ -51,9 +51,12 @@ export function SegmentedTabs<K extends string>({ tabs, value, onChange }: Segme
           >
             <Text
               variant="label"
-              numberOfLines={2}
+              // One line, shrinking to fit (Android only shrinks single-line text; two lines broke words
+              // like "Request-s").
+              numberOfLines={1}
               adjustsFontSizeToFit
-              minimumFontScale={0.8}
+              minimumFontScale={0.7}
+              maxFontSizeMultiplier={1.3}
               style={[
                 styles.label,
                 {
@@ -97,7 +100,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     paddingVertical: 6,
   },
   label: { textAlign: 'center', flexShrink: 1 },
