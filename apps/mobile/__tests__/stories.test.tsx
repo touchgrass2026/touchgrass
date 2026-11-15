@@ -15,7 +15,6 @@ import { mockRouteParams, mockRouter, renderWithProviders, resetStores } from '.
 const P2 = '0192f3a4-5b6c-7d8e-9f01-000000000003';
 const S1 = '0192f3a4-5b6c-7d8e-9f01-00000005a001';
 const S2 = '0192f3a4-5b6c-7d8e-9f01-00000005a002';
-const CONV = '0192f3a4-5b6c-7d8e-9f01-00000005c001';
 
 const person = (id: string, displayName: string): PersonCard => ({
   id,
@@ -145,7 +144,7 @@ describe('story viewer', () => {
     expect(await screen.findByText('Sunset at the lake')).toBeOnTheScreen();
     expect(screen.getByLabelText('Story 1 of 2')).toBeOnTheScreen();
     await waitFor(() => expect(api.callsTo('POST', `/v1/stories/${S1}/view`)).toHaveLength(1));
-    // Only the author sees viewers; others get like, reply and report.
+    // Only the author sees viewers; others get like and report.
     expect(screen.queryByTestId('story-stats')).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: 'Like' }));
     expect(await screen.findByRole('button', { name: 'Remove like' })).toBeOnTheScreen();
@@ -163,32 +162,12 @@ describe('story viewer', () => {
     expect(mockRouter.back).toHaveBeenCalled();
   });
 
-  it('replies by DM and reports, pausing the story', async () => {
+  it('reports, pausing the story; replying is off for now (D-213)', async () => {
     mockRouteParams.current = { userId: P2 };
-    api
-      .on('GET', `/v1/users/${P2}/stories`, {
-        status: 200,
-        body: { person: meera, items: [story(S1, { seen: true })] },
-      })
-      .on('POST', '/v1/chats/direct', {
-        status: 200,
-        body: {
-          id: CONV,
-          kind: 'direct',
-          state: 'active',
-          title: 'Meera',
-          avatar: null,
-          peer: meera,
-          eventId: null,
-          lastMessage: null,
-          unreadCount: 0,
-          muted: false,
-          readOnly: false,
-          canCreatePoll: false,
-          opensAt: null,
-          closesAt: null,
-        },
-      });
+    api.on('GET', `/v1/users/${P2}/stories`, {
+      status: 200,
+      body: { person: meera, items: [story(S1, { seen: true })] },
+    });
     await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
     await fireEvent.press(await screen.findByRole('button', { name: 'Report story' }));
     expect(mockRouter.push).toHaveBeenCalledWith({
@@ -198,14 +177,9 @@ describe('story viewer', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeOnTheScreen();
     // Already seen: no second view is recorded.
     expect(api.callsTo('POST', `/v1/stories/${S1}/view`)).toHaveLength(0);
-    await fireEvent.press(screen.getByRole('button', { name: 'Reply' }));
-    await waitFor(() =>
-      expect(mockRouter.replace).toHaveBeenCalledWith({
-        pathname: '/chats/[id]',
-        params: { id: CONV },
-      }),
-    );
-    expect(api.callsTo('POST', '/v1/chats/direct')[0]?.body).toEqual({ userId: P2 });
+    expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
+    expect(screen.queryByTestId('story-reply')).toBeNull();
+    expect(api.callsTo('POST', '/v1/chats/direct')).toHaveLength(0);
   });
 
   it('your own story: who saw it and liked it, a held notice, and delete', async () => {
@@ -391,8 +365,9 @@ describe('Instagram-style viewer (D-207)', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Resume' }));
     expect(screen.getByRole('button', { name: 'Pause' })).toBeOnTheScreen();
-    // Others' stories: a reply bar into the DM, plus like and report.
-    expect(screen.getByRole('button', { name: 'Reply' })).toHaveTextContent('Message Meera');
+    // Others' stories: like and report; replying is off for now (D-213).
+    expect(screen.queryByTestId('story-reply')).toBeNull();
+    expect(screen.getByTestId('story-like')).toBeOnTheScreen();
   });
 
   it('holding a story pauses its video until let go', async () => {

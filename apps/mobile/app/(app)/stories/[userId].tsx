@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Animated, FlatList, Modal, PanResponder, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../../components/Avatar';
-import { Eye, Flag, Heart, More, Pause, Play, Send, X } from '../../../components/icons';
+import { Eye, Flag, Heart, More, Pause, Play, X } from '../../../components/icons';
 import { StoryVideo } from '../../../components/stories/StoryVideo';
 import {
   Button,
@@ -20,7 +20,6 @@ import {
   Text,
   Pressable,
 } from '../../../components/ui';
-import { useStartDirect } from '../../../src/features/chat/api';
 import { storyAge } from '../../../src/features/stories/age';
 import {
   STORY_KEYS,
@@ -77,7 +76,6 @@ function PersonStoriesViewer({
   const markViewed = useMarkStoryViewed();
   const like = useLikeStory(userId);
   const remove = useDeleteStory(userId);
-  const startDirect = useStartDirect();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [held, setHeld] = useState(false);
@@ -463,24 +461,8 @@ function PersonStoriesViewer({
               </View>
             ) : (
               <View style={styles.actions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('stories.reply')}
-                  accessibilityHint={t('stories.replyHint', { name: person.displayName })}
-                  onPress={() =>
-                    void run(async () => {
-                      const chat = await startDirect.mutateAsync(person.id);
-                      router.replace({ pathname: '/chats/[id]', params: { id: chat.id } });
-                    })
-                  }
-                  style={styles.reply}
-                  testID="story-reply"
-                >
-                  <Text variant="body" numberOfLines={1} style={[styles.onMedia, styles.replyText]}>
-                    {t('stories.replyPlaceholder', { name: person.displayName })}
-                  </Text>
-                  <Icon icon={Send} size={20} color={media.text} />
-                </Pressable>
+                {/* Replying to a story is off for now (D-213): like and report only. */}
+                <View style={styles.grow} />
                 <MediaButton
                   label={story.liked ? t('stories.unlike') : t('stories.like')}
                   onPress={() =>
@@ -779,19 +761,6 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: TOUCH_TARGET,
   },
-  reply: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: TOUCH_TARGET,
-    paddingHorizontal: 16,
-    borderRadius: TOUCH_TARGET / 2,
-    borderWidth: 1,
-    borderColor: media.chipBorder,
-    backgroundColor: media.chip,
-  },
-  replyText: { flex: 1 },
   mediaButton: {
     width: TOUCH_TARGET,
     height: TOUCH_TARGET,
