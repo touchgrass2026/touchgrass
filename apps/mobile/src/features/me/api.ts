@@ -3,6 +3,7 @@ import {
   DeletionScheduledResponse,
   InterestList,
   InviteCode,
+  type MediaVariants,
   MeResponse,
   MyInvites,
   NotificationPreferences,
@@ -28,6 +29,16 @@ export function useMe() {
     queryKey: ME_KEY,
     queryFn: ({ signal }) => client.request('/v1/me', MeResponse, { signal }),
   });
+}
+
+/** Your own face for the story tray and "I'm free" (D-207): the first ready profile photo and your name. */
+export function useMyFace(): { photo: MediaVariants | null; name: string } {
+  const me = useMe();
+  const photos = [...(me.data?.photos ?? [])].sort((a, b) => a.position - b.position);
+  return {
+    photo: photos.find((p) => p.urls !== null)?.urls ?? null,
+    name: me.data?.displayName ?? '',
+  };
 }
 
 /** Mutations that return the full profile write it straight into the cache. */

@@ -92,6 +92,8 @@ export const GLYPHS = {
   trash:
     '<path d="M4.5 6.5h15M9.5 6.5V4.75c0-.69.56-1.25 1.25-1.25h2.5c.69 0 1.25.56 1.25 1.25V6.5"/><path d="M6.5 6.5l.85 12.1a2 2 0 0 0 2 1.9h5.3a2 2 0 0 0 2-1.9l.85-12.1M10 10.5v6M14 10.5v6"/>',
   flag: '<path d="M5.5 21V4"/><path d="M5.5 4.5h11l-2.25 4 2.25 4h-11"/>',
+  // More options (D-207): three dots in a row.
+  more: '<circle cx="5.5" cy="12" r="1.6" fill="CURRENT" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="CURRENT" stroke="none"/><circle cx="18.5" cy="12" r="1.6" fill="CURRENT" stroke="none"/>',
   pause:
     '<rect x="6.5" y="5" width="3.5" height="14" rx="1.25"/><rect x="14" y="5" width="3.5" height="14" rx="1.25"/>',
   play: '<path d="M7.5 4.75v14.5c0 .6.66.97 1.17.65l11.4-7.25a.77.77 0 0 0 0-1.3L8.67 4.1a.77.77 0 0 0-1.17.65Z"/>',
