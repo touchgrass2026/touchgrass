@@ -2,7 +2,7 @@ import type { FreeNowItem } from '@touchgrass/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStartDirect } from '../../src/features/chat/api';
 import { usePing } from '../../src/features/engagement/api';
@@ -10,7 +10,7 @@ import { formatTime } from '../../src/features/events/format';
 import { errorMessage } from '../../src/lib/errors';
 import { useTheme } from '../../src/theme/theme';
 import { Avatar } from '../Avatar';
-import { Button, FadeIn, Text } from '../ui';
+import { Button, FadeIn, Text, Pressable } from '../ui';
 
 /**
  * What you can do with a squad member who is free now (the mock's ping card): ping them, message them, or start

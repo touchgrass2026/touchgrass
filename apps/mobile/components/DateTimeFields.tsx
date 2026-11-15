@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -13,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/theme/theme';
 import { ArrowLeft, ArrowRight, Calendar } from './icons';
-import { Button, Chip, type GlyphIcon, Icon, Text } from './ui';
+import { Button, Chip, type GlyphIcon, Icon, Text, Pressable } from './ui';
 
 /** IST has no daylight saving: a fixed +05:30 offset. */
 const IST_OFFSET_MS = 330 * 60_000;
@@ -149,7 +148,7 @@ export function FieldShell({
         style={[
           styles.field,
           {
-            minHeight: 46,
+            minHeight: theme.minTouchTarget,
             backgroundColor: theme.colors.surfaceAlt,
             borderColor: error ? theme.colors.danger : theme.colors.inputBorder,
             borderRadius: theme.radii.md,

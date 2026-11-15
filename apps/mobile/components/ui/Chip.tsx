@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Pressable } from './Pressable';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/theme';
 import { Text } from './Text';

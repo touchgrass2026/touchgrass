@@ -8,6 +8,7 @@ import {
   LoadingState,
   OfflineBanner,
   OfflineState,
+  Pressable,
   Text,
 } from '../components/ui';
 import { renderWithProviders } from '../test-utils';
@@ -111,5 +112,42 @@ describe('OfflineBanner', () => {
     } finally {
       jest.mocked(NetInfo.useNetInfo).mockReturnValue(online);
     }
+  });
+});
+
+describe('Pressable (D-202)', () => {
+  type StyleFn = (state: { pressed: boolean; hovered?: boolean }) => unknown;
+  const styleOf = (el: ReturnType<typeof Pressable>): StyleFn =>
+    (el as unknown as { props: { style: StyleFn } }).props.style;
+
+  it('dims while held without changing its layout', () => {
+    const style = styleOf(Pressable({ style: { padding: 12 } }));
+    expect(StyleSheet.flatten(style({ pressed: false }) as never)).toEqual({ padding: 12 });
+    expect(StyleSheet.flatten(style({ pressed: true }) as never)).toEqual({
+      padding: 12,
+      opacity: 0.6,
+    });
+  });
+
+  it('keeps a style function and gives no feedback when disabled', () => {
+    const fn = ({ pressed }: { pressed: boolean }) => ({ margin: pressed ? 2 : 0 });
+    const style = styleOf(Pressable({ style: fn }));
+    expect(StyleSheet.flatten(style({ pressed: true }) as never)).toEqual({
+      margin: 2,
+      opacity: 0.6,
+    });
+    const off = styleOf(Pressable({ style: { padding: 12 }, disabled: true }));
+    expect(StyleSheet.flatten(off({ pressed: true }) as never)).toEqual({ padding: 12 });
+  });
+
+  it('still presses through to its handler', async () => {
+    const onPress = jest.fn();
+    await renderWithProviders(
+      <Pressable accessibilityRole="button" accessibilityLabel="Open" onPress={onPress}>
+        <Text>Open</Text>
+      </Pressable>,
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Open' }));
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });

@@ -77,7 +77,9 @@ export function DockTabBar({
         <Text
           variant="caption"
           numberOfLines={1}
-          style={{ color, fontWeight: focused ? '700' : '500', fontSize: 11 }}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          style={{ color, fontWeight: focused ? '700' : '500', fontSize: 12 }}
         >
           {label}
         </Text>

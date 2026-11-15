@@ -1,7 +1,7 @@
 import type { MapCluster, MapPin } from '@touchgrass/shared';
 import { type ReactNode, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Circle, Marker, type Region } from 'react-native-maps';
 import { useMapPins } from '../src/features/discovery/api';
@@ -9,7 +9,7 @@ import { type DiscoverFilters, regionToBox } from '../src/features/discovery/fil
 import { formatWhen } from '../src/features/events/format';
 import { useTheme } from '../src/theme/theme';
 import { MapPin as PinIcon, People } from './icons';
-import { FadeIn, Icon, staggerDelay, Text } from './ui';
+import { FadeIn, Icon, staggerDelay, Text, Pressable } from './ui';
 
 /**
  * Map view (F-DSC-03), full screen (D-153). Pins sit on each plan's public centre; unrevealed mystery plans are
@@ -186,7 +186,7 @@ export function DiscoverMap({
                   {p.title}
                 </Text>
                 <View style={styles.when}>
-                  <Icon icon={PinIcon} size={13} color={theme.colors.primary} />
+                  <Icon icon={PinIcon} size={14} color={theme.colors.textMuted} />
                   <Text variant="caption" tone="muted" numberOfLines={1}>
                     {formatWhen(p.startsAt, i18n.language)}
                   </Text>

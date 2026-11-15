@@ -1,7 +1,7 @@
 import type { Suggestion } from '@touchgrass/shared';
 import { useTranslation } from 'react-i18next';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useTheme } from '../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../src/theme/theme';
 import { Avatar } from './Avatar';
 import { SquadActions } from './SquadActions';
 import { AnimatedPressable, FadeIn, staggerDelay, Text, usePressScale } from './ui';
@@ -96,6 +96,6 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  top: { alignItems: 'center', gap: 4, minHeight: 44 },
+  top: { alignItems: 'center', gap: 4, minHeight: TOUCH_TARGET },
   center: { textAlign: 'center' },
 });

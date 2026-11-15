@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../src/theme/theme';
-import { Text } from './ui';
+import { Text, Pressable } from './ui';
 
 export interface SegmentedTabsProps<K extends string> {
   tabs: { key: K; label: string; badge?: number }[];

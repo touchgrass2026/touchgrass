@@ -1,13 +1,13 @@
 import type { StoryTrayEntry } from '@touchgrass/shared';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useFlag } from '../../src/features/app-config/use-flag';
 import { useStoryTray } from '../../src/features/stories/api';
-import { useTheme } from '../../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../../src/theme/theme';
 import { Avatar } from '../Avatar';
 import { Plus } from '../icons';
-import { FadeIn, Icon, staggerDelay, Text } from '../ui';
+import { FadeIn, Icon, staggerDelay, Text, Pressable } from '../ui';
 
 const SIZE = 52;
 
@@ -126,8 +126,8 @@ export function StoryTray() {
 
 const styles = StyleSheet.create({
   row: { gap: 18, alignItems: 'flex-start', paddingVertical: 2 },
-  person: { alignItems: 'center', gap: 4, width: 62, minHeight: 44 },
-  ringWrap: { minWidth: 44, minHeight: 44 },
+  person: { alignItems: 'center', gap: 4, width: 62, minHeight: TOUCH_TARGET },
+  ringWrap: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET },
   add: {
     width: SIZE,
     height: SIZE,

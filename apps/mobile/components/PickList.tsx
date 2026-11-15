@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../src/theme/theme';
 import { Check } from './icons';
-import { Icon, Text, TextField } from './ui';
+import { Icon, Text, TextField, Pressable } from './ui';
 
 export interface PickOption {
   id: string;

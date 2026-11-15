@@ -1,7 +1,7 @@
-import { type EventSummary, type FeedItem, genderOnly } from '@touchgrass/shared';
+import { type EventSummary, type FeedItem, genderOnly, media } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowRight, Calendar, Check, EyeOff, Heart, Lock, People } from './icons';
+import { Calendar, Check, EyeOff, Heart, Lock, People } from './icons';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { localized } from '../src/features/catalog/api';
@@ -20,6 +20,9 @@ const HERO_HEIGHT = 168;
  * top, then when, how many are pulling up, who you know that's going, and a Pull up pill. The whole card is one
  * button whose label reads every fact, so the pills and faces inside are hidden from screen readers.
  */
+/** Mystery plans hide their artwork behind one dark, fixed gradient. */
+const MYSTERY_GRADIENT = ['#052E1C', '#0F172A', '#000000'] as const;
+
 export function EventCard({
   event,
   onOpen,
@@ -133,7 +136,7 @@ export function EventCard({
       >
         {event.mystery ? (
           <LinearGradient
-            colors={['#052E1C', '#0F172A', '#000000']}
+            colors={MYSTERY_GRADIENT}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -150,7 +153,7 @@ export function EventCard({
               importantForAccessibility="no"
             />
             <LinearGradient
-              colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0)', theme.colors.surface]}
+              colors={[media.scrimTop, media.clear, theme.colors.surface]}
               locations={[0, 0.4, 1]}
               style={StyleSheet.absoluteFill}
             />
@@ -186,7 +189,7 @@ export function EventCard({
       >
         <View style={styles.row}>
           <View style={[styles.row, styles.grow]}>
-            <Icon icon={event.mystery ? Lock : Calendar} size={15} color={theme.colors.primary} />
+            <Icon icon={event.mystery ? Lock : Calendar} size={16} color={theme.colors.textMuted} />
             <Text variant="label" style={styles.grow}>
               {when}
             </Text>
@@ -197,8 +200,8 @@ export function EventCard({
               { backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radii.sm },
             ]}
           >
-            <Icon icon={People} size={13} color={theme.colors.primary} />
-            <Text variant="caption" style={{ color: theme.colors.primary, fontWeight: '700' }}>
+            <Icon icon={People} size={14} color={theme.colors.textMuted} />
+            <Text variant="caption" style={{ color: theme.colors.text, fontWeight: '700' }}>
               {going}
             </Text>
           </View>
@@ -232,7 +235,7 @@ export function EventCard({
             <Text variant="label" style={{ color: ctaFg, fontWeight: '700' }}>
               {cta}
             </Text>
-            <Icon icon={isGoing ? Check : ArrowRight} size={15} color={ctaFg} strokeWidth={2.5} />
+            {isGoing ? <Icon icon={Check} size={16} color={ctaFg} strokeWidth={2.5} /> : null}
           </View>
         </View>
       </View>
@@ -274,8 +277,8 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, flexShrink: 1 },
   heroText: { gap: 4 },
-  onPhoto: { color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8 },
-  onPhotoMuted: { color: '#E5E7EB', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6 },
+  onPhoto: { color: media.text, textShadowColor: media.textShadow, textShadowRadius: 8 },
+  onPhotoMuted: { color: media.textMuted, textShadowColor: media.textShadow, textShadowRadius: 6 },
   body: { paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grow: { flexGrow: 1, flexShrink: 1 },

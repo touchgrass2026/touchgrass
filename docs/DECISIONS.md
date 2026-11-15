@@ -887,3 +887,12 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 - The `ui-ux-pro-max` skill (nextlevelbuilder/ui-ux-pro-max-skill, MIT, top of GitHub's ui-design topic) is vendored as a project skill under `.claude/skills/ui-ux-pro-max`, so UI work in this repo consults its UX guidelines and React Native stack rules.
 - Its design-system generator suggested an orange/blue palette with Righteous/Poppins for "social events"; we keep the matcha brand and Inter (D-144) and adopt its interaction and layout rules instead.
 - Applied from its checks: touch targets follow the platform (44pt iOS, 48dp Android); chips and pills keep their label on one line; the first-launch guide gains Back beside Skip.
+
+## D-202 UI audit against ui-ux-pro-max's pre-delivery checklist
+
+- Measured: every text colour passes 4.5:1 on the background and surface in both themes; input borders pass 3:1; the hero carousel already pauses for reduced motion, screen readers and touch.
+- Press feedback: the kit now has `Pressable` (dims to 0.6 while held, opacity only so nothing moves, none when disabled). About 40 controls in 20 files that gave no feedback use it; import Pressable from the kit, not react-native.
+- Touch targets: static styles use `TOUCH_TARGET` (44pt iOS, 48dp Android) instead of a hard-coded 44.
+- Photo overlays: text, shadows, scrims and chips over photos come from the shared `media` tokens instead of hex values repeated in five components.
+- Accent once per surface: on plan cards the date and people icons and the going count are ink, the action button keeps the accent, and the decorative arrow on every card button is gone (a check shows only when you are going).
+- Type and icons: nothing under 12px apart from notification counts (dock labels and chat kind tags 11 → 12); icon sizes on the 14/16/18/20/24 scale (13 and 15 removed).

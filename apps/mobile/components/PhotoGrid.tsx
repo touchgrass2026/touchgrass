@@ -2,10 +2,10 @@ import { X } from './icons';
 import type { ProfilePhoto } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../src/theme/theme';
-import { Icon, Text } from './ui';
+import { Icon, Text, Pressable } from './ui';
 
 export interface PhotoGridProps {
   photos: ProfilePhoto[];

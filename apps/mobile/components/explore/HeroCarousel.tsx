@@ -1,3 +1,4 @@
+import { media } from '@touchgrass/shared';
 import type { FeedItem } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -200,7 +201,7 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
         <PlanArt seed={item.id} iconSize={44} />
       )}
       <LinearGradient
-        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.85)']}
+        colors={[media.clear, 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.85)']}
         style={styles.shade}
       >
         {item.reasons.includes('featured') ? (
@@ -227,8 +228,8 @@ const styles = StyleSheet.create({
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   shade: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', padding: 16, gap: 4 },
   pill: { alignSelf: 'flex-start', marginBottom: 4 },
-  onPhoto: { color: '#FFFFFF' },
-  onPhotoMuted: { color: '#E5E7EB' },
+  onPhoto: { color: media.text },
+  onPhotoMuted: { color: media.textMuted },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 },
   dot: { width: 6, height: 6, borderRadius: 3 },
 });

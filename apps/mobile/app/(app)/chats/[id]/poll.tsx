@@ -1,12 +1,20 @@
 import { CreatePollBody } from '@touchgrass/shared';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import { X } from '../../../../components/icons';
 import { useTranslation } from 'react-i18next';
-import { Button, Icon, Screen, SwitchRow, Text, TextField } from '../../../../components/ui';
+import {
+  Button,
+  Icon,
+  Screen,
+  SwitchRow,
+  Text,
+  TextField,
+  Pressable,
+} from '../../../../components/ui';
 import { fontFamilyFor } from '../../../../src/theme/fonts';
-import { useTheme } from '../../../../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../../../../src/theme/theme';
 import { useCreatePoll } from '../../../../src/features/chat/api';
 import { errorMessage } from '../../../../src/lib/errors';
 
@@ -134,5 +142,10 @@ const styles = StyleSheet.create({
   box: { borderWidth: 2, overflow: 'hidden' },
   optionRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 14 },
   optionInput: { flex: 1, fontSize: 16, paddingVertical: 10 },
-  remove: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  remove: {
+    width: TOUCH_TARGET,
+    height: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

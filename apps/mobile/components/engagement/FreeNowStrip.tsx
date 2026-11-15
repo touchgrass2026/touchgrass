@@ -2,13 +2,13 @@ import type { FreeNowItem } from '@touchgrass/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useFreeNow, useSetFree } from '../../src/features/engagement/api';
 import { formatTime } from '../../src/features/events/format';
-import { useTheme } from '../../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../../src/theme/theme';
 import { Avatar } from '../Avatar';
 import { Plus, Zap } from '../icons';
-import { Button, FadeIn, Icon, Pulse, staggerDelay, Text } from '../ui';
+import { Button, FadeIn, Icon, Pulse, staggerDelay, Text, Pressable } from '../ui';
 import { FreeNowSheet } from './FreeNowSheet';
 import { useFlag } from '../../src/features/app-config/use-flag';
 
@@ -33,7 +33,7 @@ export function FreeNowStrip() {
       <View style={styles.header}>
         <View style={styles.title}>
           <Pulse>
-            <Icon icon={Zap} size={13} color={theme.colors.primary} strokeWidth={2.4} />
+            <Icon icon={Zap} size={14} color={theme.colors.primary} strokeWidth={2.4} />
           </Pulse>
           <Text variant="overline" tone="muted" accessibilityRole="header">
             {t('free.title')}
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   title: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   row: { gap: 18, alignItems: 'flex-start', paddingVertical: 2 },
-  person: { alignItems: 'center', gap: 4, width: 64, minHeight: 44 },
+  person: { alignItems: 'center', gap: 4, width: 64, minHeight: TOUCH_TARGET },
   add: {
     width: SIZE,
     height: SIZE,

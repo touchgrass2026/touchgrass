@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -26,6 +25,7 @@ import {
   LoadingState,
   OfflineBanner,
   Text,
+  Pressable,
 } from '../../../../components/ui';
 import {
   useClosePoll,
@@ -50,7 +50,7 @@ import {
 } from '../../../../src/features/media/upload';
 import { errorMessage } from '../../../../src/lib/errors';
 import { useApi } from '../../../../src/providers/api-context';
-import { useTheme } from '../../../../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../../../../src/theme/theme';
 
 const JOIN_REFRESH_MS = 60_000;
 const TYPING_THROTTLE_MS = 3000;
@@ -601,16 +601,16 @@ const styles = StyleSheet.create({
   composer: { borderTopWidth: 1, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
   composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   round: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: TOUCH_TARGET,
+    height: TOUCH_TARGET,
+    borderRadius: TOUCH_TARGET / 2,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   input: {
     flex: 1,
-    minHeight: 44,
+    minHeight: TOUCH_TARGET,
     maxHeight: 132,
     borderWidth: 1.5,
     borderRadius: 22,

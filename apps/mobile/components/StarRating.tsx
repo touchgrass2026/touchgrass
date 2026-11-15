@@ -1,8 +1,8 @@
 import { Star } from './icons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../src/theme/theme';
-import { Icon, Text } from './ui';
+import { Icon, Text, Pressable } from './ui';
 
 export interface StarRatingProps {
   /** Group label read before the stars, e.g. "Rate the plan". */

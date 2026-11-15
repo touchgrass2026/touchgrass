@@ -1,7 +1,7 @@
 import type { NotificationItem } from '@touchgrass/shared';
 import { type Href, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import {
   Button,
   EmptyState,
@@ -11,13 +11,14 @@ import {
   OfflineBanner,
   staggerDelay,
   Text,
+  Pressable,
 } from '../../components/ui';
 import { useTrack } from '../../src/features/analytics/analytics';
 import { formatWhen } from '../../src/features/events/format';
 import { useInbox, useMarkRead } from '../../src/features/notifications/api';
 import { pushPath } from '../../src/features/notifications/push-links';
 import { errorMessage } from '../../src/lib/errors';
-import { useTheme } from '../../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../../src/theme/theme';
 
 /** The notification inbox (F-NOT-01): newest first, unread marked, tapping opens what it is about. */
 export default function NotificationsScreen() {
@@ -126,5 +127,5 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   list: { padding: 16, gap: 8, flexGrow: 1 },
-  item: { minHeight: 44, padding: 12, gap: 4, borderWidth: 1 },
+  item: { minHeight: TOUCH_TARGET, padding: 12, gap: 4, borderWidth: 1 },
 });

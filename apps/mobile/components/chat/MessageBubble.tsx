@@ -1,13 +1,13 @@
 import { Check } from '../icons';
 import type { Message, PollView } from '@touchgrass/shared';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { localized } from '../../src/features/catalog/api';
 import { formatTime } from '../../src/features/events/format';
 import type { PendingMessage } from '../../src/features/chat/outbox';
 import { useTheme } from '../../src/theme/theme';
-import { Button, Icon, Text } from '../ui';
+import { Button, Icon, Text, Pressable } from '../ui';
 
 /** System lines (chat opened, icebreakers, request accepted) in the reader's language. */
 export function systemText(
@@ -85,7 +85,7 @@ export function PollCard({
                 ]}
               >
                 {selected ? (
-                  <Icon icon={Check} size={13} color={theme.colors.onPrimary} strokeWidth={3} />
+                  <Icon icon={Check} size={14} color={theme.colors.onPrimary} strokeWidth={3} />
                 ) : null}
               </View>
               <Text style={styles.optionText}>{o.text}</Text>

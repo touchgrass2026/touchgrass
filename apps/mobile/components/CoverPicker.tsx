@@ -1,3 +1,4 @@
+import { media } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,8 +22,8 @@ export interface CoverValue {
 }
 
 /** Light text on a dark scrim stays readable over any photo (as the kit's dark Pill). */
-const SCRIM = 'rgba(0,0,0,0.6)';
-const ON_SCRIM = '#FFFFFF';
+const SCRIM = media.scrim;
+const ON_SCRIM = media.text;
 
 /**
  * The plan's cover photo (D-196), shown large at the top of Plot (D-199). Empty, it is one big "Add a cover

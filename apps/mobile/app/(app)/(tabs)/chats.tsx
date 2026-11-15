@@ -3,7 +3,7 @@ import type { ConversationSummary } from '@touchgrass/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Avatar } from '../../../components/Avatar';
 import { SegmentedTabs } from '../../../components/SegmentedTabs';
 import {
@@ -15,6 +15,7 @@ import {
   OfflineState,
   Screen,
   Text,
+  Pressable,
 } from '../../../components/ui';
 import { useInbox } from '../../../src/features/chat/api';
 import { formatTime } from '../../../src/features/events/format';
@@ -174,7 +175,7 @@ export default function ChatsScreen() {
 
 const styles = StyleSheet.create({
   kindTag: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1 },
-  kindText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  kindText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { flexShrink: 1 },
   row: {

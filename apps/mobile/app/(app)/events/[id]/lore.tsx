@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
 import { ChipGroup } from '../../../../components/ChipGroup';
 import {
   Button,
@@ -13,6 +13,7 @@ import {
   Screen,
   Text,
   TextField,
+  Pressable,
 } from '../../../../components/ui';
 import {
   useAddLore,

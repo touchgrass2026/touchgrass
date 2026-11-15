@@ -10,6 +10,9 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 import { AccessibilityInfo, Platform, useColorScheme } from 'react-native';
 import { useSettingsStore } from '../stores/settings-store';
 
+/** Platform minimum touch target for static styles (D-201): 44pt on iOS, 48dp on Android. */
+export const TOUCH_TARGET = Platform.OS === 'android' ? 48 : MIN_TOUCH_TARGET;
+
 export interface Theme {
   scheme: 'light' | 'dark';
   colors: ColorScheme;
@@ -28,7 +31,7 @@ export function buildTheme(scheme: 'light' | 'dark', reduceMotion: boolean): The
     radii,
     typography,
     // Platform minimums (ui-ux-pro-max `touch-target-size`, D-201): 44pt on iOS, 48dp on Android.
-    minTouchTarget: Platform.OS === 'android' ? 48 : MIN_TOUCH_TARGET,
+    minTouchTarget: TOUCH_TARGET,
     reduceMotion,
   };
 }

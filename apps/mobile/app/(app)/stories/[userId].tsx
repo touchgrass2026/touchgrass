@@ -5,7 +5,7 @@ import { StoryVideo } from '../../../components/stories/StoryVideo';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../../components/Avatar';
 import { Eye, Flag, Heart, Pause, Play, Send, Trash, X } from '../../../components/icons';
@@ -19,6 +19,7 @@ import {
   OfflineState,
   Pop,
   Text,
+  Pressable,
 } from '../../../components/ui';
 import { useStartDirect } from '../../../src/features/chat/api';
 import { formatTime } from '../../../src/features/events/format';
@@ -34,7 +35,7 @@ import { useIsOffline } from '../../../src/hooks/use-is-offline';
 import { useScreenReader } from '../../../src/hooks/use-screen-reader';
 import { ApiError } from '../../../src/lib/api-client';
 import { errorMessage } from '../../../src/lib/errors';
-import { useTheme } from '../../../src/theme/theme';
+import { useTheme, TOUCH_TARGET } from '../../../src/theme/theme';
 
 /** How long a story stays up before the next one, unless paused (or a screen reader is on). */
 export const STORY_DURATION_MS = 6000;
@@ -483,6 +484,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   viewerList: { gap: 10 },
-  viewerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  viewerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: TOUCH_TARGET },
   viewerName: { flex: 1 },
 });

@@ -6,6 +6,7 @@ export { IconButton } from './IconButton';
 export { IconText } from './IconText';
 export { ListRow, type ListRowProps, SwitchRow, type SwitchRowProps } from './ListRow';
 export { OfflineBanner } from './OfflineBanner';
+export { Pressable } from './Pressable';
 export { Pill, type PillTone } from './Pill';
 export { Screen, type ScreenProps } from './Screen';
 export { EmptyState, ErrorState, LoadingState, OfflineState } from './StateViews';

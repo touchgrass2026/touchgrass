@@ -1,3 +1,4 @@
+import { media } from '@touchgrass/shared';
 import { BadgeCheck } from './icons';
 import type {
   HostRatingSummary,
@@ -204,8 +205,8 @@ function PhotoPager({ photos }: { photos: MediaVariants[] }) {
               style={[
                 styles.dot,
                 i === page
-                  ? { backgroundColor: '#FFFFFF', width: 18 }
-                  : { backgroundColor: 'rgba(255,255,255,0.5)' },
+                  ? { backgroundColor: media.text, width: 18 }
+                  : { backgroundColor: media.dot },
               ]}
             />
           ))}

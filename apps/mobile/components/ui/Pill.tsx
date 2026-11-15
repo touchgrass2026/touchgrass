@@ -1,3 +1,4 @@
+import { media } from '@touchgrass/shared';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../../src/theme/theme';
 import { Icon, type GlyphIcon } from './Icon';
@@ -24,7 +25,7 @@ export function Pill({
     accent: { bg: theme.colors.accent, fg: theme.colors.onAccent, border: theme.colors.accent },
     glass: { bg: theme.colors.surfaceAlt, fg: theme.colors.text, border: theme.colors.border },
     // Over photos: a dark scrim keeps light text readable on any image.
-    dark: { bg: 'rgba(0,0,0,0.65)', fg: '#FFFFFF', border: 'rgba(255,255,255,0.2)' },
+    dark: { bg: media.chip, fg: media.text, border: media.chipBorder },
   }[tone];
   return (
     <View

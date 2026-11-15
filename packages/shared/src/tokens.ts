@@ -116,6 +116,21 @@ export const typography = {
   /** Section labels, sentence case at normal tracking (D-198: no tracked all-caps labels). */
   overline: { fontSize: 13, lineHeight: 18, fontWeight: '600', letterSpacing: 0.1 },
 } as const;
+/**
+ * Colours over photos and artwork (D-202): the same in both themes because the photo, not the theme,
+ * is the background. Text on media always sits on `scrim` or a gradient ending in it.
+ */
+export const media = {
+  text: '#FFFFFF',
+  textMuted: '#E5E7EB',
+  textShadow: 'rgba(0,0,0,0.6)',
+  scrim: 'rgba(0,0,0,0.6)',
+  scrimTop: 'rgba(0,0,0,0.45)',
+  clear: 'rgba(0,0,0,0)',
+  chip: 'rgba(0,0,0,0.65)',
+  chipBorder: 'rgba(255,255,255,0.2)',
+  dot: 'rgba(255,255,255,0.5)',
+} as const;
 export const motion = { fast: 150, normal: 250, slow: 400, signalPulse: 2400 } as const;
 /** Minimum touch target (pt) for F-A11Y-01. */
 export const MIN_TOUCH_TARGET = 44;

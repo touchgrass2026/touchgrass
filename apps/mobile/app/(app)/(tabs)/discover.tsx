@@ -5,7 +5,7 @@ import { FreeNowStrip } from '../../../components/engagement/FreeNowStrip';
 import { StoryTray } from '../../../components/stories/StoryTray';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Search } from '../../../components/icons';
 import { BRAND } from '@touchgrass/shared';
 import { Avatar } from '../../../components/Avatar';
@@ -28,6 +28,7 @@ import {
   OfflineState,
   Screen,
   Text,
+  Pressable,
 } from '../../../components/ui';
 import { useMe } from '../../../src/features/me/api';
 import { useTheme } from '../../../src/theme/theme';
@@ -175,7 +176,7 @@ export default function DiscoverScreen() {
         style={[
           styles.search,
           {
-            minHeight: 44,
+            minHeight: theme.minTouchTarget,
             backgroundColor: theme.colors.surfaceAlt,
             borderColor: theme.colors.border,
             borderRadius: theme.radii.pill,
