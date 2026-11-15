@@ -9,6 +9,7 @@ export * from './semver';
 export * from './time';
 export * from './geo';
 export * from './tokens';
+export * from './categories';
 export * from './feature-flags';
 export * from './socket';
 export * from './i18n';

@@ -1,4 +1,4 @@
-import { media } from '@touchgrass/shared';
+import { type CategoryHue, media } from '@touchgrass/shared';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../../src/theme/theme';
 import { Icon, type GlyphIcon } from './Icon';
@@ -14,10 +14,15 @@ export function Pill({
   label,
   tone = 'glass',
   icon,
+  hue,
+  testID,
 }: {
   label: string;
   tone?: PillTone;
   icon?: GlyphIcon;
+  /** A category hue (D-204): tinted background, light label, icon in the solid hue. Overrides `tone`. */
+  hue?: CategoryHue;
+  testID?: string;
 }) {
   const theme = useTheme();
   const look = {
@@ -27,15 +32,28 @@ export function Pill({
     // Over photos: a dark scrim keeps light text readable on any image.
     dark: { bg: media.chip, fg: media.text, border: media.chipBorder },
   }[tone];
+  const fg = hue ? hue.text : look.fg;
+  const bg = hue ? hue.soft : look.bg;
+  const border = hue ? hue.soft : look.border;
+  const iconColor = hue ? hue.solid : look.fg;
   return (
     <View
+      testID={testID}
       style={[
         styles.pill,
-        { backgroundColor: look.bg, borderColor: look.border, borderRadius: theme.radii.pill },
+        { backgroundColor: bg, borderColor: border, borderRadius: theme.radii.pill },
       ]}
     >
-      {icon ? <Icon icon={icon} size={12} color={look.fg} strokeWidth={2.5} /> : null}
-      <Text variant="caption" numberOfLines={1} style={{ color: look.fg, fontWeight: '700' }}>
+      {icon ? (
+        <Icon
+          icon={icon}
+          size={12}
+          color={iconColor}
+          accent={hue ? iconColor : undefined}
+          strokeWidth={2.5}
+        />
+      ) : null}
+      <Text variant="caption" numberOfLines={1} style={{ color: fg, fontWeight: '700' }}>
         {label}
       </Text>
     </View>

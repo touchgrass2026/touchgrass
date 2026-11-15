@@ -13,9 +13,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { localized } from '../../src/features/catalog/api';
 import { formatWhen, locationLabel } from '../../src/features/events/format';
 import { useScreenReader } from '../../src/hooks/use-screen-reader';
 import { useTheme } from '../../src/theme/theme';
+import { CategoryPill } from '../CategoryPill';
 import { PlanArt } from '../PlanArt';
 import { AnimatedPressable, Pill, Text, usePressScale } from '../ui';
 
@@ -173,10 +175,12 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
   const when = formatWhen(item.startsAt, i18n.language, item.timezone);
   const where = locationLabel(t, item.location);
   const going = t('explore.going', { count: item.goingCount });
+  const category =
+    item.category && !item.mystery ? localized(item.category.name, i18n.language) : null;
   return (
     <AnimatedPressable
       accessibilityRole="button"
-      accessibilityLabel={[item.title, when, where, going].join(', ')}
+      accessibilityLabel={[item.title, category, when, where, going].filter(Boolean).join(', ')}
       accessibilityHint={t('a11y.opensScreen', { screen: item.title })}
       onPress={onOpen}
       onPressIn={press.onPressIn}
@@ -198,15 +202,20 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
           accessibilityIgnoresInvertColors
         />
       ) : (
-        <PlanArt seed={item.id} iconSize={44} />
+        <PlanArt category={item.mystery ? null : item.category} iconSize={44} />
       )}
       <LinearGradient
         colors={[media.clear, 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.85)']}
         style={styles.shade}
       >
-        {item.reasons.includes('featured') ? (
-          <View style={styles.pill}>
-            <Pill label={t('explore.featured')} tone="dark" />
+        {item.reasons.includes('featured') || (item.category && !item.mystery) ? (
+          <View style={styles.pills}>
+            {item.reasons.includes('featured') ? (
+              <Pill label={t('explore.featured')} tone="dark" />
+            ) : null}
+            {item.mystery ? null : (
+              <CategoryPill category={item.category} testID={`category-hero-${item.slug}`} />
+            )}
           </View>
         ) : null}
         <Text variant="title" numberOfLines={2} style={styles.onPhoto}>
@@ -227,7 +236,7 @@ const styles = StyleSheet.create({
   card: { height: HEIGHT, overflow: 'hidden' },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   shade: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', padding: 16, gap: 4 },
-  pill: { alignSelf: 'flex-start', marginBottom: 4 },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
   onPhoto: { color: media.text },
   onPhotoMuted: { color: media.textMuted },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 },

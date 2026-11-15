@@ -8,6 +8,7 @@ import { localized } from '../src/features/catalog/api';
 import { capacityLabel, formatWhen, locationLabel, rsvpLabel } from '../src/features/events/format';
 import { useTheme } from '../src/theme/theme';
 import { Avatar } from './Avatar';
+import { CategoryPill } from './CategoryPill';
 import { PlanArt } from './PlanArt';
 import { AnimatedPressable, Icon, Pill, Text, usePressScale } from './ui';
 
@@ -67,8 +68,10 @@ export function EventCard({
         })
       : null;
   const extras = feed ? feedDetails(t, feed) : [];
+  const categoryName = event.category ? localized(event.category.name, i18n.language) : null;
   const summary = [
     event.title,
+    event.mystery ? null : categoryName,
     when,
     where,
     capacityLabel(t, event),
@@ -96,13 +99,7 @@ export function EventCard({
     ? { label: onlyLabel ?? '', tone: 'accent' as const, icon: Heart }
     : event.type === 'curated'
       ? { label: t('share.curated'), tone: 'primary' as const, icon: undefined }
-      : event.category
-        ? {
-            label: localized(event.category.name, i18n.language),
-            tone: 'primary' as const,
-            icon: undefined,
-          }
-        : null;
+      : null;
   const second = event.soloFriendly
     ? t('events.soloFriendly')
     : event.smallGroup
@@ -159,7 +156,7 @@ export function EventCard({
             />
           </>
         ) : (
-          <PlanArt seed={event.id} />
+          <PlanArt category={event.category} />
         )}
         <View style={styles.topRow}>
           <View style={styles.pills}>
@@ -167,7 +164,9 @@ export function EventCard({
               <Pill label={t('events.mystery')} tone="dark" icon={EyeOff} />
             ) : lead ? (
               <Pill label={lead.label} tone={lead.tone} icon={lead.icon} />
-            ) : null}
+            ) : (
+              <CategoryPill category={event.category} testID={`category-${event.slug}`} />
+            )}
             {second ? <Pill label={second} tone="dark" /> : null}
           </View>
           {distance ? <Pill label={distance} tone="dark" /> : null}

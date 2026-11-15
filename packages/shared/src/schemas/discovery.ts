@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Interest } from './catalog';
 import { GeoPoint } from './common';
 import { EventSummary, Venue } from './events';
 import { CrewSummary } from './engagement';
@@ -168,6 +169,8 @@ export const MapPin = z.object({
   mystery: z.boolean(),
   startsAt: z.iso.datetime(),
   emoji: z.string().nullable(),
+  /** The plan's category, for the pin's hue and glyph (D-204); mystery pins still draw a neutral lock. */
+  category: Interest.pick({ slug: true, category: true, name: true }).nullable().default(null),
 });
 export type MapPin = z.infer<typeof MapPin>;
 export const MapCluster = z.object({ center: GeoPoint, count: z.number().int() });

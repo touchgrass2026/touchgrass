@@ -353,6 +353,22 @@ describe('Discover tab (F-DSC-01..08)', () => {
             mystery: true,
             startsAt: '2026-11-03T12:30:00.000Z',
             emoji: '☕',
+            category: null,
+          },
+          {
+            id: item(4).id,
+            slug: 'Slug0004',
+            title: 'Board game night',
+            center: { lat: 17.43, lng: 78.38 },
+            radiusMeters: 0,
+            mystery: false,
+            startsAt: '2026-11-03T12:30:00.000Z',
+            emoji: null,
+            category: {
+              slug: 'board-games',
+              category: 'games',
+              name: { en: 'Board games', te: 'బోర్డ్ గేమ్స్', hi: 'बोर्ड गेम्स' },
+            },
           },
         ],
         clusters: [{ center: { lat: 17.41, lng: 78.43 }, count: 7 }],
@@ -362,6 +378,17 @@ describe('Discover tab (F-DSC-01..08)', () => {
     await renderWithProviders(<DiscoverScreen />, { fetchFn: api.fetch });
     await fireEvent.press(await screen.findByRole('tab', { name: 'Map' }));
     expect(await screen.findByTestId('pin-Slug0003')).toBeOnTheScreen();
+    // Custom pins (D-204): a category badge with its name read out, a neutral lock for mystery plans.
+    expect(screen.getByTestId('marker-Slug0004').props.accessibilityLabel).toMatch(
+      /^Board game night, Board games, /,
+    );
+    expect(
+      screen.getByTestId('pin-badge-games', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('pin-badge-mystery', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('7', { includeHiddenElements: true })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '7 plans here' })).toBeOnTheScreen();
     expect(screen.getByText('Zoom in to see every plan here.')).toBeOnTheScreen();
     const mapCall = api.calls.find((c) => c.path === '/v1/discover/map');

@@ -531,14 +531,15 @@ export class DiscoveryService {
         ),
       ),
     ];
-    const emojis = new Map(
-      (await this.interests.interestsByIds(categoryIds)).map((i) => [i.id, i.emoji]),
+    const interests = new Map(
+      (await this.interests.interestsByIds(categoryIds)).map((i) => [i.id, i]),
     );
     const { singles, clusters } = clusterPoints(kept, q.zoom);
     return {
       pins: singles.flatMap((r) => {
         const c = cores.get(r.id);
         if (!c) return [];
+        const category = c.categoryInterestId ? interests.get(c.categoryInterestId) : undefined;
         return [
           {
             id: c.id,
@@ -549,7 +550,10 @@ export class DiscoveryService {
             radiusMeters: c.mystery ? MYSTERY_AREA_RADIUS_M : 0,
             mystery: c.mystery,
             startsAt: c.startsAt.toISOString(),
-            emoji: c.categoryInterestId ? (emojis.get(c.categoryInterestId) ?? null) : null,
+            emoji: category?.emoji ?? null,
+            category: category
+              ? { slug: category.slug, category: category.category, name: category.name }
+              : null,
           },
         ];
       }),
