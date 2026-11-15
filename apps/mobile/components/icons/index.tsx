@@ -88,6 +88,7 @@ export const Photo = glyph('photo');
 export const Eye = glyph('eye');
 export const Trash = glyph('trash');
 export const Flag = glyph('flag');
+export const More = glyph('more');
 export const Pause = glyph('pause');
 export const Play = glyph('play');
 export const Bowl = glyph('bowl');

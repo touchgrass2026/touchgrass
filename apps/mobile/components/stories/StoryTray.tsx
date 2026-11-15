@@ -3,17 +3,20 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useFlag } from '../../src/features/app-config/use-flag';
+import { useMyFace } from '../../src/features/me/api';
 import { useStoryTray } from '../../src/features/stories/api';
 import { useTheme, TOUCH_TARGET } from '../../src/theme/theme';
-import { Avatar } from '../Avatar';
 import { Plus } from '../icons';
 import { FadeIn, Icon, staggerDelay, Text, Pressable } from '../ui';
+import { BADGE_SIZE, RingBadge, StoryRing } from './StoryRing';
 
-const SIZE = 52;
+const SIZE = 56;
+const ITEM_WIDTH = 72;
 
 /**
- * Squad stories (Phase 13) as the mock's reel: "Your story" first (add one, or open yours), then people with
- * something new (lime ring), then the rest (muted ring). Hidden while the feature is switched off.
+ * Squad stories (Phase 13, D-207) the Instagram way: "Your story" first (your face with a lime "+" to add one;
+ * once you have a live story, your ringed face opens it and the "+" still adds more), then people with
+ * something new (gradient ring), then the rest (muted ring). Hidden while the feature is switched off.
  */
 export function StoryTray() {
   const { t } = useTranslation();
@@ -21,6 +24,7 @@ export function StoryTray() {
   const theme = useTheme();
   const enabled = useFlag('stories');
   const q = useStoryTray(enabled);
+  const face = useMyFace();
   if (!enabled || !q.data) return null;
   const mine = q.data.items.find((i) => i.mine);
   const others = q.data.items.filter((i) => !i.mine);
@@ -28,6 +32,14 @@ export function StoryTray() {
   const open = (entry: StoryTrayEntry): void => {
     router.push({ pathname: '/stories/[userId]', params: { userId: entry.person.id } });
   };
+  const add = (): void => {
+    router.push('/stories/new');
+  };
+  const addBadge = (
+    <RingBadge color={theme.colors.primary} testID="story-add-badge">
+      <Icon icon={Plus} size={14} color={theme.colors.onPrimary} strokeWidth={2.8} />
+    </RingBadge>
+  );
 
   return (
     <View testID="story-tray">
@@ -43,44 +55,31 @@ export function StoryTray() {
             accessibilityHint={mine ? undefined : t('stories.addHint')}
             onPress={() => {
               if (mine) open(mine);
-              else router.push('/stories/new');
+              else add();
             }}
             testID={mine ? 'story-mine' : 'story-add'}
-            style={styles.ringWrap}
+            style={styles.face}
           >
-            {mine ? (
-              <Avatar
-                photo={mine.person.photo}
-                name={mine.person.displayName}
-                size={SIZE}
-                ring={theme.colors.primary}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.add,
-                  { borderColor: theme.colors.primary, backgroundColor: theme.colors.surfaceAlt },
-                ]}
-              >
-                <Icon icon={Plus} size={22} color={theme.colors.primary} strokeWidth={2.4} />
-              </View>
-            )}
+            <StoryRing
+              photo={mine?.person.photo ?? face.photo}
+              name={mine?.person.displayName ?? face.name}
+              size={SIZE}
+              kind={mine ? (mine.unseen ? 'unseen' : 'seen') : 'none'}
+              // Without a live story the badge is part of this one control.
+              badge={mine ? undefined : addBadge}
+            />
           </Pressable>
           {mine ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('stories.add')}
-              onPress={() => {
-                router.push('/stories/new');
-              }}
+              accessibilityHint={t('stories.addHint')}
+              onPress={add}
               testID="story-add-more"
-              hitSlop={10}
-              style={[
-                styles.badge,
-                { backgroundColor: theme.colors.primary, borderColor: theme.colors.background },
-              ]}
+              hitSlop={(TOUCH_TARGET - BADGE_SIZE) / 2}
+              style={styles.addMore}
             >
-              <Icon icon={Plus} size={14} color={theme.colors.onPrimary} strokeWidth={2.6} />
+              {addBadge}
             </Pressable>
           ) : null}
           <Text variant="caption" tone="muted" numberOfLines={1} style={styles.name}>
@@ -102,11 +101,11 @@ export function StoryTray() {
               testID={`story-person-${entry.person.id}`}
               style={styles.person}
             >
-              <Avatar
+              <StoryRing
                 photo={entry.person.photo}
                 name={entry.person.displayName}
                 size={SIZE}
-                ring={entry.unseen ? theme.colors.primary : theme.colors.border}
+                kind={entry.unseen ? 'unseen' : 'seen'}
               />
               <Text
                 variant="caption"
@@ -125,29 +124,15 @@ export function StoryTray() {
 }
 
 const styles = StyleSheet.create({
-  row: { gap: 18, alignItems: 'flex-start', paddingVertical: 2 },
-  person: { alignItems: 'center', gap: 4, width: 62, minHeight: TOUCH_TARGET },
-  ringWrap: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET },
-  add: {
-    width: SIZE,
-    height: SIZE,
-    borderRadius: SIZE / 2,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
+  row: { gap: 10, alignItems: 'flex-start', paddingVertical: 2 },
+  person: { alignItems: 'center', gap: 4, width: ITEM_WIDTH, minHeight: TOUCH_TARGET },
+  face: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET },
+  // Over the bottom-right of your ringed face (the ring adds 10pt to SIZE).
+  addMore: {
     position: 'absolute',
-    top: SIZE - 22,
-    right: 2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    top: SIZE + 10 - BADGE_SIZE,
+    right: (ITEM_WIDTH - SIZE - 10) / 2,
   },
-  name: { textAlign: 'center', width: 62 },
+  name: { textAlign: 'center', width: ITEM_WIDTH },
   bold: { fontWeight: '700' },
 });

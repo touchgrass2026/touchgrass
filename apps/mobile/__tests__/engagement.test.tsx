@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import type {
   BadgeView,
   EventDetail,
@@ -33,7 +33,7 @@ import ReferralsScreen from '../app/(app)/referrals';
 import { FreeNowStrip } from '../components/engagement/FreeNowStrip';
 import { StreakCard } from '../components/engagement/StreakCard';
 import { useAuthStore } from '../src/stores/auth-store';
-import { authResponseFixture, FakeApi, ids, interestsFixture } from '../test/fake-api';
+import { authResponseFixture, FakeApi, ids, interestsFixture, meFixture } from '../test/fake-api';
 import { mockRouteParams, mockRouter, renderWithProviders, resetStores } from '../test-utils';
 
 const CREW = '0192f3a4-5b6c-7d8e-9f01-0000000c0a01';
@@ -239,6 +239,42 @@ describe("I'm free now (F-ENG-01)", () => {
     expect(screen.getByTestId('free-me')).toHaveTextContent(/You're free until/);
     await fireEvent.press(screen.getByRole('button', { name: 'Not free anymore' }));
     await waitFor(() => expect(api.callsTo('DELETE', '/v1/me/availability')).toHaveLength(1));
+  });
+
+  it('your face with a lightning badge; an amber ring once you are free (D-207)', async () => {
+    let until: string | null = null;
+    api
+      .on('GET', '/v1/me', { status: 200, body: meFixture({ photos: [] }) })
+      .on('GET', '/v1/me/availability', () => ({
+        status: 200,
+        body: { me: { until, note: '' }, items: [] },
+      }));
+    const { queryClient } = await renderWithProviders(<FreeNowStrip />, { fetchFn: api.fetch });
+    const set = await screen.findByRole('button', { name: "I'm free" });
+    expect(set).toHaveProp('testID', 'free-set');
+    expect(await within(set).findByText('P', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(
+      within(set).getByTestId('free-badge', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      within(set).getByTestId('free-me-ring-none', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('+')).toBeNull();
+
+    until = '2026-11-01T15:30:00.000Z';
+    await act(() => queryClient.invalidateQueries());
+    const mine = await screen.findByRole('button', { name: /^You're free until/ });
+    expect(mine).toHaveProp('testID', 'free-mine');
+    expect(
+      within(mine).getByTestId('free-me-ring-seen', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      within(mine).getByTestId('free-badge', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(within(mine).getByText('You')).toBeOnTheScreen();
+    expect(screen.queryByTestId('free-set')).toBeNull();
+    await fireEvent.press(mine);
+    expect(mockRouter.push).toHaveBeenCalledWith('/free');
   });
 });
 

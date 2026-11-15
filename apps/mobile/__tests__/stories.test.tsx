@@ -1,11 +1,15 @@
 import * as ImagePicker from 'expo-image-picker';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { useVideoPlayer } from 'expo-video';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import type { PersonCard, PersonStories, Story, StoryTray } from '@touchgrass/shared';
+import type { TFunction } from 'i18next';
 import NewStoryScreen from '../app/(app)/stories/new';
 import StoryViewerScreen from '../app/(app)/stories/[userId]';
 import { StoryTray as Tray } from '../components/stories/StoryTray';
+import { storyAge } from '../src/features/stories/age';
+import { useStoryTray } from '../src/features/stories/api';
 import { useAuthStore } from '../src/stores/auth-store';
-import { authResponseFixture, FakeApi, ids, urlsFixture } from '../test/fake-api';
+import { authResponseFixture, FakeApi, ids, meFixture, urlsFixture } from '../test/fake-api';
 import { mockRouteParams, mockRouter, renderWithProviders, resetStores } from '../test-utils';
 
 const P2 = '0192f3a4-5b6c-7d8e-9f01-000000000003';
@@ -239,10 +243,16 @@ describe('story viewer', () => {
       await screen.findByText('Only you can see this until it has been reviewed.'),
     ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Like' })).toBeNull();
+    // No reply bar on your own story.
+    expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
+    // The eye at the bottom-left: "Seen by 2", opening who saw it, when, and who liked it.
+    expect(screen.getByText('Seen by 2')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Seen by 2, 1 like' }));
-    expect(await screen.findByLabelText('Kiran, Liked it')).toBeOnTheScreen();
-    expect(screen.getByLabelText('Meera')).toBeOnTheScreen();
+    expect(await screen.findByLabelText(/^Kiran, Liked it, \d+ hours ago$/)).toBeOnTheScreen();
+    expect(screen.getByLabelText(/^Meera, \d+ hours ago$/)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    // Delete sits behind the options button.
+    await fireEvent.press(screen.getByRole('button', { name: 'Story options' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Delete story' }));
     await waitFor(() => expect(api.callsTo('DELETE', `/v1/stories/${S1}`)).toHaveLength(1));
     await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
@@ -274,6 +284,241 @@ describe('video stories in the viewer (D-164)', () => {
     await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
     expect(await screen.findByLabelText('Video story from Meera')).toBeOnTheScreen();
     expect(screen.queryByTestId('story-image')).toBeNull();
+  });
+});
+
+describe('Instagram-style tray (D-207)', () => {
+  const entry = (p: PersonCard, over: Partial<StoryTray['items'][number]> = {}) => ({
+    person: p,
+    mine: false,
+    count: 1,
+    unseen: false,
+    latestAt: '2026-11-03T09:00:00.000Z',
+    ...over,
+  });
+
+  it('shows your own face with a lime add badge instead of a dashed circle', async () => {
+    api
+      .on('GET', '/v1/stories', { status: 200, body: { items: [entry(kiran)] } })
+      .on('GET', '/v1/me', { status: 200, body: meFixture({ photos: [] }) });
+    await renderWithProviders(<Tray />, { fetchFn: api.fetch });
+    const add = await screen.findByRole('button', { name: 'Add to your story' });
+    expect(add).toHaveProp('testID', 'story-add');
+    // Your initial (no photo yet), no ring, and the "+" badge inside the same control.
+    expect(await within(add).findByText('P', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(within(add).getByTestId('ring-none', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(
+      within(add).getByTestId('story-add-badge', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Your story')).toBeOnTheScreen();
+  });
+
+  it('rings new stories in a gradient and seen ones in a muted ring', async () => {
+    api.on('GET', '/v1/stories', {
+      status: 200,
+      body: {
+        items: [
+          entry(me, { mine: true }),
+          entry(meera, { unseen: true }),
+          entry(kiran, { unseen: false }),
+        ],
+      },
+    });
+    await renderWithProviders(<Tray />, { fetchFn: api.fetch });
+    const meeraButton = await screen.findByRole('button', { name: 'Meera, new story' });
+    expect(
+      within(meeraButton).getByTestId('ring-unseen', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      within(meeraButton).queryByTestId('ring-seen', { includeHiddenElements: true }),
+    ).toBeNull();
+    const kiranButton = screen.getByRole('button', { name: 'Kiran, story' });
+    expect(
+      within(kiranButton).getByTestId('ring-seen', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    // Your live story: your ringed face opens it; the badge is its own control to add more.
+    const mine = screen.getByRole('button', { name: 'Your story' });
+    expect(
+      within(mine).getByTestId('ring-seen', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      within(mine).queryByTestId('story-add-badge', { includeHiddenElements: true }),
+    ).toBeNull();
+    expect(
+      within(screen.getByTestId('story-add-more')).getByTestId('story-add-badge'),
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('Instagram-style viewer (D-207)', () => {
+  const twoStories = (): void => {
+    mockRouteParams.current = { userId: P2 };
+    api
+      .on('GET', `/v1/users/${P2}/stories`, {
+        status: 200,
+        body: {
+          person: meera,
+          items: [story(S1, { seen: true }), story(S2, { seen: true })],
+        } satisfies PersonStories,
+      })
+      .on('GET', `/v1/users/${ids.other}/stories`, {
+        status: 200,
+        body: { person: kiran, items: [story(S1, { seen: true })] },
+      });
+  };
+
+  it('draws one progress segment per story and a header with name, age and close', async () => {
+    twoStories();
+    await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('story-segment-0')).toBeOnTheScreen();
+    expect(screen.getByTestId('story-segment-1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('story-segment-2')).toBeNull();
+    expect(screen.getByRole('header', { name: 'Meera' })).toBeOnTheScreen();
+    expect(screen.getByTestId('story-age')).toHaveTextContent(/^\d+h$/);
+    expect(screen.getByLabelText(/^\d+ hours ago$/)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Close stories' }));
+    expect(mockRouter.back).toHaveBeenCalled();
+  });
+
+  it('gives screen readers buttons for previous, next and pause', async () => {
+    twoStories();
+    await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Next story' }));
+    expect(await screen.findByLabelText('Story 2 of 2')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Previous story' }));
+    expect(await screen.findByLabelText('Story 1 of 2')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Pause' }));
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Resume' }));
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeOnTheScreen();
+    // Others' stories: a reply bar into the DM, plus like and report.
+    expect(screen.getByRole('button', { name: 'Reply' })).toHaveTextContent('Message Meera');
+  });
+
+  it('holding a story pauses its video until let go', async () => {
+    mockRouteParams.current = { userId: P2 };
+    api.on('GET', `/v1/users/${P2}/stories`, {
+      status: 200,
+      body: {
+        person: meera,
+        items: [
+          story(S1, {
+            seen: true,
+            video: { url: 'https://cdn.test/media/s1/video.mp4', durationMs: 9000 },
+          }),
+        ],
+      },
+    });
+    await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
+    await screen.findByLabelText('Video story from Meera');
+    // The mock hands out a fresh player per render: read the one now on screen.
+    const player = () =>
+      jest.mocked(useVideoPlayer).mock.results.at(-1)?.value as {
+        play: jest.Mock;
+        pause: jest.Mock;
+      };
+    expect(player().play).toHaveBeenCalled();
+    await fireEvent(screen.getByTestId('story-next'), 'longPress');
+    await waitFor(() => expect(player().pause).toHaveBeenCalled());
+    expect(player().play).not.toHaveBeenCalled();
+    await fireEvent(screen.getByTestId('story-next'), 'pressOut');
+    await waitFor(() => expect(player().play).toHaveBeenCalled());
+  });
+
+  it("moves on to the next person's stories at the end, in tray order", async () => {
+    twoStories();
+    // Opened from the tray: Meera, then Kiran.
+    api.on('GET', '/v1/stories', {
+      status: 200,
+      body: {
+        items: [
+          {
+            person: meera,
+            mine: false,
+            count: 2,
+            unseen: false,
+            latestAt: '2026-11-03T09:00:00.000Z',
+          },
+          {
+            person: kiran,
+            mine: false,
+            count: 1,
+            unseen: false,
+            latestAt: '2026-11-03T08:00:00.000Z',
+          },
+        ],
+      },
+    });
+    function FromTray() {
+      const tray = useStoryTray();
+      return tray.data ? <StoryViewerScreen /> : null;
+    }
+    await renderWithProviders(<FromTray />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Next story' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Next story' }));
+    expect(mockRouter.replace).toHaveBeenCalledWith({
+      pathname: '/stories/[userId]',
+      params: { userId: ids.other, queue: '' },
+    });
+    expect(mockRouter.back).not.toHaveBeenCalled();
+  });
+
+  it('follows the queue it was given, and closes after the last person', async () => {
+    mockRouteParams.current = { userId: ids.other, queue: '' };
+    api.on('GET', `/v1/users/${ids.other}/stories`, {
+      status: 200,
+      body: { person: kiran, items: [story(S1, { seen: true })] },
+    });
+    await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Next story' }));
+    expect(mockRouter.back).toHaveBeenCalled();
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it('pages through viewers', async () => {
+    mockRouteParams.current = { userId: ids.me };
+    api
+      .on('GET', `/v1/users/${ids.me}/stories`, {
+        status: 200,
+        body: {
+          person: me,
+          items: [story(S1, { mine: true, seen: true, viewCount: 2, likeCount: 0 })],
+        },
+      })
+      .on('GET', `/v1/stories/${S1}/viewers`, (c) => ({
+        status: 200,
+        body: c.url.includes('cursor=c1')
+          ? {
+              items: [{ person: meera, liked: false, viewedAt: new Date().toISOString() }],
+              nextCursor: null,
+            }
+          : {
+              items: [{ person: kiran, liked: false, viewedAt: new Date().toISOString() }],
+              nextCursor: 'c1',
+            },
+      }));
+    await renderWithProviders(<StoryViewerScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Seen by 2, 0 likes' }));
+    expect(await screen.findByLabelText('Kiran, Just now')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Show more' }));
+    expect(await screen.findByLabelText('Meera, Just now')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+});
+
+describe('storyAge', () => {
+  const t = ((key: string, o?: { count?: number }) =>
+    `${key}:${o?.count ?? ''}`) as unknown as TFunction;
+  const now = Date.parse('2026-11-03T12:00:00.000Z');
+  it('says just now, minutes, then hours', () => {
+    expect(storyAge(t, '2026-11-03T11:59:30.000Z', now).short).toBe('stories.justNow:');
+    expect(storyAge(t, '2026-11-03T11:48:00.000Z', now)).toEqual({
+      short: 'stories.ageMinutes:12',
+      long: 'stories.ageMinutesLong:12',
+    });
+    expect(storyAge(t, '2026-11-03T09:00:00.000Z', now).short).toBe('stories.ageHours:3');
+    // A clock slightly behind the server never shows a negative age.
+    expect(storyAge(t, '2026-11-03T12:01:00.000Z', now).short).toBe('stories.justNow:');
   });
 });
 
