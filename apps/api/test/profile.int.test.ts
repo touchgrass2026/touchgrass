@@ -373,7 +373,7 @@ describe('profiles and privacy (F-ACC-05)', () => {
     expect(res.body.photos[0].md).toContain('md.webp');
   });
 
-  it('keeps interests in the member own words, counted toward the limits (D-199)', async () => {
+  it('keeps interests in the member own words, counted toward the limits (D-200)', async () => {
     const a = await signIn(h);
     const b = await signIn(h);
     await onboard(h, a.accessToken);

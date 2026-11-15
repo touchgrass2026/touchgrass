@@ -41,16 +41,17 @@ async function ensureLibraryAccess(): Promise<void> {
 }
 
 /**
- * Opens the photo library. Returns null when the user cancels, and throws `PhotoAccessDeniedError` when
- * access is declined, so screens can explain it instead of silently doing nothing.
+ * Opens the photo library, cropping to `aspect` (portrait 4:5 unless told otherwise). Returns null when the
+ * user cancels, and throws `PhotoAccessDeniedError` when access is declined, so screens can explain it
+ * instead of silently doing nothing.
  */
-export async function pickImage(): Promise<string | null> {
+export async function pickImage(aspect: [number, number] = [4, 5]): Promise<string | null> {
   await ensureLibraryAccess();
   const res = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     quality: 1,
     allowsEditing: true,
-    aspect: [4, 5],
+    aspect,
     exif: false,
   });
   return res.canceled ? null : (res.assets[0]?.uri ?? null);

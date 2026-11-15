@@ -185,7 +185,7 @@ export class ProfilesService {
   }
 
   /**
-   * Replaces the listed interests and, when given, the member's own (D-199). Both count toward the limits;
+   * Replaces the listed interests and, when given, the member's own (D-200). Both count toward the limits;
    * leaving `custom` out keeps the ones already saved. Typed interests are labels, so a flagged one is refused.
    */
   async setInterests(userId: string, ids: string[], custom?: string[]): Promise<Interest[]> {
@@ -216,7 +216,7 @@ export class ProfilesService {
     return this.interests.interestsByIds(unique);
   }
 
-  /** The member's own interests (D-199). */
+  /** The member's own interests (D-200). */
   async customInterestsOf(userId: string): Promise<string[]> {
     return (await this.get(userId))?.customInterests ?? [];
   }

@@ -1,4 +1,3 @@
-import { MapPin } from '../../components/icons';
 import {
   CreateEventBody,
   type EventDetail,
@@ -13,17 +12,43 @@ import {
 import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useApi } from '../../src/providers/api-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, type ScrollViewInstance, StyleSheet, View } from 'react-native';
-import { CoverPicker, type CoverValue } from '../../components/CoverPicker';
+import {
+  Keyboard,
+  ScrollView,
+  type ScrollViewInstance,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import MapView, { Marker, type MapPressEvent } from 'react-native-maps';
 import { ChipGroup } from '../../components/ChipGroup';
-import { DateField, TimeField } from '../../components/DateTimeFields';
+import { CoverPicker, type CoverValue } from '../../components/CoverPicker';
+import { DateField, Sheet, TimeField } from '../../components/DateTimeFields';
+import {
+  Calendar,
+  ChevronDown,
+  Clock,
+  Eye,
+  EyeOff,
+  Gear,
+  Grid,
+  MapPin,
+  People,
+  Ticket,
+  Zap,
+} from '../../components/icons';
 import { interestOptions } from '../../components/interest-options';
 import { PickList } from '../../components/PickList';
-import { SelectField } from '../../components/SelectField';
+import {
+  GroupNote,
+  RowError,
+  RowIcon,
+  SettingBlock,
+  SettingRow,
+  SettingsGroup,
+} from '../../components/plot/Settings';
 import { SegmentedTabs } from '../../components/SegmentedTabs';
 import {
   Button,
@@ -31,7 +56,7 @@ import {
   Chip,
   ErrorState,
   FadeIn,
-  IconText,
+  Icon,
   ListRow,
   LoadingState,
   Screen,
@@ -53,6 +78,8 @@ import { isoToIst, istToIso, quickPick } from '../../src/features/events/format'
 import { useHostStatus } from '../../src/features/payments/api';
 import { money } from '../../src/features/payments/format';
 import { errorMessage } from '../../src/lib/errors';
+import { useApi } from '../../src/providers/api-context';
+import { fontFamilyFor } from '../../src/theme/fonts';
 import { useTheme } from '../../src/theme/theme';
 
 const HYDERABAD: GeoPoint = { lat: 17.385, lng: 78.4867 };
@@ -67,6 +94,9 @@ const VISIBILITIES: EventVisibility[] = [
   'men_only',
   'balanced',
 ];
+const DURATIONS = [1, 1.5, 2, 3, 4];
+const REVEAL_HOURS = [1, 2, 4, 24];
+const BALANCED_PCTS = [50, 60, 70];
 
 interface Picked {
   where: EventWhere;
@@ -103,6 +133,46 @@ interface FormState {
   /** Group chat for people pulling up (D-156). */
   chatEnabled: boolean;
 }
+
+/** The sheets the setting rows open. */
+type SheetName =
+  'category' | 'duration' | 'where' | 'who' | 'capacity' | 'price' | 'vibes' | 'reveal';
+
+/** Validation keys each row shows (anything else is shown above the main button). */
+const ROW_KEYS = new Set([
+  'title',
+  'description',
+  'categoryId',
+  'date',
+  'startsAt',
+  'endsAt',
+  'where',
+  'capacity',
+  'minGroupSize',
+  'visibility',
+  'balancedMaxSharePct',
+  'pricePaise',
+  'refundPolicy',
+  'vibeTagIds',
+  'mysteryRevealMinutesBefore',
+]);
+
+/** Editing a field also clears the server-side names of the same error. */
+const CLEARS: Partial<Record<keyof FormState, string[]>> = {
+  date: ['startsAt'],
+  time: ['startsAt', 'date'],
+  durationHours: ['endsAt'],
+  capacity: ['minGroupSize'],
+  smallGroup: ['capacity'],
+  visibility: ['balancedMaxSharePct'],
+  balancedPct: ['balancedMaxSharePct'],
+  paid: ['pricePaise', 'refundPolicy'],
+  price: ['pricePaise'],
+  refundKind: ['refundPolicy'],
+  cutoffHours: ['refundPolicy'],
+  partialPct: ['refundPolicy'],
+  revealHours: ['mysteryRevealMinutesBefore'],
+};
 
 function initialState(): FormState {
   const pick = quickPick('tomorrow');
@@ -167,7 +237,11 @@ function fromEvent(e: EventDetail): FormState {
   };
 }
 
-/** Plot a plan (F-EVT-01/02): what, where, when, who, plus the advanced options. Also edits (F-EVT-16). */
+/**
+ * Plot a plan (F-EVT-01/02), also edits (F-EVT-16). One image-led page (D-199): cover photo, the name as a
+ * heading, one card of setting rows that open sheets (category, when, where, who, how many, price), details,
+ * and "More options" folded away. The main button stays pinned at the bottom.
+ */
 export default function PlotScreen() {
   const { id, venueId, venueName, inviteUserId } = useLocalSearchParams<{
     id?: string;
@@ -220,8 +294,8 @@ function PlotForm({
     uri: existing?.cover?.md ?? null,
   }));
   const [coverTouched, setCoverTouched] = useState(false);
-  /** Where the place search starts in the scroll content, to lift it above the keyboard. */
-  const placeY = useRef(0);
+  /** Where the details box starts in the scroll content, to lift it above the keyboard. */
+  const detailsY = useRef(0);
   const create = useCreateEvent(createKey);
   const [leaving, setLeaving] = useState(false);
   const { client } = useApi();
@@ -245,13 +319,13 @@ function PlotForm({
       : initialPick,
   );
   const [whereChanged, setWhereChanged] = useState(false);
-  const [changingPlace, setChangingPlace] = useState(false);
+  const [sheet, setSheet] = useState<SheetName | null>(null);
   const [query, setQuery] = useState('');
   const [near, setNear] = useState<GeoPoint>(HYDERABAD);
   const [mapOpen, setMapOpen] = useState(false);
   const [pin, setPin] = useState<GeoPoint | null>(null);
   const [pinAddress, setPinAddress] = useState('');
-  const [advanced, setAdvanced] = useState(existing !== null);
+  const [advanced, setAdvanced] = useState(false);
   // Edits only send the reveal time when the host changed it (the detail view does not expose it).
   const [revealTouched, setRevealTouched] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -268,18 +342,41 @@ function PlotForm({
     })();
   }, []);
 
+  const clearErrors = (keys: string[]): void => {
+    setErrors((e) => {
+      const next = { ...e };
+      for (const k of keys) next[k] = '';
+      return next;
+    });
+  };
   const set = <K extends keyof FormState>(key: K, value: FormState[K]): void => {
     setForm((f) => ({ ...f, [key]: value }));
-    setErrors((e) => ({ ...e, [key]: '' }));
+    clearErrors([key, ...(CLEARS[key] ?? [])]);
+  };
+  const open = (name: SheetName): void => {
+    // A field typed in just before would keep the keyboard over the sheet's choices.
+    Keyboard.dismiss();
+    setSheet(name);
+  };
+  const close = (): void => {
+    setSheet(null);
   };
   const choose = (p: Picked): void => {
     setPicked(p);
     setWhereChanged(true);
     setQuery('');
     setMapOpen(false);
-    setChangingPlace(false);
-    setErrors((e) => ({ ...e, where: '' }));
+    setSheet(null);
+    clearErrors(['where']);
   };
+
+  const startsAtIso = istToIso(form.date, form.time);
+  // The button wakes up once the plan has what it cannot exist without; the rest is checked on submit.
+  const ready =
+    form.title.trim().length >= LIMITS.event.titleMinLength &&
+    (existing !== null || form.categoryId !== null) &&
+    picked !== null &&
+    startsAtIso !== null;
 
   const submit = async (): Promise<void> => {
     setFormError(null);
@@ -312,7 +409,7 @@ function PlotForm({
       mystery: form.mystery,
       ...(existing && !revealTouched ? {} : { mysteryRevealMinutesBefore: form.revealHours * 60 }),
       // Paid plans have no +1s: every seat is a ticket.
-      allowPlusOnes: canSell && pricePaise > 0 ? false : form.allowPlusOnes,
+      allowPlusOnes: paidPlan ? false : form.allowPlusOnes,
       chatEnabled: form.chatEnabled,
       ...(coverTouched ? { coverMediaId: cover.id } : {}),
       indoor: form.indoor,
@@ -326,11 +423,17 @@ function PlotForm({
       issues: readonly { path: readonly PropertyKey[]; message: string }[],
     ): void => {
       const next: Record<string, string> = {};
+      let other: string | null = null;
       for (const issue of issues) {
-        const key = String(issue.path[0] ?? 'form');
-        next[key === 'categoryInterestId' ? 'categoryId' : key] = issue.message;
+        const raw = String(issue.path[0] ?? 'form');
+        const key = raw === 'categoryInterestId' ? 'categoryId' : raw;
+        if (ROW_KEYS.has(key)) next[key] = next[key] ?? issue.message;
+        else other = other ?? issue.message;
       }
       setErrors(next);
+      if (other) setFormError(other);
+      // An error inside "More options" must not stay folded away.
+      if (next.vibeTagIds || next.mysteryRevealMinutesBefore) setAdvanced(true);
     };
     try {
       if (existing) {
@@ -379,7 +482,6 @@ function PlotForm({
   /** Price and refund policy (F-PAY-01/02): only approved hosts sell tickets. */
   function pricing(): Record<string, unknown> {
     if (!canSell) return {};
-    const pricePaise = form.paid ? Math.round(Number(form.price || '0') * 100) : 0;
     if (!Number.isFinite(pricePaise) || pricePaise <= 0)
       return { pricePaise: 0, refundPolicy: null };
     return {
@@ -393,8 +495,9 @@ function PlotForm({
     };
   }
   const pricePaise = form.paid ? Math.round(Number(form.price || '0') * 100) : 0;
+  const paidPlan = canSell && pricePaise > 0;
   const hostShare =
-    canSell && pricePaise > 0 && host.data
+    paidPlan && host.data
       ? feeBreakdown(pricePaise, host.data.platformFeeBps, host.data.gstBps).hostNetPaise
       : null;
 
@@ -434,39 +537,60 @@ function PlotForm({
   ].slice(0, SUGGESTIONS_MAX);
 
   const categoryOptions = interestOptions(interests.data?.items ?? [], t, i18n.language);
+  const categoryName = categoryOptions.find((o) => o.id === form.categoryId)?.label ?? null;
+  const vibeOptions = (vibes.data?.items ?? []).map((v) => ({
+    id: v.id,
+    label: localized(v.name, i18n.language),
+  }));
+  const vibeNames = vibeOptions.filter((o) => form.vibeTagIds.includes(o.id)).map((o) => o.label);
+  const optionsOn = [
+    form.soloFriendly,
+    form.smallGroup,
+    form.mystery,
+    form.allowPlusOnes && !paidPlan,
+    form.indoor,
+    form.stepFree,
+    form.accessibleRestroom,
+    form.quietSpace,
+    form.chatEnabled,
+  ].filter(Boolean).length;
+  const durationText = form.durationHours.trim()
+    ? t('events.plotUiHours', { n: form.durationHours.trim() })
+    : t('events.plotUiChoose');
+  const whoText =
+    form.visibility === 'balanced'
+      ? `${t('events.visibility.balanced')} · ${String(form.balancedPct)}%`
+      : t(`events.visibility.${form.visibility}`);
+  const whenError = errors.date || errors.startsAt || null;
+
+  const titleError = errors.title || null;
+  const footer = (
+    <>
+      {formError ? (
+        <Text tone="danger" accessibilityLiveRegion="assertive" testID="plot-error">
+          {formError}
+        </Text>
+      ) : !ready ? (
+        <Text variant="caption" tone="muted" style={styles.center} testID="plot-needs">
+          {existing ? t('events.plotUiNeedsEdit') : t('events.plotUiNeedsCreate')}
+        </Text>
+      ) : null}
+      <Button
+        label={existing ? t('events.save') : t('events.plotUiPublish')}
+        loading={leaving || create.isPending || update.isPending}
+        disabled={!ready}
+        onPress={() => void submit()}
+        testID="plot-submit"
+      />
+    </>
+  );
 
   return (
-    <Screen testID="plot-screen" scrollRef={scrollRef}>
+    <Screen testID="plot-screen" scrollRef={scrollRef} footer={footer}>
       <Text variant="title" accessibilityRole="header">
         {existing ? t('events.edit') : t('events.plotTitle')}
       </Text>
 
-      <Text variant="heading" accessibilityRole="header">
-        {t('events.what')}
-      </Text>
-      <TextField
-        label={t('events.titleLabel')}
-        placeholder={t('events.titlePlaceholder')}
-        value={form.title}
-        maxLength={LIMITS.event.titleMaxLength}
-        onChangeText={(v) => {
-          set('title', v);
-        }}
-        error={errors.title || null}
-        testID="plot-title"
-      />
-      <SelectField
-        label={t('events.categoryLabel')}
-        placeholder={t('events.pickCategory')}
-        searchLabel={t('onboarding.interestsSearch')}
-        options={categoryOptions}
-        value={form.categoryId}
-        onChange={(id) => {
-          set('categoryId', id);
-        }}
-        error={errors.categoryId || null}
-        testID="plot-category"
-      />
       <CoverPicker
         value={cover}
         onChange={(next) => {
@@ -475,40 +599,390 @@ function PlotForm({
         }}
       />
 
-      <Text
-        variant="heading"
-        accessibilityRole="header"
+      {/* The name is the page's heading: typed straight in, no box around it. */}
+      <View style={styles.titleWrap}>
+        <TextInput
+          testID="plot-title"
+          accessibilityLabel={t('events.titleLabel')}
+          accessibilityHint={titleError ?? undefined}
+          placeholder={t('events.plotUiNamePlaceholder')}
+          placeholderTextColor={theme.colors.textMuted}
+          value={form.title}
+          onChangeText={(v) => {
+            set('title', v.replace(/\n/g, ' '));
+          }}
+          maxLength={LIMITS.event.titleMaxLength}
+          multiline
+          submitBehavior="blurAndSubmit"
+          returnKeyType="done"
+          maxFontSizeMultiplier={2}
+          style={[
+            theme.typography.display,
+            styles.titleInput,
+            {
+              color: theme.colors.text,
+              fontFamily: fontFamilyFor(theme.typography.display.fontWeight),
+              borderBottomColor: titleError ? theme.colors.danger : theme.colors.inputBorder,
+            },
+          ]}
+        />
+        {titleError ? (
+          <Text
+            variant="caption"
+            tone="danger"
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            {titleError}
+          </Text>
+        ) : null}
+      </View>
+
+      <SettingsGroup testID="plot-settings">
+        <SettingRow
+          icon={Grid}
+          label={t('events.categoryLabel')}
+          value={categoryName ?? t('events.plotUiChoose')}
+          placeholder={categoryName === null}
+          onPress={() => {
+            open('category');
+          }}
+          error={errors.categoryId || null}
+          testID="plot-category"
+        />
+        <SettingBlock testID="plot-when">
+          <View style={styles.line}>
+            <RowIcon icon={Calendar} />
+            <Text style={styles.blockLabel}>{t('events.when')}</Text>
+            <View style={styles.pills}>
+              <DateField
+                variant="pill"
+                label={t('events.dateLabel')}
+                value={form.date}
+                onChange={(v) => {
+                  set('date', v);
+                }}
+                error={whenError}
+                testID="plot-date"
+              />
+              <TimeField
+                variant="pill"
+                label={t('events.timeLabel')}
+                value={form.time}
+                onChange={(v) => {
+                  set('time', v);
+                }}
+                testID="plot-time"
+              />
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.chipRow, styles.indent]}
+          >
+            {(['tonight', 'tomorrow', 'weekend'] as const).map((k) => {
+              const p = quickPick(k);
+              return (
+                <Chip
+                  key={k}
+                  kind="radio"
+                  label={t(k === 'weekend' ? 'events.thisWeekend' : `events.${k}`)}
+                  selected={p.date === form.date && p.time === form.time}
+                  onToggle={() => {
+                    setForm((f) => ({ ...f, date: p.date, time: p.time }));
+                    clearErrors(['date', 'startsAt']);
+                  }}
+                />
+              );
+            })}
+          </ScrollView>
+          {whenError ? <RowError message={whenError} testID="plot-when-error" /> : null}
+        </SettingBlock>
+        <SettingRow
+          icon={Clock}
+          label={t('events.plotUiDuration')}
+          value={durationText}
+          onPress={() => {
+            open('duration');
+          }}
+          error={errors.endsAt || null}
+          testID="plot-duration"
+        />
+        <SettingRow
+          icon={MapPin}
+          label={t('events.where')}
+          value={picked?.label ?? t('events.plotUiAddPlace')}
+          placeholder={picked === null}
+          onPress={() => {
+            open('where');
+          }}
+          error={errors.where || null}
+          testID="plot-where"
+          valueTestID={picked ? 'plot-picked' : undefined}
+        />
+        <SettingRow
+          icon={Eye}
+          label={t('events.plotUiWho')}
+          value={whoText}
+          onPress={() => {
+            open('who');
+          }}
+          error={errors.visibility || errors.balancedMaxSharePct || null}
+          testID="plot-who"
+        />
+        <SettingRow
+          icon={People}
+          label={t('events.plotUiHowMany')}
+          value={
+            form.capacity
+              ? t('events.plotUiPeople', { n: form.capacity })
+              : t('events.plotUiChoose')
+          }
+          placeholder={!form.capacity}
+          onPress={() => {
+            open('capacity');
+          }}
+          error={errors.capacity || errors.minGroupSize || null}
+          testID="plot-how-many"
+        />
+        {canSell ? (
+          <SettingRow
+            icon={Ticket}
+            label={t('events.plotUiPrice')}
+            value={pricePaise > 0 ? money(pricePaise, i18n.language) : t('events.free')}
+            onPress={() => {
+              open('price');
+            }}
+            error={errors.pricePaise || errors.refundPolicy || null}
+            testID="plot-price-row"
+          />
+        ) : null}
+      </SettingsGroup>
+      {!canSell ? <GroupNote testID="plot-paid-hint">{t('events.paidNeedsHost')}</GroupNote> : null}
+
+      <View
+        style={styles.detailsWrap}
         onLayout={(e) => {
-          placeY.current = e.nativeEvent.layout.y;
+          detailsY.current = e.nativeEvent.layout.y;
         }}
       >
-        {t('events.where')}
-      </Text>
-      {picked && !changingPlace ? (
-        <Card style={styles.picked}>
-          <IconText icon={MapPin} testID="plot-picked" accessibilityLiveRegion="polite">
-            {picked.label}
-          </IconText>
-          <Button
-            label={t('events.changePlace')}
-            variant="ghost"
-            onPress={() => {
-              setChangingPlace(true);
+        <Text variant="label">{t('events.descriptionLabel')}</Text>
+        <TextInput
+          testID="plot-description"
+          accessibilityLabel={t('events.descriptionLabel')}
+          placeholder={t('events.plotUiDetailsPlaceholder')}
+          placeholderTextColor={theme.colors.textMuted}
+          value={form.description}
+          onChangeText={(v) => {
+            set('description', v);
+          }}
+          onFocus={() => {
+            // Lift the box to the top so the keyboard does not cover what is being typed.
+            scrollRef.current?.scrollTo({ y: Math.max(0, detailsY.current - 24), animated: true });
+          }}
+          multiline
+          textAlignVertical="top"
+          maxLength={LIMITS.event.descriptionMaxLength}
+          maxFontSizeMultiplier={2}
+          style={[
+            theme.typography.body,
+            styles.details,
+            {
+              color: theme.colors.text,
+              fontFamily: fontFamilyFor(theme.typography.body.fontWeight),
+              backgroundColor: theme.colors.surface,
+              borderColor: errors.description ? theme.colors.danger : theme.colors.inputBorder,
+              borderRadius: theme.radii.md,
+            },
+          ]}
+        />
+        {errors.description ? (
+          <Text
+            variant="caption"
+            tone="danger"
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            {errors.description}
+          </Text>
+        ) : null}
+      </View>
+
+      <SettingsGroup testID="plot-more-options">
+        <SettingRow
+          icon={Gear}
+          label={t('events.more')}
+          value={t('events.plotUiOnCount', { n: optionsOn })}
+          expanded={advanced}
+          accessibilityHint={t('events.plotUiMoreHint')}
+          trailing={
+            <View style={advanced ? styles.flipped : null}>
+              <Icon icon={ChevronDown} size={16} color={theme.colors.textMuted} />
+            </View>
+          }
+          onPress={() => {
+            setAdvanced((a) => !a);
+          }}
+          testID="plot-more"
+        />
+        {advanced ? (
+          <>
+            <SettingRow
+              icon={Zap}
+              label={t('profile.vibes')}
+              value={vibeNames.length > 0 ? vibeNames.join(', ') : t('events.plotUiNone')}
+              placeholder={vibeNames.length === 0}
+              onPress={() => {
+                open('vibes');
+              }}
+              error={errors.vibeTagIds || null}
+              testID="plot-vibes"
+            />
+            <SwitchRow
+              label={t('events.soloFriendly')}
+              value={form.soloFriendly}
+              onChange={(v) => {
+                set('soloFriendly', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.smallGroup')}
+              value={form.smallGroup}
+              onChange={(v) => {
+                set('smallGroup', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.mystery')}
+              value={form.mystery}
+              onChange={(v) => {
+                set('mystery', v);
+              }}
+              testID="plot-mystery"
+            />
+            {form.mystery ? (
+              <SettingRow
+                icon={EyeOff}
+                label={t('events.plotUiReveal')}
+                value={t('events.plotUiRevealValue', { hours: form.revealHours })}
+                onPress={() => {
+                  open('reveal');
+                }}
+                error={errors.mysteryRevealMinutesBefore || null}
+                testID="plot-reveal"
+              />
+            ) : null}
+            <SwitchRow
+              label={t('events.plusOnes')}
+              value={form.allowPlusOnes && !paidPlan}
+              disabled={paidPlan}
+              onChange={(v) => {
+                set('allowPlusOnes', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.indoor')}
+              value={form.indoor}
+              onChange={(v) => {
+                set('indoor', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.stepFree')}
+              value={form.stepFree}
+              onChange={(v) => {
+                set('stepFree', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.accessibleRestroom')}
+              value={form.accessibleRestroom}
+              onChange={(v) => {
+                set('accessibleRestroom', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.quietSpace')}
+              value={form.quietSpace}
+              onChange={(v) => {
+                set('quietSpace', v);
+              }}
+            />
+            <SwitchRow
+              label={t('events.chatToggle')}
+              hint={t('events.chatToggleHint')}
+              value={form.chatEnabled}
+              onChange={(v) => {
+                set('chatEnabled', v);
+              }}
+              testID="plot-chat"
+            />
+          </>
+        ) : null}
+      </SettingsGroup>
+
+      {sheet === 'category' ? (
+        <Sheet title={t('events.categoryLabel')} onClose={close} testID="plot-category-sheet">
+          <PickList
+            label={t('events.categoryLabel')}
+            searchLabel={t('onboarding.interestsSearch')}
+            mode="single"
+            options={categoryOptions}
+            selected={form.categoryId ? [form.categoryId] : []}
+            onChange={(ids) => {
+              const [chosen] = ids;
+              if (chosen) set('categoryId', chosen);
+              close();
             }}
-            testID="plot-change-place"
+            testIDPrefix="plot-category"
+            searchFrom={0}
           />
-        </Card>
-      ) : (
-        <>
+          <Button label={t('common.cancel')} variant="ghost" onPress={close} />
+        </Sheet>
+      ) : null}
+
+      {sheet === 'duration' ? (
+        <Sheet title={t('events.plotUiDurationTitle')} onClose={close} testID="plot-duration-sheet">
+          <View style={styles.chips} accessibilityRole="radiogroup">
+            {DURATIONS.map((h) => (
+              <Chip
+                key={h}
+                kind="radio"
+                label={t('events.plotUiHours', { n: h })}
+                selected={Number(form.durationHours) === h}
+                onToggle={() => {
+                  set('durationHours', String(h));
+                }}
+                testID={`plot-duration-${String(h)}`}
+              />
+            ))}
+          </View>
+          <TextField
+            label={t('events.durationHours')}
+            value={form.durationHours}
+            onChangeText={(v) => {
+              set('durationHours', v.replace(/[^\d.]/g, ''));
+            }}
+            keyboardType="decimal-pad"
+            error={errors.endsAt || null}
+            testID="plot-duration-input"
+          />
+          <Button label={t('common.done')} onPress={close} testID="plot-duration-done" />
+        </Sheet>
+      ) : null}
+
+      {sheet === 'where' ? (
+        <Sheet title={t('events.plotUiWhereTitle')} onClose={close} testID="plot-where-sheet">
           <TextField
             label={t('events.searchPlace')}
-            onFocus={() => {
-              // Suggestions open under the box: lift it to the top so the keyboard does not cover them.
-              scrollRef.current?.scrollTo({ y: Math.max(0, placeY.current - 24), animated: true });
-            }}
             placeholder={t('events.searchPlaceHint')}
             value={query}
             onChangeText={setQuery}
+            autoFocus
+            autoCorrect={false}
+            returnKeyType="search"
             error={errors.where || null}
             testID="plot-place-search"
           />
@@ -586,8 +1060,10 @@ function PlotForm({
             label={t('events.pickOnMap')}
             variant="ghost"
             onPress={() => {
+              Keyboard.dismiss();
               setMapOpen((o) => !o);
             }}
+            accessibilityState={{ expanded: mapOpen }}
           />
           {mapOpen ? (
             <View style={styles.mapWrap}>
@@ -629,327 +1105,199 @@ function PlotForm({
               />
             </View>
           ) : null}
-        </>
-      )}
-
-      <Text variant="heading" accessibilityRole="header">
-        {t('events.when')}
-      </Text>
-      <ScrollView
-        horizontal
-        keyboardShouldPersistTaps="handled"
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipRow}
-      >
-        {(['tonight', 'tomorrow', 'weekend'] as const).map((k) => (
-          <Chip
-            key={k}
-            kind="radio"
-            label={t(k === 'weekend' ? 'events.thisWeekend' : `events.${k}`)}
-            selected={(() => {
-              const p = quickPick(k);
-              return p.date === form.date && p.time === form.time;
-            })()}
-            onToggle={() => {
-              const p = quickPick(k);
-              setForm((f) => ({ ...f, date: p.date, time: p.time }));
-            }}
-          />
-        ))}
-      </ScrollView>
-      <View style={styles.pair}>
-        <View style={styles.half}>
-          <DateField
-            label={t('events.dateLabel')}
-            value={form.date}
-            onChange={(v) => {
-              set('date', v);
-            }}
-            error={errors.date || errors.startsAt || null}
-            testID="plot-date"
-          />
-        </View>
-        <View style={styles.half}>
-          <TimeField
-            label={t('events.timeLabel')}
-            value={form.time}
-            onChange={(v) => {
-              set('time', v);
-            }}
-            testID="plot-time"
-          />
-        </View>
-      </View>
-      <TextField
-        label={t('events.durationHours')}
-        value={form.durationHours}
-        onChangeText={(v) => {
-          set('durationHours', v);
-        }}
-        keyboardType="decimal-pad"
-        error={errors.endsAt || null}
-      />
-
-      <Text variant="heading" accessibilityRole="header">
-        {t('events.who')}
-      </Text>
-      <TextField
-        label={t('events.capacityLabel')}
-        value={form.capacity}
-        onChangeText={(v) => {
-          set('capacity', v.replace(/\D/g, ''));
-        }}
-        keyboardType="number-pad"
-        error={errors.capacity || null}
-        testID="plot-capacity"
-      />
-      <SegmentedTabs
-        tabs={[
-          { key: 'free', label: t('events.free') },
-          ...(canSell ? [{ key: 'paid' as const, label: t('events.paid') }] : []),
-        ]}
-        value={form.paid ? 'paid' : 'free'}
-        onChange={(k) => {
-          set('paid', k === 'paid');
-        }}
-      />
-      {!canSell ? (
-        <Text variant="caption" tone="muted" testID="plot-paid-hint">
-          {t('events.paidNeedsHost')}
-        </Text>
+          <Button label={t('common.cancel')} variant="ghost" onPress={close} />
+        </Sheet>
       ) : null}
-      {canSell && form.paid ? (
-        <>
-          <TextField
-            label={t('payments.priceLabel')}
-            hint={t('payments.priceHint')}
-            value={form.price}
-            onChangeText={(v) => {
-              set('price', v.replace(/[^\d.]/g, ''));
+
+      {sheet === 'who' ? (
+        <Sheet title={t('events.plotUiWho')} onClose={close} testID="plot-who-sheet">
+          <PickList
+            label={t('events.visibilityLabel')}
+            options={VISIBILITIES.map((v) => ({ id: v, label: t(`events.visibility.${v}`) }))}
+            selected={[form.visibility]}
+            onChange={(ids) => {
+              const v = ids[0] as EventVisibility | undefined;
+              if (!v) return;
+              set('visibility', v);
+              // Balanced needs one more choice (the share), so the sheet stays open for it.
+              if (v !== 'balanced') close();
             }}
-            keyboardType="decimal-pad"
-            error={errors.pricePaise || null}
-            testID="plot-price"
+            mode="single"
+            testIDPrefix="plot-visibility"
           />
-          {hostShare !== null ? (
-            <Text tone="muted" testID="plot-host-share">
-              {t('payments.youGet', { amount: money(hostShare, i18n.language) })}
-            </Text>
+          {form.visibility === 'balanced' ? (
+            <View style={styles.chips} accessibilityRole="radiogroup">
+              {BALANCED_PCTS.map((pct) => (
+                <Chip
+                  key={pct}
+                  kind="radio"
+                  label={t('events.balancedShare', { pct })}
+                  selected={form.balancedPct === pct}
+                  onToggle={() => {
+                    set('balancedPct', pct);
+                  }}
+                />
+              ))}
+            </View>
           ) : null}
-          {pricePaise > 0 ? (
+          <Button label={t('common.done')} onPress={close} testID="plot-who-done" />
+        </Sheet>
+      ) : null}
+
+      {sheet === 'capacity' ? (
+        <Sheet title={t('events.plotUiHowMany')} onClose={close} testID="plot-how-many-sheet">
+          <TextField
+            label={t('events.capacityLabel')}
+            value={form.capacity}
+            onChangeText={(v) => {
+              set('capacity', v.replace(/\D/g, ''));
+            }}
+            keyboardType="number-pad"
+            autoFocus
+            error={errors.capacity || errors.minGroupSize || null}
+            testID="plot-capacity"
+          />
+          <Button label={t('common.done')} onPress={close} testID="plot-how-many-done" />
+        </Sheet>
+      ) : null}
+
+      {sheet === 'price' && canSell ? (
+        <Sheet title={t('events.plotUiPrice')} onClose={close} testID="plot-price-sheet">
+          <SegmentedTabs
+            tabs={[
+              { key: 'free', label: t('events.free') },
+              { key: 'paid', label: t('events.paid') },
+            ]}
+            value={form.paid ? 'paid' : 'free'}
+            onChange={(k) => {
+              set('paid', k === 'paid');
+            }}
+          />
+          {form.paid ? (
             <>
-              <ChipGroup
-                label={t('payments.refundPolicyLabel')}
-                options={(['full', 'partial', 'none'] as const).map((k) => ({
-                  id: k,
-                  label: t(`payments.refundKinds.${k}`),
-                }))}
-                selected={[form.refundKind]}
-                onChange={(ids) => {
-                  const k = ids[0] as FormState['refundKind'] | undefined;
-                  if (k) set('refundKind', k);
+              <TextField
+                label={t('payments.priceLabel')}
+                hint={t('payments.priceHint')}
+                value={form.price}
+                onChangeText={(v) => {
+                  set('price', v.replace(/[^\d.]/g, ''));
                 }}
-                mode="single"
-                scroll
-                testIDPrefix="plot-refund"
+                keyboardType="decimal-pad"
+                error={errors.pricePaise || null}
+                testID="plot-price"
               />
-              {form.refundKind !== 'none' ? (
-                <TextField
-                  label={t('payments.cutoffLabel')}
-                  value={form.cutoffHours}
-                  onChangeText={(v) => {
-                    set('cutoffHours', v.replace(/\D/g, ''));
-                  }}
-                  keyboardType="number-pad"
-                  error={errors.refundPolicy || null}
-                  testID="plot-cutoff"
-                />
+              {hostShare !== null ? (
+                <Text tone="muted" testID="plot-host-share">
+                  {t('payments.youGet', { amount: money(hostShare, i18n.language) })}
+                </Text>
               ) : null}
-              {form.refundKind === 'partial' ? (
-                <TextField
-                  label={t('payments.partialPctLabel')}
-                  value={form.partialPct}
-                  onChangeText={(v) => {
-                    set('partialPct', v.replace(/\D/g, ''));
-                  }}
-                  keyboardType="number-pad"
-                  testID="plot-partial-pct"
-                />
+              {pricePaise > 0 ? (
+                <>
+                  <ChipGroup
+                    label={t('payments.refundPolicyLabel')}
+                    options={(['full', 'partial', 'none'] as const).map((k) => ({
+                      id: k,
+                      label: t(`payments.refundKinds.${k}`),
+                    }))}
+                    selected={[form.refundKind]}
+                    onChange={(ids) => {
+                      const k = ids[0] as FormState['refundKind'] | undefined;
+                      if (k) set('refundKind', k);
+                    }}
+                    mode="single"
+                    scroll
+                    testIDPrefix="plot-refund"
+                  />
+                  {form.refundKind !== 'none' ? (
+                    <TextField
+                      label={t('payments.cutoffLabel')}
+                      value={form.cutoffHours}
+                      onChangeText={(v) => {
+                        set('cutoffHours', v.replace(/\D/g, ''));
+                      }}
+                      keyboardType="number-pad"
+                      error={errors.refundPolicy || null}
+                      testID="plot-cutoff"
+                    />
+                  ) : null}
+                  {form.refundKind === 'partial' ? (
+                    <TextField
+                      label={t('payments.partialPctLabel')}
+                      value={form.partialPct}
+                      onChangeText={(v) => {
+                        set('partialPct', v.replace(/\D/g, ''));
+                      }}
+                      keyboardType="number-pad"
+                      testID="plot-partial-pct"
+                    />
+                  ) : null}
+                </>
               ) : null}
             </>
           ) : null}
-        </>
-      ) : null}
-      <Text variant="label">{t('events.visibilityLabel')}</Text>
-      <PickList
-        label={t('events.visibilityLabel')}
-        options={VISIBILITIES.map((v) => ({ id: v, label: t(`events.visibility.${v}`) }))}
-        selected={[form.visibility]}
-        onChange={(ids) => {
-          const v = ids[0] as EventVisibility | undefined;
-          if (v) set('visibility', v);
-        }}
-        mode="single"
-        testIDPrefix="plot-visibility"
-      />
-      {form.visibility === 'balanced' ? (
-        <View style={styles.chips}>
-          {[50, 60, 70].map((pct) => (
-            <Chip
-              key={pct}
-              kind="radio"
-              label={t('events.balancedShare', { pct })}
-              selected={form.balancedPct === pct}
-              onToggle={() => {
-                set('balancedPct', pct);
-              }}
-            />
-          ))}
-        </View>
+          <Button label={t('common.done')} onPress={close} testID="plot-price-done" />
+        </Sheet>
       ) : null}
 
-      <SwitchRow
-        label={t('events.chatToggle')}
-        hint={t('events.chatToggleHint')}
-        value={form.chatEnabled}
-        onChange={(v) => {
-          set('chatEnabled', v);
-        }}
-        testID="plot-chat"
-      />
-
-      <Button
-        label={t('events.more')}
-        variant="ghost"
-        onPress={() => {
-          setAdvanced((a) => !a);
-        }}
-        accessibilityState={{ expanded: advanced }}
-      />
-      {advanced ? (
-        <>
-          <TextField
-            label={t('events.descriptionLabel')}
-            value={form.description}
-            onChangeText={(v) => {
-              set('description', v);
-            }}
-            multiline
-            maxLength={LIMITS.event.descriptionMaxLength}
-          />
-          <ChipGroup
+      {sheet === 'vibes' ? (
+        <Sheet title={t('profile.vibes')} onClose={close} testID="plot-vibes-sheet">
+          <PickList
             label={t('profile.vibes')}
-            options={(vibes.data?.items ?? []).map((v) => ({
-              id: v.id,
-              label: localized(v.name, i18n.language),
-            }))}
+            options={vibeOptions}
             selected={form.vibeTagIds}
             onChange={(ids) => {
               set('vibeTagIds', ids);
             }}
             mode="multi"
             max={5}
-            scroll
             testIDPrefix="plot-vibe"
           />
-          <SwitchRow
-            label={t('events.soloFriendly')}
-            value={form.soloFriendly}
-            onChange={(v) => {
-              set('soloFriendly', v);
-            }}
-          />
-          <SwitchRow
-            label={t('events.smallGroup')}
-            value={form.smallGroup}
-            onChange={(v) => {
-              set('smallGroup', v);
-            }}
-          />
-          <SwitchRow
-            label={t('events.mystery')}
-            value={form.mystery}
-            onChange={(v) => {
-              set('mystery', v);
-            }}
-            testID="plot-mystery"
-          />
-          {form.mystery ? (
-            <View style={styles.chips}>
-              {[1, 2, 4, 24].map((h) => (
-                <Chip
-                  key={h}
-                  kind="radio"
-                  label={t('events.mysteryReveal', { hours: h })}
-                  selected={form.revealHours === h}
-                  onToggle={() => {
-                    set('revealHours', h);
-                    setRevealTouched(true);
-                  }}
-                />
-              ))}
-            </View>
-          ) : null}
-          <SwitchRow
-            label={t('events.plusOnes')}
-            value={form.allowPlusOnes}
-            onChange={(v) => {
-              set('allowPlusOnes', v);
-            }}
-          />
-          <SwitchRow
-            label={t('events.indoor')}
-            value={form.indoor}
-            onChange={(v) => {
-              set('indoor', v);
-            }}
-          />
-          <SwitchRow
-            label={t('events.stepFree')}
-            value={form.stepFree}
-            onChange={(v) => {
-              set('stepFree', v);
-            }}
-          />
-          <SwitchRow
-            label={t('events.accessibleRestroom')}
-            value={form.accessibleRestroom}
-            onChange={(v) => {
-              set('accessibleRestroom', v);
-            }}
-          />
-          <SwitchRow
-            label={t('events.quietSpace')}
-            value={form.quietSpace}
-            onChange={(v) => {
-              set('quietSpace', v);
-            }}
-          />
-        </>
+          <Button label={t('common.done')} onPress={close} testID="plot-vibes-done" />
+        </Sheet>
       ) : null}
 
-      {formError ? (
-        <Text tone="danger" accessibilityLiveRegion="assertive" testID="plot-error">
-          {formError}
-        </Text>
+      {sheet === 'reveal' ? (
+        <Sheet title={t('events.plotUiReveal')} onClose={close} testID="plot-reveal-sheet">
+          <PickList
+            label={t('events.plotUiReveal')}
+            options={REVEAL_HOURS.map((h) => ({
+              id: String(h),
+              label: t('events.mysteryReveal', { hours: h }),
+            }))}
+            selected={[String(form.revealHours)]}
+            onChange={(ids) => {
+              const h = Number(ids[0]);
+              if (REVEAL_HOURS.includes(h)) {
+                set('revealHours', h);
+                setRevealTouched(true);
+              }
+              close();
+            }}
+            mode="single"
+            testIDPrefix="plot-reveal"
+          />
+          <Button label={t('common.cancel')} variant="ghost" onPress={close} />
+        </Sheet>
       ) : null}
-      <Button
-        label={existing ? t('events.save') : t('events.publish')}
-        loading={leaving || create.isPending || update.isPending}
-        onPress={() => void submit()}
-        testID="plot-submit"
-      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  center: { textAlign: 'center' },
+  titleWrap: { gap: 8 },
+  titleInput: { borderBottomWidth: 1.5, paddingTop: 0, paddingBottom: 10, paddingHorizontal: 0 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  blockLabel: { flexShrink: 1 },
+  pills: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
+  // Lines the quick picks up with the row's label, past its icon.
+  indent: { paddingLeft: 44 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chipRow: { gap: 8, paddingRight: 8 },
-  picked: { gap: 4 },
+  detailsWrap: { gap: 8 },
+  details: { minHeight: 96, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 11 },
+  flipped: { transform: [{ rotate: '180deg' }] },
   suggestions: { gap: 0, paddingVertical: 6 },
-  pair: { flexDirection: 'row', gap: 12 },
-  half: { flex: 1 },
   mapWrap: { gap: 12 },
   map: { height: 260 },
 });

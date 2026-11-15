@@ -29,7 +29,7 @@ export type UpdateProfileBody = z.infer<typeof UpdateProfileBody>;
 export const CustomInterest = z.string().trim().min(P.customInterestMin).max(P.customInterestMax);
 
 /**
- * Listed interests plus, optionally, the member's own (D-199). Both count toward the interest limits. Leaving
+ * Listed interests plus, optionally, the member's own (D-200). Both count toward the interest limits. Leaving
  * `customInterests` out keeps the ones already saved (onboarding only sends listed ones).
  */
 export const SetInterestsBody = z
@@ -99,7 +99,7 @@ export const MeResponse = z.object({
   visibility: ProfileVisibility,
   photos: z.array(ProfilePhoto),
   interests: z.array(Interest),
-  /** Interests in the member's own words (D-199). */
+  /** Interests in the member's own words (D-200). */
   customInterests: z.array(z.string()).default([]),
   vibeTags: z.array(VibeTag),
   stats: ProfileStats,
@@ -121,7 +121,7 @@ export const PublicProfile = z.object({
   spokenLanguages: z.array(z.string()),
   photos: z.array(MediaVariants),
   interests: z.array(Interest),
-  /** Interests in their own words (D-199). */
+  /** Interests in their own words (D-200). */
   customInterests: z.array(z.string()).default([]),
   vibeTags: z.array(VibeTag),
   sharedInterestIds: z.array(z.uuid()),

@@ -1,4 +1,4 @@
--- Interests in a member's own words when they are not in the list (D-199). They count toward the
+-- Interests in a member's own words when they are not in the list (D-200). They count toward the
 -- interest limits; the API checks each one (2-30 characters, at most 5), the table keeps a backstop.
 ALTER TABLE profiles
   ADD COLUMN custom_interests text[] NOT NULL DEFAULT '{}'

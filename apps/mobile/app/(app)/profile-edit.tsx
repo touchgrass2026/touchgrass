@@ -29,13 +29,13 @@ const FormSchema = z.object({
 });
 type FormValues = z.infer<typeof FormSchema>;
 
-/** Typed interests live in the same selection as listed ones, under ids with this prefix (D-199). */
+/** Typed interests live in the same selection as listed ones, under ids with this prefix (D-200). */
 const CUSTOM = 'custom:';
 const isCustom = (id: string): boolean => id.startsWith(CUSTOM);
 const sameText = (a: string, b: string): boolean => a.toLocaleLowerCase() === b.toLocaleLowerCase();
 
 /**
- * Edit everything shown on the profile (F-ACC-05, D-199): photos, the basics, then interests and mood as
+ * Edit everything shown on the profile (F-ACC-05, D-200): photos, the basics, then interests and mood as
  * dropdowns (a searchable checklist in a sheet) instead of a long checklist and a wall of chips. Interests that
  * are not listed can be typed in; they count toward the same limits.
  */

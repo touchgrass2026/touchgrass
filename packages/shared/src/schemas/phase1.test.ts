@@ -52,7 +52,7 @@ describe('profile schemas', () => {
   it('bounds interests, vibes and photos', () => {
     expect(SetInterestsBody.safeParse({ interestIds: [uuid, uuid] }).success).toBe(false);
     expect(SetInterestsBody.safeParse({ interestIds: [uuid, uuid, uuid] }).success).toBe(true);
-    // The member's own interests count toward the limits (D-199).
+    // The member's own interests count toward the limits (D-200).
     expect(
       SetInterestsBody.safeParse({ interestIds: [uuid], customInterests: ['Carrom', 'Kites'] })
         .success,

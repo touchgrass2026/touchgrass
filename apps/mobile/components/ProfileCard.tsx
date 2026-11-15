@@ -23,7 +23,7 @@ export interface ProfileCardProps {
   bio: string;
   photos: MediaVariants[];
   interests: Interest[];
-  /** Interests in their own words (D-199), shown as tags after the listed ones. */
+  /** Interests in their own words (D-200), shown as tags after the listed ones. */
   customInterests?: string[];
   vibeTags: VibeTag[];
   stats: ProfileStats;
@@ -37,7 +37,7 @@ export interface ProfileCardProps {
 const FALLBACK_WIDTH = 320;
 
 /**
- * Profile body shared by "my profile" and other people's profiles (D-199): large swipeable photos with page
+ * Profile body shared by "my profile" and other people's profiles (D-200): large swipeable photos with page
  * dots, then name, age and the verified mark, a quiet subtitle, the bio, a calm stats row and small neutral
  * tags for interests and mood.
  */

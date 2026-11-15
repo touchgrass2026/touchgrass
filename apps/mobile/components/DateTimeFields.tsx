@@ -66,6 +66,7 @@ function useFormatters(language: string) {
       new Intl.DateTimeFormat(locale, { timeZone: 'UTC', ...o });
     return {
       field: make({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+      short: make({ weekday: 'short', day: 'numeric', month: 'short' }),
       month: make({ month: 'long', year: 'numeric' }),
       weekday: make({ weekday: 'narrow' }),
       full: make({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
@@ -83,6 +84,13 @@ export interface FieldShellProps {
   hint: string;
   /** Defaults to the calendar. */
   icon?: GlyphIcon;
+  /**
+   * `pill`: a compact chip for a settings row, with no visible label (the row names it) and no error line (the
+   * row shows it); screen readers still hear "label: value".
+   */
+  variant?: 'field' | 'pill';
+  /** Shorter text shown in the pill; `display` is still what screen readers hear. */
+  pillDisplay?: string;
 }
 
 /** Looks like a text field, opens a picker: nothing to type and nothing to get wrong. */
@@ -94,8 +102,35 @@ export function FieldShell({
   testID,
   hint,
   icon = Calendar,
+  variant = 'field',
+  pillDisplay,
 }: FieldShellProps) {
   const theme = useTheme();
+  if (variant === 'pill')
+    return (
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${display}`}
+        accessibilityHint={hint}
+        onPress={() => {
+          Keyboard.dismiss();
+          onOpen();
+        }}
+        hitSlop={2}
+        style={[
+          styles.pill,
+          {
+            minHeight: theme.minTouchTarget,
+            backgroundColor: theme.colors.surfaceAlt,
+            borderColor: error ? theme.colors.danger : theme.colors.inputBorder,
+            borderRadius: theme.radii.pill,
+          },
+        ]}
+      >
+        <Text variant="label">{pillDisplay ?? display}</Text>
+      </Pressable>
+    );
   return (
     <View style={styles.wrap}>
       <Text variant="overline" tone="muted">
@@ -253,10 +288,11 @@ export interface DateFieldProps {
   error?: string | null;
   testID?: string;
   now?: Date;
+  variant?: 'field' | 'pill';
 }
 
 /** A date chosen from a month calendar. Days before today (IST) can't be picked. */
-export function DateField({ label, value, onChange, error, testID, now }: DateFieldProps) {
+export function DateField({ label, value, onChange, error, testID, now, variant }: DateFieldProps) {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const fmt = useFormatters(i18n.language);
@@ -281,6 +317,8 @@ export function DateField({ label, value, onChange, error, testID, now }: DateFi
       <FieldShell
         label={label}
         display={picked ? fmt.field.format(utc(picked)) : t('events.pickDate')}
+        pillDisplay={picked ? fmt.short.format(utc(picked)) : undefined}
+        variant={variant}
         error={error}
         hint={t('events.pickDate')}
         testID={testID}
@@ -392,10 +430,11 @@ export interface TimeFieldProps {
   value: string;
   onChange: (value: string) => void;
   testID?: string;
+  variant?: 'field' | 'pill';
 }
 
 /** A time chosen by tapping: hour, minutes and am/pm. */
-export function TimeField({ label, value, onChange, testID }: TimeFieldProps) {
+export function TimeField({ label, value, onChange, testID, variant }: TimeFieldProps) {
   const { t, i18n } = useTranslation();
   const fmt = useFormatters(i18n.language);
   const [open, setOpen] = useState(false);
@@ -417,6 +456,7 @@ export function TimeField({ label, value, onChange, testID }: TimeFieldProps) {
       <FieldShell
         label={label}
         display={display}
+        variant={variant}
         hint={t('events.pickTime')}
         testID={testID}
         onOpen={() => {
@@ -503,6 +543,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   grow: { flexGrow: 1, flexShrink: 1 },
+  pill: { borderWidth: 1.5, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
   backdrop: { flex: 1 },
   sheet: { borderWidth: 1, padding: 20, gap: 12, maxHeight: '88%' },
   sheetBody: { flexGrow: 0, flexShrink: 1 },

@@ -59,7 +59,7 @@ export function useSetInterests() {
   const { client } = useApi();
   const qc = useQueryClient();
   return useMutation({
-    /** Listed ids only (onboarding keeps any typed ones), or both lists from Edit profile (D-199). */
+    /** Listed ids only (onboarding keeps any typed ones), or both lists from Edit profile (D-200). */
     mutationFn: (input: string[] | { interestIds: string[]; customInterests: string[] }) =>
       client.request('/v1/me/interests', InterestList, {
         method: 'PUT',

@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { EventDetail } from '@touchgrass/shared';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Share } from 'react-native';
 import PlansScreen from '../app/(app)/(tabs)/plans';
@@ -550,6 +551,8 @@ describe('Plot flow (F-EVT-01/02)', () => {
       },
     });
     await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    // Where is a setting row that opens the place search in a sheet (D-199).
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
     expect(await screen.findByTestId('place-fx_4')).toBeOnTheScreen();
     expect(screen.queryByTestId('place-fx_5')).toBeNull();
@@ -557,7 +560,7 @@ describe('Plot flow (F-EVT-01/02)', () => {
     expect(await screen.findByTestId('plot-picked')).toBeOnTheScreen();
     expect(screen.queryByTestId('plot-suggestions')).toBeNull();
     expect(screen.queryByTestId('plot-place-search')).toBeNull();
-    await fireEvent.press(screen.getByTestId('plot-change-place'));
+    await fireEvent.press(screen.getByTestId('plot-where'));
     expect(screen.getByTestId('plot-place-search')).toBeOnTheScreen();
   });
 
@@ -569,6 +572,7 @@ describe('Plot flow (F-EVT-01/02)', () => {
         : { status: 200, body: { venues: [], places: [] } },
     );
     await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'zzz');
     expect(await screen.findByTestId('plot-place-empty')).toHaveTextContent(
       'No places match "zzz". Try another name, or drop a pin on the map.',
@@ -583,13 +587,21 @@ describe('Plot flow (F-EVT-01/02)', () => {
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
     await pickCategory(0);
     await pickWhen();
-    await fireEvent.press(screen.getByTestId('plot-submit'));
-    expect(await screen.findByText('Pick a place first')).toBeOnTheScreen();
+    // Without a place the plan cannot be published yet, and the page says what is missing.
+    expect(screen.getByTestId('plot-submit')).toBeDisabled();
+    expect(screen.getByTestId('plot-needs')).toHaveTextContent(
+      'Add a name, a category and a place to publish.',
+    );
+    expect(screen.getByTestId('plot-where')).toHaveAccessibleName('Where, Add a place');
 
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
     await fireEvent.press(await screen.findByTestId('place-fx_lake'));
     expect(await screen.findByTestId('plot-picked')).toHaveTextContent('Lake View Park');
-    // Hosts can do without a group chat (D-156).
+    expect(screen.getByTestId('plot-submit')).toBeEnabled();
+    expect(screen.queryByTestId('plot-needs')).toBeNull();
+    // Hosts can do without a group chat (D-156); it sits under More options.
+    await fireEvent.press(screen.getByRole('button', { name: 'More options' }));
     await fireEvent(screen.getByTestId('plot-chat'), 'valueChange', false);
     await fireEvent.press(screen.getByTestId('plot-submit'));
     await waitFor(() => expect(api.callsTo('POST', '/v1/events')).toHaveLength(1));
@@ -621,6 +633,7 @@ describe('Plot flow (F-EVT-01/02)', () => {
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
     await pickCategory(0);
     await pickWhen();
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
     await fireEvent.press(await screen.findByTestId('place-fx_lake'));
     await screen.findByTestId('plot-picked');
@@ -644,6 +657,7 @@ describe('Plot flow (F-EVT-01/02)', () => {
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
     await pickCategory(0);
     await pickWhen();
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
     await fireEvent.press(await screen.findByTestId('place-fx_lake'));
     await screen.findByTestId('plot-picked');
@@ -656,6 +670,71 @@ describe('Plot flow (F-EVT-01/02)', () => {
     expect(second?.headers['idempotency-key']).toBe(first?.headers['idempotency-key']);
   });
 
+  it('adds a cover photo from the cover area and sends it with the plan (D-196)', async () => {
+    const realFetch = global.fetch;
+    // Compressing reads the local file back; everything else goes to the fake API.
+    global.fetch = (input: string | URL | Request, init?: RequestInit) =>
+      (typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url
+      ).startsWith('file:')
+        ? Promise.resolve(new Response('x'.repeat(4096)))
+        : api.fetch(input, init);
+    try {
+      api
+        .on('POST', '/v1/media/uploads', {
+          status: 201,
+          body: {
+            assetId: ids.asset,
+            upload: {
+              url: 'https://s3.test/bucket',
+              fields: { key: 'uploads/k' },
+              expiresAt: '2026-11-01T01:00:00.000Z',
+            },
+          },
+        })
+        .on('POST', '/bucket', { status: 204 })
+        .on('POST', `/v1/media/${ids.asset}/complete`, {
+          status: 200,
+          body: {
+            id: ids.asset,
+            purpose: 'event_cover',
+            status: 'ready',
+            width: 1600,
+            height: 900,
+            urls: null,
+          },
+        });
+      await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+      expect(screen.queryByTestId('plot-cover-preview')).toBeNull();
+      await fireEvent.press(screen.getByRole('button', { name: 'Add a cover photo' }));
+      expect(await screen.findByTestId('plot-cover-preview')).toBeOnTheScreen();
+      // Covers are cropped wide, to match the frame they are shown in.
+      expect(jest.mocked(ImagePicker.launchImageLibraryAsync)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ aspect: [16, 9] }),
+      );
+      expect(screen.getByRole('button', { name: 'Change photo' })).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: 'Remove photo' })).toBeOnTheScreen();
+      expect(api.callsTo('POST', '/v1/media/uploads')[0]?.body).toMatchObject({
+        purpose: 'event_cover',
+      });
+
+      await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
+      await pickCategory(0);
+      await fireEvent.press(screen.getByTestId('plot-where'));
+      await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
+      await fireEvent.press(await screen.findByTestId('place-fx_lake'));
+      await screen.findByTestId('plot-picked');
+      await fireEvent.press(screen.getByTestId('plot-submit'));
+      await waitFor(() => expect(api.callsTo('POST', '/v1/events')).toHaveLength(1));
+      expect(api.callsTo('POST', '/v1/events')[0]?.body).toMatchObject({ coverMediaId: ids.asset });
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
   it('shows server errors in plain words', async () => {
     api.on('POST', '/v1/events', {
       status: 403,
@@ -664,6 +743,7 @@ describe('Plot flow (F-EVT-01/02)', () => {
     await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Chai');
     await pickCategory(0);
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
     await fireEvent.press(await screen.findByTestId('place-fx_lake'));
     await fireEvent.press(screen.getByTestId('plot-submit'));
@@ -690,6 +770,7 @@ describe('Plot flow: pin, advanced options and edits', () => {
     await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Mystery chai');
     await pickCategory(1);
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.press(screen.getByRole('button', { name: 'Pick on map' }));
     await fireEvent(screen.getByTestId('plot-map'), 'press', {
       nativeEvent: { coordinate: { latitude: 17.44, longitude: 78.35 } },
@@ -698,11 +779,17 @@ describe('Plot flow: pin, advanced options and edits', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Use this spot' }));
     expect(screen.getByTestId('plot-picked')).toHaveTextContent('Near the big banyan tree');
     await fireEvent.press(screen.getByRole('radio', { name: 'Tomorrow' }));
+    await fireEvent.press(screen.getByTestId('plot-who'));
     await fireEvent.press(screen.getByTestId(`plot-visibility-balanced`));
     await fireEvent.press(screen.getByRole('radio', { name: 'Max share of any one gender: 70%' }));
+    await fireEvent.press(screen.getByTestId('plot-who-done'));
+    expect(screen.getByTestId('plot-who')).toHaveAccessibleName('Who can come, Balanced · 70%');
     await fireEvent.press(screen.getByRole('button', { name: 'More options' }));
+    await fireEvent.press(screen.getByTestId('plot-vibes'));
     await fireEvent.press(await screen.findByTestId(`plot-vibe-${vibesFixture[0]?.id ?? ''}`));
+    await fireEvent.press(screen.getByTestId('plot-vibes-done'));
     await fireEvent(screen.getByTestId('plot-mystery'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('plot-reveal'));
     await fireEvent.press(screen.getByRole('radio', { name: 'Reveal the spot 4 h before' }));
     await fireEvent(screen.getByRole('switch', { name: 'Allow +1s' }), 'valueChange', true);
     await fireEvent(screen.getByRole('switch', { name: 'Step-free access' }), 'valueChange', true);
@@ -727,15 +814,21 @@ describe('Plot flow: pin, advanced options and edits', () => {
   it('flags invalid input before calling the API', async () => {
     mockRouteParams.current = {};
     await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
+    await pickCategory(0);
+    await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.press(await screen.findByRole('button', { name: 'Pick on map' }));
     await fireEvent(screen.getByTestId('plot-map'), 'press', {
       nativeEvent: { coordinate: { latitude: 17.44, longitude: 78.35 } },
     });
     await fireEvent.changeText(screen.getByTestId('plot-pin-address'), 'Somewhere');
     await fireEvent.press(screen.getByRole('button', { name: 'Use this spot' }));
+    await fireEvent.press(screen.getByTestId('plot-how-many'));
     await fireEvent.changeText(screen.getByTestId('plot-capacity'), '1');
+    await fireEvent.press(screen.getByTestId('plot-how-many-done'));
     await fireEvent.press(screen.getByTestId('plot-submit'));
-    expect(await screen.findAllByText(/./)).not.toHaveLength(0);
+    // The capacity problem shows on its own row.
+    expect(await screen.findByTestId('plot-how-many-error')).toBeOnTheScreen();
     expect(api.callsTo('POST', '/v1/events')).toHaveLength(0);
   });
 

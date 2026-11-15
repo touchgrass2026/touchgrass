@@ -26,11 +26,16 @@ export const GLYPHS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   arrowRight: '<path d="M5 12h13.5M13 6.5l5.5 5.5-5.5 5.5"/>',
   arrowLeft: '<path d="M19 12H5.5M11 6.5 5.5 12l5.5 5.5"/>',
+  // Setting rows: opens a sheet (right), expands in place (down).
+  chevronRight: '<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
+  chevronDown: '<path d="M5.5 9.5 12 16l6.5-6.5"/>',
 
   // Plans
   pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 1 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.25" fill="ACCENT" stroke="none"/>',
   calendar:
     '<rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="15.5" cy="15.25" r="1.75" fill="ACCENT" stroke="none"/>',
+  clock:
+    '<circle cx="12" cy="12" r="8.75"/><path d="M12 7v5l3.25 2"/><circle cx="12" cy="12" r="1.1" fill="ACCENT" stroke="none"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><circle cx="12" cy="15.5" r="1.6" fill="ACCENT" stroke="none"/>',
   people:
     '<circle cx="9" cy="8.5" r="3.25"/><path d="M3.25 19.5c0-3.18 2.57-5.75 5.75-5.75s5.75 2.57 5.75 5.75"/><path d="M14.8 5.6a2.75 2.75 0 1 1 1.9 4.9"/><path d="M16.75 13.9c2.4.3 4 2.4 4 5.1"/>',
@@ -101,8 +106,6 @@ export const GLYPHS = {
   share:
     '<path d="M12 15.5V3.5M7.5 8 12 3.5 16.5 8"/><path d="M7 11.5H6a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.75v2.5M12 18.75v2.5M2.75 12h2.5M18.75 12h2.5M5.46 5.46l1.77 1.77M16.77 16.77l1.77 1.77M5.46 18.54l1.77-1.77M16.77 7.23l1.77-1.77"/><circle cx="12" cy="12" r="1.1" fill="ACCENT" stroke="none"/>',
-  // List rows that open another screen.
-  chevronRight: '<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
 } as const;
 
 export type GlyphName = keyof typeof GLYPHS;

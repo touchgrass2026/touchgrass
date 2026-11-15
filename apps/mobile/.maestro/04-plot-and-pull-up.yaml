@@ -22,13 +22,20 @@ name: Plot a plan and manage it
 - tapOn:
     id: plot-title
 - inputText: 'Maestro chai walk'
-# Category is a field that opens a searchable list (D-189).
+# Category is a setting row that opens a searchable list (D-189, D-199).
 - tapOn:
     id: plot-category
 - tapOn:
     id: plot-category-search
 - inputText: 'Chai'
 - tapOn: '.*Chai runs.*'
+# Where is a setting row too: place search opens in a sheet that stays above the keyboard.
+- scrollUntilVisible:
+    element:
+      id: plot-where
+    direction: DOWN
+- tapOn:
+    id: plot-where
 - tapOn:
     id: plot-place-search
 - inputText: 'mall'
@@ -41,10 +48,11 @@ name: Plot a plan and manage it
     index: 0
 - assertVisible:
     id: plot-picked
-- tapOn: 'Tomorrow'
 - scrollUntilVisible:
-    element:
-      id: plot-submit
+    element: 'Tomorrow'
+    direction: DOWN
+- tapOn: 'Tomorrow'
+# The main button is pinned at the bottom, so it needs no scrolling.
 - tapOn:
     id: plot-submit
 - assertVisible: 'Maestro chai walk'

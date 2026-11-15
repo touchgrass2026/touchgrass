@@ -50,7 +50,7 @@ type Shortcut = {
 };
 
 /**
- * Your profile (F-ACC-05, D-199): back, share and settings as small header buttons; your photos, name and
+ * Your profile (F-ACC-05, D-200): back, share and settings as small header buttons; your photos, name and
  * details as others see them; one clear "Edit profile"; your streak and next plans; then everything else as
  * grouped rows (icon, label, chevron), like a settings list.
  */

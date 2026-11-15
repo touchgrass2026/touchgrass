@@ -852,7 +852,28 @@ The admin Waitlist filter has a third view, **Invited, not joined** (`?status=in
 - **Chat header**: the name is the title (with "Crew chat"/"Plan chat" under it); Mute and New poll are round icon buttons (new `poll` glyph), so actions never look like the title.
 - **Polls like WhatsApp**: creating one stacks the options in one box with dividers and no gaps, a new row appears as you type, × removes one; in the chat each option is a row with a round tick, its count and a thin bar.
 
-## D-199 Profile redesign and interests in your own words
+## D-198 Explore filters sheet, plan artwork, first-launch guide, calm labels
+
+- Filters on Explore open as one bottom sheet (sort, distance, good for, category, mood) with a pinned Reset / Show plans footer, in place of rows of individual chips; category is a dropdown and mood a multi-select.
+- Segmented tabs (Squad, Chats) keep labels on one line and shrink text before wrapping.
+- `MultiSelectField`: dropdown multi-select with search and an optional "Use what I typed" row; used for mood and interests.
+- Plans without a cover photo show `PlanArt` everywhere (cards, rails, the plan screen): a lit gradient from the plan id and a quiet category icon, no accent colour on it.
+- First launch walks the dock one button at a time (`DockGuide`, once per install, Skip always available, Replay from Settings; off in e2e builds).
+- Following the top ui-design skill repos (ui-ux-pro-max, taste-skill, anti-slop): section labels are 13px sentence case, never tracked all-caps; accent once per surface; running text in the ink colour.
+
+## D-199 Plot is one image-led page
+
+A tester found Plot unprofessional (a long stack of boxed fields and walls of chips) and did not want a step-by-step wizard. Plot now follows the single-page pattern of the best-liked event apps:
+
+- **Cover first**: a large 16:9 cover area (`CoverPicker`); empty, it is one "Add a cover photo" target; set, the photo fills it with small Change and Remove buttons. Covers are cropped 16:9 (`pickImage(aspect)`), still sent as `coverMediaId` only when changed.
+- **The name is the heading**: typed straight in under the cover, with an underline instead of a box.
+- **One card of setting rows** (`components/plot/Settings.tsx`: icon, label, value in muted text, chevron; errors on the row): Category, When (date and time pills that open the existing calendar and time sheets, plus Tonight/Tomorrow/This weekend), Duration, Where (place search, saved places and the map in a sheet, which stays above the keyboard), Who can come, How many, and Price for approved hosts. Each row opens a sheet; non-hosts see the paid-plans note under the card.
+- **Details** is always visible (it was hidden under More options) and lifts itself above the keyboard.
+- **More options** is one row, folded by default, showing how many options are on; inside: Mood, the switches (solo-friendly, small group, mystery with its reveal time, +1s (off and disabled for paid plans), indoors, accessibility, group chat).
+- **Pinned main button** (`Screen` gained `footer`): "Publish plan" / "Save changes", disabled until the plan has a name, a category (new plans), a place and a valid time, with a line saying what is missing. Other validation still runs on submit and lands on the matching row.
+- Row icons are ink only: the lime accent stays on the main action and selected states.
+
+## D-200 Profile redesign and interests in your own words
 
 A tester found the profile "childish, not professional". Following Hinge/Bumble:
 

@@ -80,14 +80,14 @@ describe('My profile (F-ACC-05)', () => {
     expect(screen.getByTestId('profile-age')).toHaveTextContent(/^\d{2}$/);
     expect(screen.getByLabelText('Reliability: New here')).toBeOnTheScreen();
     expect(screen.getByText('Interest 0')).toBeOnTheScreen();
-    // Interests in their own words sit with the listed ones (D-199).
+    // Interests in their own words sit with the listed ones (D-200).
     expect(screen.getByText('Carrom nights')).toBeOnTheScreen();
     expect(screen.getByLabelText('Photo 1 of 1')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Edit profile' }));
     expect(mockRouter.push).toHaveBeenCalledWith('/profile-edit');
     await fireEvent.press(screen.getByRole('button', { name: 'Invite friends' }));
     expect(mockRouter.push).toHaveBeenCalledWith('/invites');
-    // Share and settings are header buttons; the rest is a grouped list of rows (D-199).
+    // Share and settings are header buttons; the rest is a grouped list of rows (D-200).
     expect(screen.getByRole('header', { name: 'Your activity' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('open-settings'));
     expect(mockRouter.push).toHaveBeenCalledWith('/settings');
@@ -117,7 +117,7 @@ describe('Edit profile', () => {
     await renderWithProviders(<ProfileEditScreen />, { fetchFn: api.fetch });
     await fireEvent.changeText(await screen.findByTestId('edit-bio'), 'Biryani over everything');
     await fireEvent.changeText(screen.getByTestId('edit-languages'), 'English, Telugu, Hindi,');
-    // Interests are a dropdown: a field opening a sheet with a checklist (D-199).
+    // Interests are a dropdown: a field opening a sheet with a checklist (D-200).
     expect(screen.queryByRole('checkbox', { name: 'Interest 3' })).toBeNull();
     await fireEvent.press(screen.getByTestId('edit-interest'));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Interest 3' }));
@@ -138,7 +138,7 @@ describe('Edit profile', () => {
     });
   });
 
-  it('adds an interest typed in when it is not listed (D-199)', async () => {
+  it('adds an interest typed in when it is not listed (D-200)', async () => {
     api
       .on('PATCH', '/v1/me/profile', { status: 200, body: meFixture() })
       .on('PUT', '/v1/me/interests', {
