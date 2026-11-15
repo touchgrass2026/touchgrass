@@ -93,6 +93,7 @@ export const Play = glyph('play');
 export const Bowl = glyph('bowl');
 export const Dice = glyph('dice');
 export const Book = glyph('book');
+export const Music = glyph('music');
 export const Grid = glyph('grid');
 export const ShareIcon = glyph('share');
 export const Gear = glyph('gear');

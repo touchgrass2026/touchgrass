@@ -3,12 +3,15 @@ import { type ReactNode, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Circle, Marker, type Region } from 'react-native-maps';
+import MapView, { Circle, type Region } from 'react-native-maps';
 import { useMapPins } from '../src/features/discovery/api';
 import { type DiscoverFilters, regionToBox } from '../src/features/discovery/filters';
 import { formatWhen } from '../src/features/events/format';
 import { useTheme } from '../src/theme/theme';
+import { localized } from '../src/features/catalog/api';
 import { MapPin as PinIcon, People } from './icons';
+import { CategoryPill } from './CategoryPill';
+import { ClusterMarker, MYSTERY_AREA, PlanMarker } from './PlanMarker';
 import { FadeIn, Icon, staggerDelay, Text, Pressable } from './ui';
 
 /**
@@ -46,7 +49,21 @@ export function DiscoverMap({
     longitudeDelta: 0.12,
   };
   const [box, setBox] = useState(() => regionToBox(initial));
+  const [selected, setSelected] = useState<string | null>(null);
   const q = useMapPins(box, filters);
+  // "Biryani crawl, Food, Sat 4 Nov, 6:30 pm": the category is read out, not only shown as a colour.
+  const pinLabel = (p: MapPin): string =>
+    [
+      p.title,
+      p.mystery
+        ? t('events.mystery')
+        : p.category
+          ? localized(p.category.name, i18n.language)
+          : null,
+      formatWhen(p.startsAt, i18n.language),
+    ]
+      .filter(Boolean)
+      .join(', ');
 
   const zoomInto = (c: MapCluster): void => {
     map.current?.animateToRegion({
@@ -82,38 +99,40 @@ export function DiscoverMap({
               key={p.id}
               center={{ latitude: p.center.lat, longitude: p.center.lng }}
               radius={p.radiusMeters}
-              strokeColor={theme.colors.primary}
-              fillColor="rgba(20,106,37,0.12)"
+              strokeColor={MYSTERY_AREA.stroke}
+              fillColor={MYSTERY_AREA.fill}
             />
           ) : null,
         )}
         {q.data?.pins.map((p) => (
-          <Marker
+          <PlanMarker
             key={`m-${p.id}`}
             coordinate={{ latitude: p.center.lat, longitude: p.center.lng }}
+            category={p.category}
+            mystery={p.mystery}
+            selected={selected === p.id}
             title={p.title}
             description={formatWhen(p.startsAt, i18n.language)}
+            onPress={() => {
+              setSelected(p.id);
+            }}
             onCalloutPress={() => {
               onOpen(p);
             }}
-            accessibilityLabel={`${p.title}, ${formatWhen(p.startsAt, i18n.language)}`}
+            accessibilityLabel={pinLabel(p)}
+            testID={`marker-${p.slug}`}
           />
         ))}
         {q.data?.clusters.map((c) => (
-          <Marker
+          <ClusterMarker
             key={`c-${String(c.center.lat)}-${String(c.center.lng)}`}
             coordinate={{ latitude: c.center.lat, longitude: c.center.lng }}
+            count={c.count}
             onPress={() => {
               zoomInto(c);
             }}
             accessibilityLabel={t('discover.clusterLabel', { count: c.count })}
-          >
-            <View style={[styles.cluster, { backgroundColor: theme.colors.primary }]}>
-              <Text tone="onPrimary" variant="label">
-                {c.count}
-              </Text>
-            </View>
-          </Marker>
+          />
         ))}
       </MapView>
       <View style={[styles.top, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
@@ -172,16 +191,23 @@ export function DiscoverMap({
             <FadeIn key={`l-${p.id}`} delay={staggerDelay(i, 50)}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`${p.title}, ${formatWhen(p.startsAt, i18n.language)}`}
+                accessibilityLabel={pinLabel(p)}
+                accessibilityState={{ selected: selected === p.id }}
                 testID={`pin-${p.slug}`}
                 onPress={() => {
                   onOpen(p);
                 }}
                 style={[
                   styles.card,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  {
+                    backgroundColor: theme.colors.surface,
+                    // The card of the pin you tapped carries the same lime ring as its pin.
+                    borderColor: selected === p.id ? theme.colors.primary : theme.colors.border,
+                    borderWidth: selected === p.id ? 2 : StyleSheet.hairlineWidth,
+                  },
                 ]}
               >
+                {p.mystery ? null : <CategoryPill category={p.category} />}
                 <Text variant="label" numberOfLines={2}>
                   {p.title}
                 </Text>
@@ -223,12 +249,4 @@ const styles = StyleSheet.create({
   },
   clusterCard: { width: 'auto', flexDirection: 'row', alignItems: 'center' },
   when: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  cluster: {
-    minWidth: 36,
-    minHeight: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
 });

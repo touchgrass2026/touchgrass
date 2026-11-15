@@ -314,6 +314,8 @@ describe('visibility and privacy in discovery (F-DSC-06, F-EVT-03/12)', () => {
     const pin = map.pins.find((p) => p.id === e.id);
     expect(pin).toMatchObject({ mystery: true, radiusMeters: 2000 });
     expect(pin?.center).toEqual(center);
+    // The pin carries its category for the marker's hue and glyph (D-204).
+    expect(pin?.category).toMatchObject({ slug: item?.category?.slug });
 
     const search = await request(h.http)
       .get('/v1/discover/search')

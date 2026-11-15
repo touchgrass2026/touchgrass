@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { colors, contrastRatio, relativeLuminance } from './tokens';
+import {
+  CATEGORY_HUE_NAMES,
+  categoryHues,
+  colors,
+  contrastRatio,
+  media,
+  palette,
+  relativeLuminance,
+} from './tokens';
 
 describe('design tokens', () => {
   it('computes WCAG contrast', () => {
@@ -42,4 +50,41 @@ describe('design tokens', () => {
       });
     }
   }
+
+  // Category hues (D-204) live on the app's dark surfaces only.
+  describe('category hues', () => {
+    const d = colors.dark;
+    const surfaces = [
+      ['background', d.background],
+      ['surface', d.surface],
+      ['surfaceAlt', d.surfaceAlt],
+    ] as const;
+    for (const name of CATEGORY_HUE_NAMES) {
+      const h = categoryHues[name];
+      it(`${name}: tag text reads on its tint and on every surface (4.5:1)`, () => {
+        expect(contrastRatio(h.text, h.soft)).toBeGreaterThanOrEqual(4.5);
+        for (const [, bg] of surfaces)
+          expect(contrastRatio(h.text, bg)).toBeGreaterThanOrEqual(4.5);
+      });
+      it(`${name}: glyphs and text on the solid fill (4.5:1)`, () => {
+        expect(contrastRatio(h.onSolid, h.solid)).toBeGreaterThanOrEqual(4.5);
+      });
+      it(`${name}: the solid stands out as an icon or pin on its tint and every surface (3:1)`, () => {
+        expect(contrastRatio(h.solid, h.soft)).toBeGreaterThanOrEqual(3);
+        for (const [, bg] of surfaces) expect(contrastRatio(h.solid, bg)).toBeGreaterThanOrEqual(3);
+      });
+      it(`${name}: white text reads on the artwork below its top stop (4.5:1)`, () => {
+        expect(contrastRatio(media.text, h.art[1])).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(media.text, h.art[2])).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+    it('never reuses the lime primary, so actions keep the only lime', () => {
+      for (const name of CATEGORY_HUE_NAMES) {
+        const h = categoryHues[name];
+        expect([h.solid, h.soft, h.text].map((x) => x.toUpperCase())).not.toContain(
+          palette.lime400,
+        );
+      }
+    });
+  });
 });

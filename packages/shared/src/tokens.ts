@@ -131,6 +131,94 @@ export const media = {
   chipBorder: 'rgba(255,255,255,0.2)',
   dot: 'rgba(255,255,255,0.5)',
 } as const;
+/**
+ * Category hues (D-204): a small, fixed set that tells kinds of plans apart on the dark app surfaces (map pins,
+ * category tags, artwork). Informational only: the lime `primary` stays the one colour on actions and selected
+ * states, and a hue is always paired with the category's label or glyph, never shown alone.
+ * - `solid`: marker fill and icons (3:1 or better on every dark surface and on `soft`).
+ * - `soft`: tag background, opaque so it also reads over photos.
+ * - `text`: label text on `soft` and on the surfaces (4.5:1 or better).
+ * - `onSolid`: glyphs and text drawn on `solid`.
+ * - `art`: the three gradient stops behind a plan without a cover photo, lit at the top and quiet at the bottom.
+ * Contrast is checked in tokens.test.ts.
+ */
+export interface CategoryHue {
+  solid: string;
+  soft: string;
+  text: string;
+  onSolid: string;
+  art: readonly [string, string, string];
+}
+export const CATEGORY_HUE_NAMES = [
+  'green',
+  'coral',
+  'amber',
+  'teal',
+  'sky',
+  'violet',
+  'rose',
+  'slate',
+] as const;
+export type CategoryHueName = (typeof CATEGORY_HUE_NAMES)[number];
+export const categoryHues: Record<CategoryHueName, CategoryHue> = {
+  green: {
+    solid: '#5FD38D',
+    soft: '#223E2E',
+    text: '#BDF0CF',
+    onSolid: palette.forest950,
+    art: ['#2F6B4A', '#183A29', '#0B130E'],
+  },
+  coral: {
+    solid: '#FF8A75',
+    soft: '#452E29',
+    text: '#FFD0C6',
+    onSolid: palette.forest950,
+    art: ['#9A4F42', '#562A23', '#1A0C0A'],
+  },
+  amber: {
+    solid: '#F5B83D',
+    soft: '#43381C',
+    text: '#FCE3AE',
+    onSolid: palette.forest950,
+    art: ['#8C6A26', '#4C3914', '#181108'],
+  },
+  teal: {
+    solid: '#2DD4BF',
+    soft: '#173E39',
+    text: '#B3F2E8',
+    onSolid: palette.forest950,
+    art: ['#1F6E66', '#123F3B', '#061614'],
+  },
+  sky: {
+    solid: '#5CC2F5',
+    soft: '#223A45',
+    text: '#C3E8FB',
+    onSolid: palette.forest950,
+    art: ['#2F6690', '#183A55', '#08131D'],
+  },
+  violet: {
+    solid: '#B49CFF',
+    soft: '#353247',
+    text: '#E0D6FF',
+    onSolid: palette.forest950,
+    art: ['#5E4B9C', '#33285A', '#110C1F'],
+  },
+  rose: {
+    solid: '#FB7F9C',
+    soft: '#442C31',
+    text: '#FFCBD7',
+    onSolid: palette.forest950,
+    art: ['#94485E', '#532633', '#1C0B10'],
+  },
+  // The neutral hue: plans without a clear category, mystery plans and map clusters.
+  slate: {
+    solid: '#A3B3A7',
+    soft: '#313734',
+    text: '#DCE3DD',
+    onSolid: palette.forest950,
+    art: ['#4A5650', '#28302C', '#0E1210'],
+  },
+};
 export const motion = { fast: 150, normal: 250, slow: 400, signalPulse: 2400 } as const;
 /** Minimum touch target (pt) for F-A11Y-01. */
 export const MIN_TOUCH_TARGET = 44;

@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Share, StyleSheet, View } from 'react-native';
-import MapView, { Circle, Marker } from 'react-native-maps';
+import MapView, { Circle } from 'react-native-maps';
 import { usePriorityPass, useReferrals } from '../src/features/engagement/api';
 import { useCheckIn, useJoinRequest, useRsvp } from '../src/features/events/api';
 import { useRefundQuote } from '../src/features/payments/api';
@@ -29,7 +29,9 @@ import { useTrustedContacts } from '../src/features/safety/api';
 import { PersonRow } from './PersonRow';
 import { useTrack } from '../src/features/analytics/analytics';
 import { Button, FadeIn, IconText, Pop, Text, TextField } from './ui';
+import { CategoryPill } from './CategoryPill';
 import { PlanArt } from './PlanArt';
+import { MYSTERY_AREA, PlanMarker } from './PlanMarker';
 import { useFlag } from '../src/features/app-config/use-flag';
 
 /**
@@ -214,9 +216,10 @@ export function EventDetailView({
               style={[styles.cover, styles.coverArt, { borderRadius: theme.radii.lg }]}
               testID="event-art"
             >
-              <PlanArt seed={event.id} category={event.category?.slug} iconSize={48} />
+              <PlanArt category={event.category} iconSize={48} />
             </View>
           )}
+          <CategoryPill category={event.category} testID="event-category" />
           <Text variant="caption" tone="primary">
             {formatWhen(event.startsAt, i18n.language, event.timezone)} –{' '}
             {formatTime(event.endsAt, i18n.language, event.timezone)}
@@ -616,13 +619,19 @@ export function EventDetailView({
             testID="event-map"
           >
             {loc.kind === 'exact' ? (
-              <Marker coordinate={{ latitude: loc.point.lat, longitude: loc.point.lng }} />
+              <PlanMarker
+                coordinate={{ latitude: loc.point.lat, longitude: loc.point.lng }}
+                category={event.category}
+                mystery={false}
+                accessibilityLabel={locationLabel(t, loc)}
+                testID="event-map-marker"
+              />
             ) : (
               <Circle
                 center={{ latitude: loc.center.lat, longitude: loc.center.lng }}
                 radius={loc.radiusMeters}
-                strokeColor={theme.colors.primary}
-                fillColor="rgba(20,106,37,0.15)"
+                strokeColor={MYSTERY_AREA.stroke}
+                fillColor={MYSTERY_AREA.fill}
               />
             )}
           </MapView>

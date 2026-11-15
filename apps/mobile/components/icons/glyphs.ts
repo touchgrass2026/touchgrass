@@ -99,6 +99,9 @@ export const GLYPHS = {
   bowl: '<path d="M3.5 11.5h17a8.5 8.5 0 0 1-17 0Z"/><path d="M8 20.25h8M9 7.5c0-1.5 1.5-1.5 1.5-3M13.5 7.5c0-1.5 1.5-1.5 1.5-3"/>',
   dice: '<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="CURRENT" stroke="none"/><circle cx="15" cy="15" r="1.2" fill="CURRENT" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="ACCENT" stroke="none"/>',
   book: '<path d="M12 6.5c-2-1.5-4.75-2-8-1.75v13.5c3.25-.25 6 .25 8 1.75 2-1.5 4.75-2 8-1.75V4.75c-3.25-.25-6 .25-8 1.75Z"/><path d="M12 6.5v13.5"/>',
+  // Creative plans: a pair of beamed notes.
+  music:
+    '<path d="M9 17.5V6l11-2.5v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/>',
   grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><circle cx="16.75" cy="16.75" r="3.25" fill="ACCENT" stroke="none"/>',
   // Chat polls: three answer bars, the leading one picked.
   poll: '<path d="M4 6h9M4 12h16M4 18h6"/><circle cx="19" cy="6" r="1.6" fill="ACCENT" stroke="none"/>',
