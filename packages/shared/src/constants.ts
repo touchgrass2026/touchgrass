@@ -56,12 +56,22 @@ export const LIMITS = {
   upload: {
     maxImageBytes: 10 * 1024 * 1024,
     allowedImageTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    /**
+     * Animated GIFs are for plan covers only (D-203): kept animated (as animated webp) by the server, so they
+     * have a smaller size cap and a frame cap.
+     */
+    gifContentType: 'image/gif',
+    gifPurposes: ['event_cover'],
+    maxGifBytes: 8 * 1024 * 1024,
+    maxGifFrames: 200,
     /** Video is for stories only (D-164): re-encoded on our servers, so phone formats are accepted. */
     maxVideoBytes: 30 * 1024 * 1024,
     allowedVideoTypes: ['video/mp4', 'video/quicktime'],
     maxVideoSeconds: 15,
   },
   imageSizes: [160, 480, 1080] as const,
+  /** Place search while plotting (D-203): known venues first, then map places; the list scrolls. */
+  placeSearch: { knownVenues: 4, mapPlaces: 8 },
   event: {
     smallGroupMin: 4,
     smallGroupMax: 8,

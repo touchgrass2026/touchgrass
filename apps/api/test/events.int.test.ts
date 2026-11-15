@@ -2,6 +2,7 @@ import type { EventDetail } from '@touchgrass/shared';
 import { haversineMeters } from '@touchgrass/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CitiesService } from '../src/modules/cities/cities.service.js';
 import { CheckInService } from '../src/modules/events/check-in.service.js';
 import { EventsService } from '../src/modules/events/events.service.js';
 import { WaitlistService } from '../src/modules/events/waitlist.service.js';
@@ -23,6 +24,7 @@ import {
 import {
   bearer,
   befriend,
+  cityAndHood,
   createHarness,
   device,
   freshPhone,
@@ -160,6 +162,69 @@ describe('plot (F-EVT-01/02)', () => {
       .post(`/v1/events/${e.id}/publish`)
       .set(...bearer(host.token))
       .expect(409);
+  });
+
+  it('accepts places inside a served city but outside every neighbourhood (D-203)', async () => {
+    const host = await verifiedMember(h);
+    // Charminar sits inside the Hyderabad bounds, away from the seeded neighbourhood polygons.
+    const charminar = { lat: 17.3616, lng: 78.4747 };
+    const located = await h.app.get(CitiesService).locate(charminar);
+    const { cityId } = await cityAndHood(h);
+    expect(located).toMatchObject({ cityId, neighbourhoodId: null, centroid: null });
+    const venue = await request(h.http)
+      .post('/v1/venues/from-place')
+      .set(...bearer(host.token))
+      .send({ placeId: 'fx_charminar', sessionToken: 'sess-hood' })
+      .expect(200);
+    expect(venue.body).toMatchObject({ name: 'Charminar', neighbourhoodName: null });
+    const byVenue = await plot(h, host, { where: { venueId: venue.body.id } });
+    expect(byVenue.location).toMatchObject({ kind: 'exact', placeName: 'Charminar' });
+    // A dropped pin there works too, and mystery plans still get a fuzzed centre without a neighbourhood.
+    const pinned = await plot(h, host, {
+      where: { point: charminar, address: 'Near the old city gate', placeName: null },
+      mystery: true,
+    });
+    expect(pinned.id).toBeTruthy();
+
+    // Reverse geocoding suggests an address and says whether the spot is served.
+    const served = await request(h.http)
+      .get('/v1/venues/reverse-geocode')
+      .query(charminar)
+      .set(...bearer(host.token))
+      .expect(200);
+    expect(served.body).toEqual({
+      address: 'Near Charminar, Char Kaman, Ghansi Bazaar, Hyderabad',
+      served: true,
+    });
+    const mumbai = await request(h.http)
+      .get('/v1/venues/reverse-geocode')
+      .query({ lat: 19.076, lng: 72.8777 })
+      .set(...bearer(host.token))
+      .expect(200);
+    expect(mumbai.body).toEqual({ address: null, served: false });
+    await request(h.http)
+      .get('/v1/venues/reverse-geocode')
+      .query({ lat: 120, lng: 0 })
+      .set(...bearer(host.token))
+      .expect(400);
+  });
+
+  it('search returns at most 4 known venues', async () => {
+    const host = await verifiedMember(h);
+    await h.pool.query(
+      `INSERT INTO venues (id, city_id, name, address, location, accessibility)
+       SELECT gen_random_uuid(), $1, 'Cap Test Cafe ' || i, 'Gachibowli',
+              ST_SetSRID(ST_MakePoint(78.35, 17.44), 4326)::geography,
+              '{"stepFree":false,"accessibleRestroom":false,"quietSpace":false}'::jsonb
+       FROM generate_series(1, 6) AS i`,
+      [(await cityAndHood(h)).cityId],
+    );
+    const res = await request(h.http)
+      .get('/v1/venues/search')
+      .query({ q: 'Cap Test Cafe', lat: SPOT.lat, lng: SPOT.lng, session: 'sess-cap' })
+      .set(...bearer(host.token))
+      .expect(200);
+    expect(res.body.venues).toHaveLength(4);
   });
 
   it('uses saved venues found through search', async () => {

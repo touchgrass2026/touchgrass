@@ -4,6 +4,12 @@ import { MediaPurpose, MediaStatus } from '../enums';
 
 export const ImageContentType = z.enum(LIMITS.upload.allowedImageTypes);
 
+/** Plan covers may be an animated GIF (D-203); every other image purpose takes stills only. */
+export const GifContentType = z.literal(LIMITS.upload.gifContentType);
+
+export const isGifContentType = (contentType: string): boolean =>
+  contentType === LIMITS.upload.gifContentType;
+
 export const VideoContentType = z.enum(LIMITS.upload.allowedVideoTypes);
 
 export const isVideoContentType = (contentType: string): boolean =>
@@ -12,7 +18,7 @@ export const isVideoContentType = (contentType: string): boolean =>
 export const CreateUploadBody = z
   .object({
     purpose: MediaPurpose,
-    contentType: z.union([ImageContentType, VideoContentType]),
+    contentType: z.union([ImageContentType, GifContentType, VideoContentType]),
     sizeBytes: z.number().int().min(1).max(LIMITS.upload.maxVideoBytes),
   })
   .superRefine((b, ctx) => {
@@ -23,6 +29,15 @@ export const CreateUploadBody = z
           path: ['contentType'],
           message: 'Video is only for stories',
         });
+    } else if (isGifContentType(b.contentType)) {
+      if (!(LIMITS.upload.gifPurposes as readonly string[]).includes(b.purpose))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['contentType'],
+          message: 'GIFs are only for plan covers',
+        });
+      else if (b.sizeBytes > LIMITS.upload.maxGifBytes)
+        ctx.addIssue({ code: 'custom', path: ['sizeBytes'], message: 'GIF too large' });
     } else if (b.sizeBytes > LIMITS.upload.maxImageBytes) {
       ctx.addIssue({ code: 'custom', path: ['sizeBytes'], message: 'Image too large' });
     }

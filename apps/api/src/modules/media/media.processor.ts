@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { isVideoContentType, LIMITS } from '@touchgrass/shared';
+import { isGifContentType, isVideoContentType, LIMITS } from '@touchgrass/shared';
 import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { uuidv7 } from 'uuidv7';
@@ -12,6 +12,11 @@ import { VideoRejected, VideoTranscoder } from './video.js';
 
 /** Refuse decompression bombs: 40 megapixels is far above any phone camera output. */
 const MAX_INPUT_PIXELS = 40_000_000;
+/**
+ * Animated covers (D-203) decode every frame: each frame keeps the still-image limit, and all frames together
+ * stay under this (about 100 frames of 1080 x 1080).
+ */
+const MAX_ANIMATED_PIXELS = 120_000_000;
 const [SM, MD, LG] = LIMITS.imageSizes;
 
 export interface ProcessedImage {
@@ -31,6 +36,56 @@ export async function renderVariant(input: Buffer, maxEdge: number): Promise<Pro
     .webp({ quality: 80 })
     .toBuffer({ resolveWithObject: true });
   return { buffer: data, width: info.width, height: info.height };
+}
+
+/** An animated GIF the cover pipeline refuses (too many frames or pixels); the asset is rejected. */
+export class AnimationRejected extends Error {}
+
+/**
+ * Animated plan covers (D-203): every frame is resized like a still and written as an animated webp, keeping
+ * the GIF's frame delays and loop count. Metadata goes as for stills. Refuses more than `maxGifFrames` frames,
+ * frames over the still-image pixel limit, and more than `MAX_ANIMATED_PIXELS` in all.
+ */
+export async function renderAnimatedVariant(
+  input: Buffer,
+  maxEdge: number,
+): Promise<ProcessedImage> {
+  const { data, info } = await sharp(input, {
+    animated: true,
+    limitInputPixels: MAX_ANIMATED_PIXELS,
+    failOn: 'error',
+  })
+    .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 75, effort: 4 })
+    .toBuffer({ resolveWithObject: true });
+  // An animated result is one tall strip of frames: the picture is one page high.
+  return { buffer: data, width: info.width, height: info.pageHeight ?? info.height };
+}
+
+/** Checks an animated upload's frames before any frame is decoded (limits are overridable for tests). */
+export async function assertAnimationWithinLimits(
+  input: Buffer,
+  limits: { frames: number; framePixels: number; totalPixels: number } = {
+    frames: LIMITS.upload.maxGifFrames,
+    framePixels: MAX_INPUT_PIXELS,
+    totalPixels: MAX_ANIMATED_PIXELS,
+  },
+): Promise<void> {
+  const meta = await sharp(input, { animated: true, limitInputPixels: false }).metadata();
+  const pages = meta.pages ?? 1;
+  const framePixels = meta.width * (meta.pageHeight ?? meta.height);
+  if (pages > limits.frames) throw new AnimationRejected(`Too many frames (${String(pages)})`);
+  if (framePixels > limits.framePixels) throw new AnimationRejected('Frames too large');
+  if (framePixels * pages > limits.totalPixels) throw new AnimationRejected('Animation too large');
+}
+
+/** JPEG frames to moderate: the image itself, or an animation's first, middle and last frames. */
+export async function moderationFrames(rendered: Buffer): Promise<Buffer[]> {
+  const pages = (await sharp(rendered, { animated: true }).metadata()).pages ?? 1;
+  const picks = [...new Set([0, Math.floor(pages / 2), pages - 1])];
+  return Promise.all(
+    picks.map((page) => sharp(rendered, { page }).jpeg({ quality: 85 }).toBuffer()),
+  );
 }
 
 @Injectable()
@@ -95,10 +150,13 @@ export class MediaProcessor {
     if (!asset || asset.status !== 'processing') return 'skipped';
     if (isVideoContentType(asset.contentType)) return this.processVideo(asset);
 
+    // GIFs are plan covers only (the upload schema enforces it) and keep their animation (D-203).
+    const animated = isGifContentType(asset.contentType);
     let original: Buffer;
     try {
       original = await this.storage.get(asset.originalKey);
-      await sharp(original, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+      if (animated) await assertAnimationWithinLimits(original);
+      else await sharp(original, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
     } catch (err) {
       this.logger.warn(
         `Rejecting unreadable upload ${assetId}: ${err instanceof Error ? err.message : String(err)}`,
@@ -111,9 +169,8 @@ export class MediaProcessor {
       return 'rejected';
     }
 
-    const [sm, md, lg] = await Promise.all(
-      [SM, MD, LG].map((size) => renderVariant(original, size)),
-    );
+    const render = animated ? renderAnimatedVariant : renderVariant;
+    const [sm, md, lg] = await Promise.all([SM, MD, LG].map((size) => render(original, size)));
     if (!sm || !md || !lg) throw new Error('Variant rendering failed');
     const keys: VariantKeys = {
       sm: `media/${assetId}/sm.webp`,
@@ -126,9 +183,17 @@ export class MediaProcessor {
       this.storage.put(keys.lg, lg.buffer, 'image/webp'),
     ]);
 
-    // Rekognition accepts JPEG/PNG only, so moderate a metadata-free JPEG rendition.
-    const forModeration = await sharp(md.buffer).jpeg({ quality: 85 }).toBuffer();
-    const verdict = await this.moderationProvider.moderateImage(forModeration);
+    // Rekognition accepts JPEG/PNG only, so moderate metadata-free JPEG renditions: the picture, or for an
+    // animation its first, middle and last frames (any flagged frame holds the cover).
+    const verdicts = await Promise.all(
+      (await moderationFrames(md.buffer)).map((frame) =>
+        this.moderationProvider.moderateImage(frame),
+      ),
+    );
+    const verdict = {
+      verdict: verdicts.some((v) => v.verdict === 'flagged') ? 'flagged' : 'clean',
+      labels: verdicts.flatMap((v) => v.labels),
+    };
     const status = verdict.verdict === 'flagged' ? 'flagged' : 'ready';
 
     await this.db.transaction(async (tx) => {

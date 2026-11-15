@@ -2,17 +2,17 @@ import { media } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import {
-  compressImage,
-  pickImage,
+  GifTooLargeError,
+  pickCover,
   uploadImage,
   waitUntilReady,
 } from '../src/features/media/upload';
 import { useApi } from '../src/providers/api-context';
 import { useTheme } from '../src/theme/theme';
 import { Photo, X } from './icons';
-import { Icon, Text } from './ui';
+import { Icon, Pressable, Text } from './ui';
 
 export interface CoverValue {
   /** Uploaded, ready cover to send as `coverMediaId`; null when there is none. */
@@ -27,9 +27,9 @@ const ON_SCRIM = media.text;
 
 /**
  * The plan's cover photo (D-196), shown large at the top of Plot (D-199). Empty, it is one big "Add a cover
- * photo" target; set, the photo fills the frame with small Change and Remove buttons over it. The picked image
- * is cropped 16:9, compressed, uploaded as an `event_cover` and awaited until the server has scanned and
- * resized it (the plan can only use a ready cover).
+ * photo" target; set, the photo fills the frame with small Change and Remove buttons over it. A picked photo
+ * is cropped 16:9 and compressed; a GIF goes as it is and stays animated (D-203). Either is uploaded as an
+ * `event_cover` and awaited until the server has scanned and resized it (the plan can only use a ready cover).
  */
 export function CoverPicker({
   value,
@@ -42,20 +42,28 @@ export function CoverPicker({
   const theme = useTheme();
   const { client } = useApi();
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
 
   const choose = async (): Promise<void> => {
-    setFailed(false);
+    setFailed(null);
     try {
-      const uri = await pickImage([16, 9]);
-      if (!uri) return;
+      const picked = await pickCover();
+      if (!picked) return;
       setBusy(true);
-      const image = await compressImage(uri);
-      const asset = await uploadImage(client, 'event_cover', image);
-      if (!(await waitUntilReady(client, asset, 40))) throw new Error('not ready');
-      onChange({ id: asset.id, uri: image.uri });
-    } catch {
-      setFailed(true);
+      const asset = await uploadImage(
+        client,
+        'event_cover',
+        picked.image,
+        picked.kind === 'gif' ? 'image/gif' : 'image/jpeg',
+      );
+      // Animated covers take longer to resize: allow them more checks.
+      if (!(await waitUntilReady(client, asset, picked.kind === 'gif' ? 75 : 40)))
+        throw new Error('not ready');
+      onChange({ id: asset.id, uri: picked.image.uri });
+    } catch (err) {
+      setFailed(
+        err instanceof GifTooLargeError ? t('events.coverGifTooLarge') : t('events.coverFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -171,8 +179,8 @@ export function CoverPicker({
         </Pressable>
       )}
       {failed ? (
-        <Text tone="danger" variant="caption" accessibilityRole="alert">
-          {t('events.coverFailed')}
+        <Text tone="danger" variant="caption" accessibilityRole="alert" testID="plot-cover-error">
+          {failed}
         </Text>
       ) : null}
     </View>

@@ -1,8 +1,9 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { EventDetail } from '@touchgrass/shared';
+import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { Share } from 'react-native';
+import { Platform, Share } from 'react-native';
 import PlansScreen from '../app/(app)/(tabs)/plans';
 import AttendeesScreen from '../app/(app)/events/[id]/attendees';
 import CancelEventScreen from '../app/(app)/events/[id]/cancel';
@@ -154,6 +155,44 @@ async function pickCategory(n: number): Promise<void> {
   await fireEvent.press(
     await screen.findByTestId(`plot-category-${interestsFixture[n]?.id ?? ''}`),
   );
+}
+
+/** Name, category and a place: what a new plan needs before it can be published. */
+async function fillPlot(): Promise<void> {
+  await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
+  await pickCategory(0);
+  await fireEvent.press(screen.getByTestId('plot-where'));
+  await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
+  await fireEvent.press(await screen.findByTestId('place-fx_lake'));
+  await screen.findByTestId('plot-picked');
+}
+
+/** The presigned upload, storage POST and completion of a ready cover. */
+function routeCoverUpload(): void {
+  api
+    .on('POST', '/v1/media/uploads', {
+      status: 201,
+      body: {
+        assetId: ids.asset,
+        upload: {
+          url: 'https://s3.test/bucket',
+          fields: { key: 'uploads/k' },
+          expiresAt: '2026-11-01T01:00:00.000Z',
+        },
+      },
+    })
+    .on('POST', '/bucket', { status: 204 })
+    .on('POST', `/v1/media/${ids.asset}/complete`, {
+      status: 200,
+      body: {
+        id: ids.asset,
+        purpose: 'event_cover',
+        status: 'ready',
+        width: 1600,
+        height: 900,
+        urls: null,
+      },
+    });
 }
 
 /** Picks Tuesday 3 Nov 2026, 6:00 pm from the calendar and time sheets. */
@@ -538,12 +577,21 @@ describe('Plot flow (F-EVT-01/02)', () => {
       .on('POST', '/v1/events', { status: 201, body: eventFixture() });
   });
 
-  it('suggests at most five places while typing, then shows only the pick (D-157)', async () => {
+  it('lists up to 4 known venues and 8 map places under labels, then shows only the pick (D-203)', async () => {
     api.on('GET', '/v1/venues/search', {
       status: 200,
       body: {
-        venues: [],
-        places: Array.from({ length: 8 }, (_, i) => ({
+        venues: Array.from({ length: 5 }, (_, i) => ({
+          id: `0192f3a4-5b6c-7d8e-9f01-0000000aa00${String(i)}`,
+          name: `Lake cafe ${String(i)}`,
+          address: 'Gachibowli',
+          location: { lat: 17.44, lng: 78.35 },
+          neighbourhoodName: 'Gachibowli',
+          indoor: false,
+          accessibility: { stepFree: false, accessibleRestroom: false, quietSpace: false },
+          isPartner: false,
+        })),
+        places: Array.from({ length: 10 }, (_, i) => ({
           placeId: `fx_${String(i)}`,
           primaryText: `Lake ${String(i)}`,
           secondaryText: 'Gachibowli',
@@ -554,14 +602,32 @@ describe('Plot flow (F-EVT-01/02)', () => {
     // Where is a setting row that opens the place search in a sheet (D-199).
     await fireEvent.press(screen.getByTestId('plot-where'));
     await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
-    expect(await screen.findByTestId('place-fx_4')).toBeOnTheScreen();
-    expect(screen.queryByTestId('place-fx_5')).toBeNull();
+    expect(await screen.findByTestId('place-fx_7')).toBeOnTheScreen();
+    expect(screen.queryByTestId('place-fx_8')).toBeNull();
+    expect(screen.getByTestId('venue-0192f3a4-5b6c-7d8e-9f01-0000000aa003')).toBeOnTheScreen();
+    expect(screen.queryByTestId('venue-0192f3a4-5b6c-7d8e-9f01-0000000aa004')).toBeNull();
+    // Each source sits under its own label.
+    expect(screen.getByRole('header', { name: 'On TouchGrass' })).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'From the map' })).toBeOnTheScreen();
+    // Drop a pin stays right under the search box, in reach above the keyboard.
+    expect(screen.getByTestId('plot-drop-pin')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('place-fx_0'));
     expect(await screen.findByTestId('plot-picked')).toBeOnTheScreen();
     expect(screen.queryByTestId('plot-suggestions')).toBeNull();
     expect(screen.queryByTestId('plot-place-search')).toBeNull();
     await fireEvent.press(screen.getByTestId('plot-where'));
     expect(screen.getByTestId('plot-place-search')).toBeOnTheScreen();
+  });
+
+  it('waits for typing to settle before searching', async () => {
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByTestId('plot-where'));
+    for (const q of ['la', 'lak', 'lake'])
+      await fireEvent.changeText(screen.getByTestId('plot-place-search'), q);
+    expect(await screen.findByTestId('place-fx_lake')).toBeOnTheScreen();
+    const searches = api.calls.filter((c) => c.path === '/v1/venues/search');
+    expect(searches).toHaveLength(1);
+    expect(searches[0]?.url).toContain('q=lake');
   });
 
   it('place search says when nothing matches and when search fails', async () => {
@@ -735,6 +801,201 @@ describe('Plot flow (F-EVT-01/02)', () => {
     }
   });
 
+  it('adds squad members as co-hosts after the plan is created (D-203)', async () => {
+    const asha = person('0192f3a4-5b6c-7d8e-9f01-0000000bb001', 'Asha M.');
+    const vikram = person('0192f3a4-5b6c-7d8e-9f01-0000000bb002', 'Vikram S.');
+    const neha = person('0192f3a4-5b6c-7d8e-9f01-0000000bb003', 'Neha P.');
+    const zoya = person('0192f3a4-5b6c-7d8e-9f01-0000000bb004', 'Zoya K.');
+    api
+      .on('GET', '/v1/social/squad', {
+        status: 200,
+        body: { items: [asha, vikram, neha, zoya], nextCursor: null },
+      })
+      .on('POST', `/v1/events/${EVENT_ID}/hosts`, { status: 200, body: eventFixture() });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fillPlot();
+    expect(screen.getByTestId('plot-cohosts')).toHaveAccessibleName('Co-hosts, None');
+    await fireEvent.press(screen.getByTestId('plot-cohosts'));
+    expect(
+      await screen.findByText(
+        'Pick up to 3 people from your squad to help run the plan. Each gets a seat.',
+      ),
+    ).toBeOnTheScreen();
+    for (const p of [asha, vikram, neha])
+      await fireEvent.press(await screen.findByTestId(`plot-cohost-${p.id}`));
+    // Three is the most: the fourth cannot be picked.
+    expect(screen.getByTestId(`plot-cohost-${zoya.id}`)).toBeDisabled();
+    await fireEvent.press(screen.getByTestId(`plot-cohost-${neha.id}`));
+    await fireEvent.press(screen.getByTestId('plot-cohosts-done'));
+    expect(screen.getByTestId('plot-cohosts')).toHaveAccessibleName('Co-hosts, Asha M., Vikram S.');
+    await fireEvent.press(screen.getByTestId('plot-submit'));
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith({
+        pathname: '/events/[id]',
+        params: { id: EVENT_ID },
+      }),
+    );
+    expect(api.callsTo('POST', `/v1/events/${EVENT_ID}/hosts`).map((c) => c.body)).toEqual([
+      { userId: asha.id, role: 'co_host' },
+      { userId: vikram.id, role: 'co_host' },
+    ]);
+  });
+
+  it('keeps the new plan and says which co-hosts could not be added, and why (D-203)', async () => {
+    const asha = person('0192f3a4-5b6c-7d8e-9f01-0000000bb001', 'Asha M.');
+    const vikram = person('0192f3a4-5b6c-7d8e-9f01-0000000bb002', 'Vikram S.');
+    api
+      .on('GET', '/v1/social/squad', {
+        status: 200,
+        body: { items: [asha, vikram], nextCursor: null },
+      })
+      .on('POST', `/v1/events/${EVENT_ID}/hosts`, (call) =>
+        (call.body as { userId: string }).userId === vikram.id
+          ? { status: 409, body: { error: { code: 'EVENT_FULL', message: 'x' } } }
+          : { status: 200, body: eventFixture() },
+      );
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fillPlot();
+    await fireEvent.press(screen.getByTestId('plot-cohosts'));
+    await fireEvent.press(await screen.findByTestId(`plot-cohost-${asha.id}`));
+    await fireEvent.press(screen.getByTestId(`plot-cohost-${vikram.id}`));
+    await fireEvent.press(screen.getByTestId('plot-cohosts-done'));
+    await fireEvent.press(screen.getByTestId('plot-submit'));
+    const failures = await screen.findByTestId('plot-host-failures');
+    expect(failures).toHaveTextContent(/Your plan is up, but these co-hosts couldn't be added:/);
+    expect(failures).toHaveTextContent(/Vikram S\.: No seat left for them\./);
+    expect(failures).not.toHaveTextContent(/Asha/);
+    // The plan exists: publishing again is not offered, opening it is.
+    expect(screen.queryByTestId('plot-submit')).toBeNull();
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('plot-open-plan'));
+    expect(mockRouter.replace).toHaveBeenCalledWith({
+      pathname: '/events/[id]',
+      params: { id: EVENT_ID },
+    });
+    expect(api.callsTo('POST', '/v1/events')).toHaveLength(1);
+  });
+
+  it('says when the squad is empty in the co-host sheet', async () => {
+    api.on('GET', '/v1/social/squad', { status: 200, body: { items: [], nextCursor: null } });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByTestId('plot-cohosts'));
+    expect(await screen.findByTestId('plot-cohosts-empty')).toBeOnTheScreen();
+  });
+
+  it('keeps an animated GIF cover whole and uploads it as a GIF (D-203)', async () => {
+    const realFetch = global.fetch;
+    global.fetch = (input: string | URL | Request, init?: RequestInit) =>
+      (typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url
+      ).startsWith('file:')
+        ? Promise.resolve(new Response('x'.repeat(4096)))
+        : api.fetch(input, init);
+    try {
+      routeCoverUpload();
+      jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({
+        canceled: false,
+        assets: [
+          {
+            uri: 'file:///party.gif',
+            mimeType: 'image/gif',
+            fileSize: 3_000_000,
+            width: 480,
+            height: 480,
+          },
+        ],
+      });
+      const manipulate = jest.mocked(ImageManipulator.manipulate);
+      manipulate.mockClear();
+      await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+      await fireEvent.press(screen.getByRole('button', { name: 'Add a cover photo' }));
+      expect(await screen.findByTestId('plot-cover-preview')).toBeOnTheScreen();
+      // Never re-encoded on the phone: that would keep only the first frame.
+      expect(manipulate).not.toHaveBeenCalled();
+      expect(api.callsTo('POST', '/v1/media/uploads')[0]?.body).toEqual({
+        purpose: 'event_cover',
+        contentType: 'image/gif',
+        sizeBytes: 3_000_000,
+      });
+      expect(screen.getByTestId('plot-cover-preview').props.source).toEqual([
+        { uri: 'file:///party.gif' },
+      ]);
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('refuses a GIF cover over 8 MB before uploading it (D-203)', async () => {
+    jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///huge.gif',
+          mimeType: 'image/gif',
+          fileSize: 8 * 1024 * 1024 + 1,
+          width: 480,
+          height: 480,
+        },
+      ],
+    });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a cover photo' }));
+    expect(await screen.findByTestId('plot-cover-error')).toHaveTextContent(
+      'That GIF is over 8 MB. Pick a smaller one.',
+    );
+    expect(api.callsTo('POST', '/v1/media/uploads')).toHaveLength(0);
+  });
+
+  it('on Android skips the editor (it flattens GIFs) and centre-crops photos to 16:9 (D-203)', async () => {
+    const os = Platform.OS;
+    Platform.OS = 'android';
+    const realFetch = global.fetch;
+    global.fetch = (input: string | URL | Request, init?: RequestInit) =>
+      (typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url
+      ).startsWith('file:')
+        ? Promise.resolve(new Response('x'.repeat(4096)))
+        : api.fetch(input, init);
+    try {
+      routeCoverUpload();
+      jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({
+        canceled: false,
+        assets: [{ uri: 'file:///tall.jpg', mimeType: 'image/jpeg', width: 3000, height: 4000 }],
+      });
+      const crop = jest.fn().mockReturnThis();
+      jest.mocked(ImageManipulator.manipulate).mockImplementationOnce(
+        () =>
+          ({
+            crop,
+            resize: jest.fn().mockReturnThis(),
+            renderAsync: jest.fn(() =>
+              Promise.resolve({
+                saveAsync: jest.fn(() =>
+                  Promise.resolve({ uri: 'file:///cropped.jpg', width: 2048, height: 1152 }),
+                ),
+              }),
+            ),
+          }) as never,
+      );
+      await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+      await fireEvent.press(screen.getByRole('button', { name: 'Add a cover photo' }));
+      expect(await screen.findByTestId('plot-cover-preview')).toBeOnTheScreen();
+      expect(jest.mocked(ImagePicker.launchImageLibraryAsync)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ allowsEditing: false }),
+      );
+      expect(crop).toHaveBeenCalledWith({ originX: 0, originY: 1156, width: 3000, height: 1688 });
+    } finally {
+      Platform.OS = os;
+      global.fetch = realFetch;
+    }
+  });
+
   it('shows server errors in plain words', async () => {
     api.on('POST', '/v1/events', {
       status: 403,
@@ -771,7 +1032,7 @@ describe('Plot flow: pin, advanced options and edits', () => {
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Mystery chai');
     await pickCategory(1);
     await fireEvent.press(screen.getByTestId('plot-where'));
-    await fireEvent.press(screen.getByRole('button', { name: 'Pick on map' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Drop a pin' }));
     await fireEvent(screen.getByTestId('plot-map'), 'press', {
       nativeEvent: { coordinate: { latitude: 17.44, longitude: 78.35 } },
     });
@@ -817,7 +1078,7 @@ describe('Plot flow: pin, advanced options and edits', () => {
     await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
     await pickCategory(0);
     await fireEvent.press(screen.getByTestId('plot-where'));
-    await fireEvent.press(await screen.findByRole('button', { name: 'Pick on map' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Drop a pin' }));
     await fireEvent(screen.getByTestId('plot-map'), 'press', {
       nativeEvent: { coordinate: { latitude: 17.44, longitude: 78.35 } },
     });
@@ -830,6 +1091,122 @@ describe('Plot flow: pin, advanced options and edits', () => {
     // The capacity problem shows on its own row.
     expect(await screen.findByTestId('plot-how-many-error')).toBeOnTheScreen();
     expect(api.callsTo('POST', '/v1/events')).toHaveLength(0);
+  });
+
+  it('shows current co-hosts when editing and adds or removes them on save (D-203)', async () => {
+    const asha = person('0192f3a4-5b6c-7d8e-9f01-0000000bb001', 'Asha M.');
+    const vikram = person('0192f3a4-5b6c-7d8e-9f01-0000000bb002', 'Vikram S.');
+    const hosted = eventFixture(
+      {
+        hosts: [
+          { person: me, role: 'host' },
+          { person: asha, role: 'co_host' },
+        ],
+      },
+      { isHost: true, hostRole: 'host' },
+    );
+    mockRouteParams.current = { id: EVENT_ID };
+    api
+      .on('GET', `/v1/events/${EVENT_ID}`, { status: 200, body: hosted })
+      .on('PATCH', `/v1/events/${EVENT_ID}`, { status: 200, body: hosted })
+      .on('GET', '/v1/social/squad', {
+        status: 200,
+        body: { items: [vikram], nextCursor: null },
+      })
+      .on('POST', `/v1/events/${EVENT_ID}/hosts`, { status: 200, body: hosted })
+      .on('DELETE', `/v1/events/${EVENT_ID}/hosts/${asha.id}`, { status: 204 });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('plot-cohosts')).toHaveAccessibleName('Co-hosts, Asha M.');
+    await fireEvent.press(screen.getByTestId('plot-cohosts'));
+    // Asha was promoted from the guest list (not in the squad) and still shows, so she can be removed.
+    await fireEvent.press(await screen.findByTestId(`plot-cohost-${asha.id}`));
+    await fireEvent.press(screen.getByTestId(`plot-cohost-${vikram.id}`));
+    await fireEvent.press(screen.getByTestId('plot-cohosts-done'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(api.callsTo('POST', `/v1/events/${EVENT_ID}/hosts`).map((c) => c.body)).toEqual([
+      { userId: vikram.id, role: 'co_host' },
+    ]);
+    expect(api.callsTo('DELETE', `/v1/events/${EVENT_ID}/hosts/${asha.id}`)).toHaveLength(1);
+  });
+
+  it('stays on the edit page and says which co-host change failed (D-203)', async () => {
+    const vikram = person('0192f3a4-5b6c-7d8e-9f01-0000000bb002', 'Vikram S.');
+    const hosted = eventFixture(
+      { hosts: [{ person: me, role: 'host' }], visibility: 'women_only' },
+      { isHost: true, hostRole: 'host' },
+    );
+    mockRouteParams.current = { id: EVENT_ID };
+    api
+      .on('GET', `/v1/events/${EVENT_ID}`, { status: 200, body: hosted })
+      .on('PATCH', `/v1/events/${EVENT_ID}`, { status: 200, body: hosted })
+      .on('GET', '/v1/social/squad', { status: 200, body: { items: [vikram], nextCursor: null } })
+      .on('POST', `/v1/events/${EVENT_ID}/hosts`, {
+        status: 403,
+        body: { error: { code: 'NOT_ELIGIBLE', message: 'x', details: { reason: 'WOMEN_ONLY' } } },
+      });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByTestId('plot-cohosts'));
+    await fireEvent.press(await screen.findByTestId(`plot-cohost-${vikram.id}`));
+    await fireEvent.press(screen.getByTestId('plot-cohosts-done'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+    const failures = await screen.findByTestId('plot-host-failures');
+    expect(failures).toHaveTextContent(/Your changes are saved, but these co-host changes/);
+    expect(failures).toHaveTextContent(/Vikram S\.: This plan is for verified women\./);
+    expect(mockRouter.back).not.toHaveBeenCalled();
+  });
+
+  it('co-hosts editing a plan do not get the co-host row', async () => {
+    const hosted = eventFixture(
+      {
+        hosts: [
+          { person: host, role: 'host' },
+          { person: me, role: 'co_host' },
+        ],
+      },
+      { isHost: true, hostRole: 'co_host' },
+    );
+    mockRouteParams.current = { id: EVENT_ID };
+    api.on('GET', `/v1/events/${EVENT_ID}`, { status: 200, body: hosted });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByDisplayValue('Sunset frisbee')).toBeOnTheScreen();
+    expect(screen.queryByTestId('plot-cohosts')).toBeNull();
+  });
+
+  it('drops a pin: the map suggests the address and says when the spot is not served (D-203)', async () => {
+    mockRouteParams.current = {};
+    api.on('GET', '/v1/venues/reverse-geocode', (call) =>
+      call.url.includes('lat=19.07')
+        ? { status: 200, body: { address: null, served: false } }
+        : { status: 200, body: { address: 'Near KBR Park, Banjara Hills', served: true } },
+    );
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByTestId('plot-where'));
+    await fireEvent.press(screen.getByTestId('plot-drop-pin'));
+    expect(screen.queryByTestId('plot-place-search')).toBeNull();
+    await fireEvent(screen.getByTestId('plot-map'), 'press', {
+      nativeEvent: { coordinate: { latitude: 19.07, longitude: 72.87 } },
+    });
+    expect(await screen.findByTestId('plot-pin-outside')).toHaveTextContent(
+      'That spot is outside the cities TouchGrass serves. Pick a spot in your city.',
+    );
+    expect(screen.getByTestId('plot-use-pin')).toBeDisabled();
+    await fireEvent(screen.getByTestId('plot-map'), 'press', {
+      nativeEvent: { coordinate: { latitude: 17.42, longitude: 78.42 } },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('plot-pin-address')).toHaveDisplayValue(
+        'Near KBR Park, Banjara Hills',
+      ),
+    );
+    expect(screen.queryByTestId('plot-pin-outside')).toBeNull();
+    await fireEvent.press(screen.getByTestId('plot-use-pin'));
+    expect(screen.getByTestId('plot-picked')).toHaveTextContent('Near KBR Park, Banjara Hills');
+    // Back to search from the map.
+    await fireEvent.press(screen.getByTestId('plot-where'));
+    await fireEvent.press(screen.getByTestId('plot-drop-pin'));
+    await fireEvent.press(screen.getByTestId('plot-back-to-search'));
+    expect(screen.getByTestId('plot-place-search')).toBeOnTheScreen();
   });
 
   it('edits an existing plan and only sends the place when it changed', async () => {

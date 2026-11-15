@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  isGifContentType,
   isVideoContentType,
   type CreateUploadBody,
   type CreateUploadResponse,
@@ -29,11 +30,14 @@ export const MEDIA_UPLOADED_EVENT = 'media.uploaded';
  * Direct-to-S3 uploads (F-ACC-06): presigned POST → client upload → `complete` → worker resizes to webp,
  * strips EXIF and moderates. Only the owner can see an asset before it is `ready`.
  */
-/** Videos (stories only) may be larger than images; the schema already tied each type to its purpose. */
+/**
+ * Videos (stories only) may be larger than images, and GIFs (plan covers only, D-203) have a smaller cap; the
+ * schema already tied each type to its purpose.
+ */
 export function maxBytesFor(contentType: string): number {
-  return isVideoContentType(contentType)
-    ? LIMITS.upload.maxVideoBytes
-    : LIMITS.upload.maxImageBytes;
+  if (isVideoContentType(contentType)) return LIMITS.upload.maxVideoBytes;
+  if (isGifContentType(contentType)) return LIMITS.upload.maxGifBytes;
+  return LIMITS.upload.maxImageBytes;
 }
 
 @Injectable()

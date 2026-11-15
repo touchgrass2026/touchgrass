@@ -11,6 +11,7 @@ import {
   InviteUsersResult,
   JoinRequestList,
   MyJoinRequest,
+  ReverseGeocodeResponse,
   RsvpResult,
   Ticket,
   type UpdateEventBody,
@@ -22,6 +23,7 @@ import {
 } from '@touchgrass/shared';
 import * as Crypto from 'expo-crypto';
 import { z } from 'zod';
+import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { useApi } from '../../providers/api-context';
 
 const Empty = z.undefined();
@@ -273,9 +275,13 @@ export function useClaimPlusOne() {
 
 // ---------- venues (F-EVT-02) ----------
 
+/** Typing pauses this long before a search goes out (D-203). */
+export const PLACE_SEARCH_DEBOUNCE_MS = 250;
+
+/** Searches once typing settles; the last results stay up while the next search runs (no flicker). */
 export function useVenueSearch(query: string, near: GeoPoint, sessionToken: string) {
   const { client } = useApi();
-  const q = query.trim();
+  const q = useDebouncedValue(query.trim(), PLACE_SEARCH_DEBOUNCE_MS);
   return useQuery({
     queryKey: ['venues', 'search', q, near.lat, near.lng],
     enabled: q.length >= 2,
@@ -285,7 +291,24 @@ export function useVenueSearch(query: string, near: GeoPoint, sessionToken: stri
         VenueSearchResponse,
         { signal },
       ),
+    placeholderData: (previous) => previous,
     staleTime: 60_000,
+  });
+}
+
+/** "Drop a pin" (D-203): a suggested address for the spot and whether TouchGrass serves it. */
+export function useReverseGeocode(point: GeoPoint | null) {
+  const { client } = useApi();
+  return useQuery({
+    queryKey: ['venues', 'reverse-geocode', point?.lat, point?.lng],
+    enabled: point !== null,
+    queryFn: ({ signal }) =>
+      client.request(
+        `/v1/venues/reverse-geocode?lat=${String(point?.lat)}&lng=${String(point?.lng)}`,
+        ReverseGeocodeResponse,
+        { signal },
+      ),
+    staleTime: 10 * 60_000,
   });
 }
 

@@ -13,6 +13,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type * as Dto from '@touchgrass/shared';
 import {
+  LIMITS,
+  ReverseGeocodeQuery,
+  ReverseGeocodeResponse,
   Venue,
   VenueFromPlaceBody,
   VenueList,
@@ -33,7 +36,10 @@ import { VenuesService } from './venues.service.js';
 export class VenuesController {
   constructor(private readonly venues: VenuesService) {}
 
-  /** Known venues plus Google Places suggestions for the "where" step of plotting. */
+  /**
+   * Known venues plus Google Places suggestions for the "where" step of plotting: up to 4 known venues and up to
+   * 8 map places (D-203; Google itself returns at most 5 per request).
+   */
   @Get('search')
   @RateLimit({ name: 'venue-search', limit: 120, windowSeconds: 60, by: 'user' })
   @ApiZodQuery(VenueSearchQuery)
@@ -43,10 +49,24 @@ export class VenuesController {
   ): Promise<Dto.VenueSearchResponse> {
     const near = { lat: q.lat, lng: q.lng };
     const [known, places] = await Promise.all([
-      this.venues.search(q.q, near),
+      this.venues.search(q.q, near, LIMITS.placeSearch.knownVenues),
       this.venues.autocomplete(q.q, near, q.session),
     ]);
-    return { venues: await this.venues.toDto(known), places };
+    return {
+      venues: await this.venues.toDto(known),
+      places: places.slice(0, LIMITS.placeSearch.mapPlaces),
+    };
+  }
+
+  /** "Drop a pin" (D-203): a suggested address for the spot, and whether it is inside a city we serve. */
+  @Get('reverse-geocode')
+  @RateLimit({ name: 'venue-reverse-geocode', limit: 30, windowSeconds: 60, by: 'user' })
+  @ApiZodQuery(ReverseGeocodeQuery)
+  @ApiZodResponse(200, ReverseGeocodeResponse)
+  reverseGeocode(
+    @Query(new ZodPipe(ReverseGeocodeQuery)) q: Dto.ReverseGeocodeQuery,
+  ): Promise<Dto.ReverseGeocodeResponse> {
+    return this.venues.reverseGeocode({ lat: q.lat, lng: q.lng });
   }
 
   @Post('from-place')

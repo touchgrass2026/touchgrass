@@ -102,6 +102,18 @@ export class VenuesService {
     return this.maps.autocomplete(query, near, sessionToken);
   }
 
+  /**
+   * A dropped pin (D-203): the map's address for it (null when the maps service has none) and whether it falls
+   * in a city we serve. Plans accept any point inside an open city, with or without a neighbourhood.
+   */
+  async reverseGeocode(point: GeoPoint): Promise<{ address: string | null; served: boolean }> {
+    const [place, located] = await Promise.all([
+      this.maps.reverseGeocode(point),
+      this.cities.locate(point),
+    ]);
+    return { address: place?.address ?? null, served: located !== null };
+  }
+
   /** Resolves a Places result into a venue (reused if we already know that place). Only launched-city places. */
   async fromPlace(placeId: string, sessionToken: string, userId: string): Promise<VenueRow> {
     const [existing] = await this.db

@@ -1,19 +1,22 @@
 import {
   CreateEventBody,
-  type EventDetail,
+  EventDetail,
   type EventVisibility,
   type EventWhere,
   feeBreakdown,
   InviteUsersResult,
   type GeoPoint,
   LIMITS,
+  type PersonCard,
   UpdateEventBody,
 } from '@touchgrass/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 import {
   Keyboard,
   ScrollView,
@@ -37,10 +40,12 @@ import {
   MapPin,
   People,
   Ticket,
+  Users,
   Zap,
 } from '../../components/icons';
 import { interestOptions } from '../../components/interest-options';
 import { PickList } from '../../components/PickList';
+import { CoHostsSheet } from '../../components/plot/CoHostsSheet';
 import {
   GroupNote,
   RowError,
@@ -67,8 +72,10 @@ import {
 } from '../../components/ui';
 import { localized, useInterests, useVibeTags } from '../../src/features/catalog/api';
 import {
+  EVENT_KEYS,
   useCreateEvent,
   useEvent,
+  useReverseGeocode,
   useSavedVenues,
   useUpdateEvent,
   useVenueFromPlace,
@@ -77,14 +84,14 @@ import {
 import { isoToIst, istToIso, quickPick } from '../../src/features/events/format';
 import { useHostStatus } from '../../src/features/payments/api';
 import { money } from '../../src/features/payments/format';
+import { ApiError } from '../../src/lib/api-client';
 import { errorMessage } from '../../src/lib/errors';
 import { useApi } from '../../src/providers/api-context';
 import { fontFamilyFor } from '../../src/theme/fonts';
 import { useTheme } from '../../src/theme/theme';
 
 const HYDERABAD: GeoPoint = { lat: 17.385, lng: 78.4867 };
-/** At most this many place suggestions show while typing. */
-const SUGGESTIONS_MAX = 5;
+const Empty = z.undefined();
 const VISIBILITIES: EventVisibility[] = [
   'public',
   'friends_of_friends',
@@ -136,7 +143,13 @@ interface FormState {
 
 /** The sheets the setting rows open. */
 type SheetName =
-  'category' | 'duration' | 'where' | 'who' | 'capacity' | 'price' | 'vibes' | 'reveal';
+  'category' | 'duration' | 'where' | 'who' | 'capacity' | 'coHosts' | 'price' | 'vibes' | 'reveal';
+
+/** A co-host who could not be added (or removed), with the reason in plain words. */
+interface HostFailure {
+  name: string;
+  reason: string;
+}
 
 /** Validation keys each row shows (anything else is shown above the main button). */
 const ROW_KEYS = new Set([
@@ -325,6 +338,19 @@ function PlotForm({
   const [mapOpen, setMapOpen] = useState(false);
   const [pin, setPin] = useState<GeoPoint | null>(null);
   const [pinAddress, setPinAddress] = useState('');
+  /** Whether the address box still holds what the map suggested (so a new suggestion may replace it). */
+  const [pinAddressSuggested, setPinAddressSuggested] = useState(true);
+  const reverse = useReverseGeocode(mapOpen ? pin : null);
+  const qc = useQueryClient();
+  // Co-hosts (D-203): only the primary host adds or removes them.
+  const canPickCoHosts = existing === null || existing.viewer.hostRole === 'host';
+  const [coHosts, setCoHosts] = useState<PersonCard[]>(
+    () => existing?.hosts.filter((h) => h.role === 'co_host').map((h) => h.person) ?? [],
+  );
+  /** Co-host changes that did not go through after the plan was saved. */
+  const [hostFailures, setHostFailures] = useState<HostFailure[]>([]);
+  /** Set once a new plan exists but some co-hosts could not be added: the page offers to open it. */
+  const [created, setCreated] = useState<{ id: string; inviteFailed: boolean } | null>(null);
   const [advanced, setAdvanced] = useState(false);
   // Edits only send the reveal time when the host changed it (the detail view does not expose it).
   const [revealTouched, setRevealTouched] = useState(false);
@@ -341,6 +367,13 @@ function PlotForm({
       if (pos) setNear({ lat: pos.coords.latitude, lng: pos.coords.longitude });
     })();
   }, []);
+
+  // The map's address for a dropped pin fills the box until the host types their own.
+  const suggestedAddress = reverse.data?.address ?? null;
+  useEffect(() => {
+    if (suggestedAddress && pinAddressSuggested) setPinAddress(suggestedAddress);
+  }, [suggestedAddress, pinAddressSuggested]);
+  const pinOutside = pin !== null && reverse.data?.served === false;
 
   const clearErrors = (keys: string[]): void => {
     setErrors((e) => {
@@ -370,6 +403,52 @@ function PlotForm({
     clearErrors(['where']);
   };
 
+  /** Why a co-host change failed, in words that fit a host adding someone (not someone joining). */
+  const hostError = (err: unknown): string =>
+    err instanceof ApiError && err.code === 'EVENT_FULL'
+      ? t('events.coHostNoSeat')
+      : err instanceof ApiError && err.code === 'NOT_FOUND'
+        ? t('events.coHostUnavailable')
+        : (errorMessage(t, err) ?? t('states.errorBody'));
+
+  /** Adds and removes co-hosts one person at a time; returns who could not be changed, and why. */
+  const applyCoHosts = async (
+    eventId: string,
+    add: PersonCard[],
+    remove: PersonCard[],
+  ): Promise<HostFailure[]> => {
+    const failures: HostFailure[] = [];
+    for (const person of add) {
+      try {
+        await client.request(`/v1/events/${eventId}/hosts`, EventDetail, {
+          method: 'POST',
+          body: { userId: person.id, role: 'co_host' },
+        });
+      } catch (err) {
+        failures.push({ name: person.displayName, reason: hostError(err) });
+      }
+    }
+    for (const person of remove) {
+      try {
+        await client.request(`/v1/events/${eventId}/hosts/${person.id}`, Empty, {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        failures.push({ name: person.displayName, reason: hostError(err) });
+      }
+    }
+    if (add.length + remove.length > 0)
+      await qc.invalidateQueries({ queryKey: EVENT_KEYS.detail(eventId) });
+    return failures;
+  };
+
+  const openCreated = (id: string, inviteFailed: boolean): void => {
+    router.replace({
+      pathname: '/events/[id]',
+      params: inviteFailed ? { id, notice: 'inviteFailed' } : { id },
+    });
+  };
+
   const startsAtIso = istToIso(form.date, form.time);
   // The button wakes up once the plan has what it cannot exist without; the rest is checked on submit.
   const ready =
@@ -380,6 +459,7 @@ function PlotForm({
 
   const submit = async (): Promise<void> => {
     setFormError(null);
+    setHostFailures([]);
     const startsAt = istToIso(form.date, form.time);
     const hours = Number(form.durationHours);
     if (!startsAt) {
@@ -446,6 +526,19 @@ function PlotForm({
           return;
         }
         await update.mutateAsync(parsed.data);
+        if (canPickCoHosts) {
+          const before = existing.hosts.filter((h) => h.role === 'co_host').map((h) => h.person);
+          const failures = await applyCoHosts(
+            existing.id,
+            coHosts.filter((p) => !before.some((b) => b.id === p.id)),
+            before.filter((b) => !coHosts.some((p) => p.id === b.id)),
+          );
+          // The plan is saved; the page stays so the host can see who did not change and try again.
+          if (failures.length > 0) {
+            setHostFailures(failures);
+            return;
+          }
+        }
         router.back();
       } else {
         const parsed = CreateEventBody.safeParse({ ...fields, where: picked.where });
@@ -454,12 +547,12 @@ function PlotForm({
           return;
         }
         setLeaving(true);
-        const created = await create.mutateAsync(parsed.data);
+        const plan = await create.mutateAsync(parsed.data);
         // The plan exists now; a failed squad invite must not keep the person on the form (a second tap
         // would look like it creates another plan), so it becomes a notice on the plan instead.
         const inviteFailed = inviteUserId
           ? await client
-              .request(`/v1/events/${created.id}/invites`, InviteUsersResult, {
+              .request(`/v1/events/${plan.id}/invites`, InviteUsersResult, {
                 method: 'POST',
                 body: { userIds: [inviteUserId] },
               })
@@ -468,10 +561,16 @@ function PlotForm({
                 () => true,
               )
           : false;
-        router.replace({
-          pathname: '/events/[id]',
-          params: inviteFailed ? { id: created.id, notice: 'inviteFailed' } : { id: created.id },
-        });
+        // Same for co-hosts: the plan exists, so a co-host who could not be added is listed here with the
+        // reason, and the page offers to open the plan instead of publishing again.
+        const failures = await applyCoHosts(plan.id, coHosts, []);
+        if (failures.length > 0) {
+          setHostFailures(failures);
+          setCreated({ id: plan.id, inviteFailed });
+          setLeaving(false);
+          return;
+        }
+        openCreated(plan.id, inviteFailed);
       }
     } catch (err) {
       setLeaving(false);
@@ -501,24 +600,30 @@ function PlotForm({
       ? feeBreakdown(pricePaise, host.data.platformFeeBps, host.data.gstBps).hostNetPaise
       : null;
 
-  // One short list of suggestions for what was typed (D-157): known venues first, then map places, at most 5.
+  // Suggestions for what was typed (D-203, was D-157): known venues, then map places, each under a label; the
+  // sheet scrolls, so nothing is cut off.
   const typing = query.trim().length >= 2;
-  const suggestions: {
+  interface Suggestion {
     key: string;
     label: string;
     detail: string;
     testID?: string;
     onPick: () => void;
-  }[] = [
-    ...(search.data?.venues ?? []).map((v) => ({
+  }
+  const knownSuggestions: Suggestion[] = (search.data?.venues ?? [])
+    .slice(0, LIMITS.placeSearch.knownVenues)
+    .map((v) => ({
       key: `v-${v.id}`,
       label: v.name,
       detail: v.address,
+      testID: `venue-${v.id}`,
       onPick: () => {
         choose({ where: { venueId: v.id }, label: v.name });
       },
-    })),
-    ...(search.data?.places ?? []).map((p) => ({
+    }));
+  const mapSuggestions: Suggestion[] = (search.data?.places ?? [])
+    .slice(0, LIMITS.placeSearch.mapPlaces)
+    .map((p) => ({
       key: `p-${p.placeId}`,
       label: p.primaryText,
       detail: p.secondaryText,
@@ -533,8 +638,8 @@ function PlotForm({
           },
         );
       },
-    })),
-  ].slice(0, SUGGESTIONS_MAX);
+    }));
+  const suggestionCount = knownSuggestions.length + mapSuggestions.length;
 
   const categoryOptions = interestOptions(interests.data?.items ?? [], t, i18n.language);
   const categoryName = categoryOptions.find((o) => o.id === form.categoryId)?.label ?? null;
@@ -564,8 +669,33 @@ function PlotForm({
   const whenError = errors.date || errors.startsAt || null;
 
   const titleError = errors.title || null;
-  const footer = (
+  const failureList =
+    hostFailures.length > 0 ? (
+      <View style={styles.failures} accessibilityLiveRegion="assertive" testID="plot-host-failures">
+        <Text tone="danger">
+          {created ? t('events.coHostsFailedCreate') : t('events.coHostsFailedEdit')}
+        </Text>
+        {hostFailures.map((f) => (
+          <Text key={f.name} tone="danger" variant="caption">
+            {t('events.coHostFailed', { name: f.name, reason: f.reason })}
+          </Text>
+        ))}
+      </View>
+    ) : null;
+  const footer = created ? (
     <>
+      {failureList}
+      <Button
+        label={t('events.openPlan')}
+        onPress={() => {
+          openCreated(created.id, created.inviteFailed);
+        }}
+        testID="plot-open-plan"
+      />
+    </>
+  ) : (
+    <>
+      {failureList}
       {formError ? (
         <Text tone="danger" accessibilityLiveRegion="assertive" testID="plot-error">
           {formError}
@@ -747,6 +877,22 @@ function PlotForm({
           error={errors.capacity || errors.minGroupSize || null}
           testID="plot-how-many"
         />
+        {canPickCoHosts ? (
+          <SettingRow
+            icon={Users}
+            label={t('events.coHosts')}
+            value={
+              coHosts.length > 0
+                ? coHosts.map((p) => p.displayName).join(', ')
+                : t('events.plotUiNone')
+            }
+            placeholder={coHosts.length === 0}
+            onPress={() => {
+              open('coHosts');
+            }}
+            testID="plot-cohosts"
+          />
+        ) : null}
         {canSell ? (
           <SettingRow
             icon={Ticket}
@@ -975,103 +1121,15 @@ function PlotForm({
 
       {sheet === 'where' ? (
         <Sheet title={t('events.plotUiWhereTitle')} onClose={close} testID="plot-where-sheet">
-          <TextField
-            label={t('events.searchPlace')}
-            placeholder={t('events.searchPlaceHint')}
-            value={query}
-            onChangeText={setQuery}
-            autoFocus
-            autoCorrect={false}
-            returnKeyType="search"
-            error={errors.where || null}
-            testID="plot-place-search"
-          />
-          {typing ? (
-            <Card style={styles.suggestions} testID="plot-suggestions">
-              {search.isFetching && suggestions.length === 0 ? (
-                <Text
-                  tone="muted"
-                  variant="caption"
-                  testID="plot-place-searching"
-                  accessibilityLiveRegion="polite"
-                >
-                  {t('events.searchingPlaces')}
-                </Text>
-              ) : search.isError ? (
-                <Text
-                  tone="danger"
-                  variant="caption"
-                  accessibilityRole="alert"
-                  testID="plot-place-error"
-                >
-                  {errorMessage(t, search.error) ?? t('events.searchFailed')}
-                </Text>
-              ) : search.data && suggestions.length === 0 ? (
-                <Text
-                  tone="muted"
-                  variant="caption"
-                  testID="plot-place-empty"
-                  accessibilityLiveRegion="polite"
-                >
-                  {t('events.noPlaces', { q: query.trim() })}
-                </Text>
-              ) : null}
-              {suggestions.map((sug, i) => (
-                <FadeIn key={sug.key} delay={staggerDelay(i, 35)} distance={6}>
-                  <ListRow
-                    label={sug.label}
-                    detail={sug.detail}
-                    testID={sug.testID}
-                    onPress={sug.onPick}
-                  />
-                </FadeIn>
-              ))}
-            </Card>
-          ) : (saved.data?.items.length ?? 0) > 0 ? (
-            <>
-              <Text variant="label" tone="muted">
-                {t('events.savedVenues')}
-              </Text>
-              <ScrollView
-                horizontal
-                keyboardShouldPersistTaps="handled"
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipRow}
-              >
-                {saved.data?.items.map((v) => (
-                  <Chip
-                    key={v.id}
-                    label={v.name}
-                    kind="radio"
-                    selected={
-                      picked?.where !== undefined &&
-                      'venueId' in picked.where &&
-                      picked.where.venueId === v.id
-                    }
-                    onToggle={() => {
-                      choose({ where: { venueId: v.id }, label: v.name });
-                    }}
-                  />
-                ))}
-              </ScrollView>
-            </>
-          ) : null}
-          <Button
-            label={t('events.pickOnMap')}
-            variant="ghost"
-            onPress={() => {
-              Keyboard.dismiss();
-              setMapOpen((o) => !o);
-            }}
-            accessibilityState={{ expanded: mapOpen }}
-          />
           {mapOpen ? (
+            // Drop a pin (D-203): tap the map, the map's address fills in (editable), then use the spot.
             <View style={styles.mapWrap}>
+              <Text tone="muted">{t('events.dropPinHint')}</Text>
               <MapView
                 style={[styles.map, { borderRadius: theme.radii.md }]}
                 initialRegion={{
-                  latitude: near.lat,
-                  longitude: near.lng,
+                  latitude: pin?.lat ?? near.lat,
+                  longitude: pin?.lng ?? near.lng,
                   latitudeDelta: 0.05,
                   longitudeDelta: 0.05,
                 }}
@@ -1082,19 +1140,45 @@ function PlotForm({
                   });
                 }}
                 accessibilityLabel={t('events.pickOnMap')}
+                accessibilityHint={t('events.dropPinHint')}
                 testID="plot-map"
               >
                 {pin ? <Marker coordinate={{ latitude: pin.lat, longitude: pin.lng }} /> : null}
               </MapView>
+              {pin && reverse.isFetching ? (
+                <Text
+                  tone="muted"
+                  variant="caption"
+                  accessibilityLiveRegion="polite"
+                  testID="plot-pin-finding"
+                >
+                  {t('events.pinFinding')}
+                </Text>
+              ) : null}
+              {pinOutside ? (
+                <Text
+                  tone="danger"
+                  variant="caption"
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                  testID="plot-pin-outside"
+                >
+                  {t('events.pinOutside')}
+                </Text>
+              ) : null}
               <TextField
                 label={t('events.addressLabel')}
                 value={pinAddress}
-                onChangeText={setPinAddress}
+                onChangeText={(v) => {
+                  setPinAddress(v);
+                  // Cleared, the box takes the map's suggestion again.
+                  setPinAddressSuggested(v.trim().length === 0);
+                }}
                 testID="plot-pin-address"
               />
               <Button
                 label={t('events.usePin')}
-                disabled={!pin || pinAddress.trim().length < 3}
+                disabled={!pin || pinAddress.trim().length < 3 || pinOutside}
                 onPress={() => {
                   if (pin)
                     choose({
@@ -1102,9 +1186,135 @@ function PlotForm({
                       label: pinAddress.trim(),
                     });
                 }}
+                testID="plot-use-pin"
+              />
+              <Button
+                label={t('events.searchPlace')}
+                variant="ghost"
+                onPress={() => {
+                  setMapOpen(false);
+                }}
+                testID="plot-back-to-search"
               />
             </View>
-          ) : null}
+          ) : (
+            <>
+              <TextField
+                label={t('events.searchPlace')}
+                placeholder={t('events.searchPlaceHint')}
+                value={query}
+                onChangeText={setQuery}
+                autoFocus
+                autoCorrect={false}
+                returnKeyType="search"
+                error={errors.where || null}
+                testID="plot-place-search"
+              />
+              {/* Right under the search box, so it stays in reach above the keyboard. */}
+              <Button
+                label={t('events.pickOnMap')}
+                variant="ghost"
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setMapOpen(true);
+                }}
+                accessibilityHint={t('events.dropPinHint')}
+                testID="plot-drop-pin"
+              />
+              {typing ? (
+                <Card style={styles.suggestions} testID="plot-suggestions">
+                  {search.isFetching && suggestionCount === 0 ? (
+                    <Text
+                      tone="muted"
+                      variant="caption"
+                      style={styles.sectionLabel}
+                      testID="plot-place-searching"
+                      accessibilityLiveRegion="polite"
+                    >
+                      {t('events.searchingPlaces')}
+                    </Text>
+                  ) : search.isError ? (
+                    <Text
+                      tone="danger"
+                      variant="caption"
+                      style={styles.sectionLabel}
+                      accessibilityRole="alert"
+                      testID="plot-place-error"
+                    >
+                      {errorMessage(t, search.error) ?? t('events.searchFailed')}
+                    </Text>
+                  ) : search.data && suggestionCount === 0 ? (
+                    <Text
+                      tone="muted"
+                      variant="caption"
+                      style={styles.sectionLabel}
+                      testID="plot-place-empty"
+                      accessibilityLiveRegion="polite"
+                    >
+                      {t('events.noPlaces', { q: query.trim() })}
+                    </Text>
+                  ) : null}
+                  {(
+                    [
+                      ['known', t('events.placesKnown'), knownSuggestions],
+                      ['map', t('events.placesMap'), mapSuggestions],
+                    ] as const
+                  ).map(([section, heading, items]) =>
+                    items.length > 0 ? (
+                      <View key={section} testID={`plot-places-${section}`}>
+                        <Text
+                          variant="label"
+                          tone="muted"
+                          accessibilityRole="header"
+                          style={styles.sectionLabel}
+                        >
+                          {heading}
+                        </Text>
+                        {items.map((sug, i) => (
+                          <FadeIn key={sug.key} delay={staggerDelay(i, 35)} distance={6}>
+                            <ListRow
+                              label={sug.label}
+                              detail={sug.detail}
+                              testID={sug.testID}
+                              onPress={sug.onPick}
+                            />
+                          </FadeIn>
+                        ))}
+                      </View>
+                    ) : null,
+                  )}
+                </Card>
+              ) : (saved.data?.items.length ?? 0) > 0 ? (
+                <>
+                  <Text variant="label" tone="muted">
+                    {t('events.savedVenues')}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    keyboardShouldPersistTaps="handled"
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipRow}
+                  >
+                    {saved.data?.items.map((v) => (
+                      <Chip
+                        key={v.id}
+                        label={v.name}
+                        kind="radio"
+                        selected={
+                          picked?.where !== undefined &&
+                          'venueId' in picked.where &&
+                          picked.where.venueId === v.id
+                        }
+                        onToggle={() => {
+                          choose({ where: { venueId: v.id }, label: v.name });
+                        }}
+                      />
+                    ))}
+                  </ScrollView>
+                </>
+              ) : null}
+            </>
+          )}
           <Button label={t('common.cancel')} variant="ghost" onPress={close} />
         </Sheet>
       ) : null}
@@ -1159,6 +1369,10 @@ function PlotForm({
           />
           <Button label={t('common.done')} onPress={close} testID="plot-how-many-done" />
         </Sheet>
+      ) : null}
+
+      {sheet === 'coHosts' ? (
+        <CoHostsSheet selected={coHosts} onChange={setCoHosts} onClose={close} />
       ) : null}
 
       {sheet === 'price' && canSell ? (
@@ -1298,6 +1512,8 @@ const styles = StyleSheet.create({
   details: { minHeight: 96, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 11 },
   flipped: { transform: [{ rotate: '180deg' }] },
   suggestions: { gap: 0, paddingVertical: 6 },
+  sectionLabel: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 2 },
+  failures: { gap: 4 },
   mapWrap: { gap: 12 },
   map: { height: 260 },
 });
