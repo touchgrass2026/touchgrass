@@ -1,5 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
-import { AuthResponse, InviteCheckResponse, LIMITS, OtpRequestResponse } from '@touchgrass/shared';
+import {
+  AuthResponse,
+  InviteCheckResponse,
+  LaunchWaitlistResponse,
+  type LaunchWaitlistInput,
+  LIMITS,
+  OtpRequestResponse,
+} from '@touchgrass/shared';
 import { z } from 'zod';
 import { deviceInfo } from '../../lib/device';
 import { useApi } from '../../providers/api-context';
@@ -30,6 +37,18 @@ export function useRequestOtp() {
         body: { phone },
       });
     },
+  });
+}
+
+/** No code yet (D-209): join the same launch waitlist as the website, tagged as coming from the app. */
+export function useJoinWaitlist() {
+  const { client } = useApi();
+  return useMutation({
+    mutationFn: (body: LaunchWaitlistInput) =>
+      client.request('/v1/public/waitlist', LaunchWaitlistResponse, {
+        method: 'POST',
+        body: { ...body, source: 'app' },
+      }),
   });
 }
 

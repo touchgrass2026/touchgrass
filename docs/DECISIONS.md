@@ -927,3 +927,8 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 - Plot only mentions "needs an approved host account" while ticket sales are on (`HostStatus.ticketsEnabled`); with free plans only (D-165) every verified member just plots.
 - Verified people carry a filled sky-blue disc with a tick (`VerifiedMark`) next to their name on profiles and person rows, the mark people already read as verified.
 - Place results (Plot's Where, the venue picker) use `PlaceRow`: a pin, the name in bold on one line, the address under it, compact like a maps app. `ListRow` keeps its detail to half the row on one line, so a long detail can never squeeze the label to nothing (the cause of the tall, nameless rows).
+
+## D-209 No invite code: join the waitlist from the app
+
+- The invite screen has a "No invite code?" section: Join the waitlist opens a short sheet (name, phone or email, consent) that posts to the same public launch waitlist as the website (`POST /v1/public/waitlist`, rate limited per IP) with `source: app`, so app sign-ups show up in the admin waitlist and its insights, and admins invite them as usual. Visit our website opens the site from `webUrl`.
+- The form checks one thing at a time in the order of the form (name, a way to reach them, consent), then the schema checks the phone and email formats.

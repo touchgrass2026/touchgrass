@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import InviteScreen from '../app/(auth)/invite';
 import OtpScreen from '../app/(auth)/otp';
 import PhoneScreen from '../app/(auth)/phone';
@@ -59,6 +60,46 @@ describe('Invite screen (F-ACC-01)', () => {
       inviterName: 'Ananya',
     });
     expect(screen.getByText('Invite from Ananya')).toBeOnTheScreen();
+  });
+
+  it('no code: joins the launch waitlist from the app, tagged as the app (D-209)', async () => {
+    api.on('POST', '/v1/public/waitlist', { status: 200, body: { received: true } });
+    await renderWithProviders(<InviteScreen />, { fetchFn: api.fetch });
+    expect(screen.getByText('No invite code?')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('open-waitlist'));
+    expect(await screen.findByTestId('waitlist-sheet')).toBeOnTheScreen();
+    // Nothing is sent until there is a name, a way to reach them and consent.
+    await fireEvent.press(screen.getByTestId('waitlist-submit'));
+    expect(await screen.findByText('Tell us your name.')).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByTestId('waitlist-name'), 'Ravi');
+    await fireEvent.press(screen.getByTestId('waitlist-submit'));
+    expect(await screen.findByText('Give a phone number or an email.')).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByTestId('waitlist-phone'), '98765 43210');
+    await fireEvent.press(screen.getByTestId('waitlist-submit'));
+    expect(
+      await screen.findByText('Turn on "Contact me" so we can send your code.'),
+    ).toBeOnTheScreen();
+    expect(api.callsTo('POST', '/v1/public/waitlist')).toHaveLength(0);
+    await fireEvent(screen.getByTestId('waitlist-consent'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('waitlist-submit'));
+    expect(await screen.findByTestId('waitlist-done')).toBeOnTheScreen();
+    expect(api.callsTo('POST', '/v1/public/waitlist')[0]?.body).toMatchObject({
+      name: 'Ravi',
+      phone: '98765 43210',
+      consent: true,
+      language: 'en',
+      source: 'app',
+    });
+    await fireEvent.press(screen.getByTestId('waitlist-close'));
+    expect(screen.queryByTestId('waitlist-sheet')).toBeNull();
+  });
+
+  it('no code: the website is one tap away', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    await renderWithProviders(<InviteScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(screen.getByRole('link', { name: 'Visit our website' }));
+    expect(open).toHaveBeenCalledWith(expect.stringMatching(/^https?:\/\//));
+    open.mockRestore();
   });
 
   it('returns to the OTP screen when it was asked for mid-verification', async () => {
