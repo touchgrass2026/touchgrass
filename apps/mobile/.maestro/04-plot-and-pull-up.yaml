@@ -65,10 +65,11 @@ name: Plot a plan and manage it
 - assertVisible: "Who's pulling up"
 - back
 # Hosts check guests in; they have no check-in code of their own.
+# Edit sits just below Scan (48dp buttons on Android), so scroll to it and check both.
 - scrollUntilVisible:
-    element: 'Scan check-ins'
+    element: 'Edit plan'
     direction: DOWN
-- assertVisible: 'Edit plan'
+- assertVisible: 'Scan check-ins'
 # Their new plan is listed on Plans (Upcoming and Hosting rows).
 - back
 - tapOn:

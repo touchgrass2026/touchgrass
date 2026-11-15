@@ -41,11 +41,13 @@ name: Free now, crews, plan votes, badges and referrals
     id: 'dock-discover'
 - tapOn:
     id: 'open-profile'
+# The streak card sits above the shortcut rows (D-200): check it on the way down.
+- scrollUntilVisible:
+    element:
+      id: streak-card
 - scrollUntilVisible:
     element:
       id: open-badges
-- assertVisible:
-    id: streak-card
 - tapOn:
     id: open-badges
 - assertVisible:
