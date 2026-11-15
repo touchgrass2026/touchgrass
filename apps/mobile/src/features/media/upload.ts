@@ -14,11 +14,31 @@ export interface LocalImage {
  * Client-side compression (F-ACC-06): longest edge ≤ 2048 px, JPEG 80%. Also converts HEIC to JPEG,
  * which the server pipeline requires. Location EXIF is dropped by the re-encode and again on the server.
  */
-export async function compressImage(uri: string): Promise<LocalImage> {
-  const rendered = await ImageManipulator.manipulate(uri).resize({ width: 2048 }).renderAsync();
+export async function compressImage(uri: string, crop?: CropBox | null): Promise<LocalImage> {
+  const context = ImageManipulator.manipulate(uri);
+  if (crop) context.crop(crop);
+  const rendered = await context.resize({ width: 2048 }).renderAsync();
   const result = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
   const blob = await (await fetch(result.uri)).blob();
   return { uri: result.uri, sizeBytes: blob.size };
+}
+
+/** A crop rectangle in image pixels. */
+export interface CropBox {
+  originX: number;
+  originY: number;
+  width: number;
+  height: number;
+}
+
+/** The largest centred box of `aspect` inside an image: what a `contentFit="cover"` frame of that shape shows. */
+export function centreCrop(width: number, height: number, aspect = 16 / 9): CropBox {
+  if (width / height > aspect) {
+    const w = Math.round(height * aspect);
+    return { originX: Math.floor((width - w) / 2), originY: 0, width: w, height };
+  }
+  const h = Math.round(width / aspect);
+  return { originX: 0, originY: Math.floor((height - h) / 2), width, height: h };
 }
 
 /** Photo access was declined; the person has to allow it in the phone's settings. */
@@ -57,6 +77,47 @@ export async function pickImage(aspect: [number, number] = [4, 5]): Promise<stri
   return res.canceled ? null : (res.assets[0]?.uri ?? null);
 }
 
+/** A picked plan cover: a still photo (cropped 16:9 and compressed) or an animated GIF sent as it is (D-203). */
+export type PickedCover = { kind: 'photo'; image: LocalImage } | { kind: 'gif'; image: LocalImage };
+
+/** The GIF is bigger than covers allow (8 MB). */
+export class GifTooLargeError extends Error {
+  constructor() {
+    super('GIF too large');
+    this.name = 'GifTooLargeError';
+  }
+}
+
+const isGif = (asset: ImagePicker.ImagePickerAsset): boolean =>
+  asset.mimeType === LIMITS.upload.gifContentType || /\.gif$/i.test(asset.fileName ?? asset.uri);
+
+/**
+ * Opens the library for a plan cover. A GIF keeps its animation: iOS's editor crops it frame by frame, but
+ * Android's re-encodes it as a still, so Android skips the editor and centre-crops stills to the 16:9 frame
+ * instead (what the cover shows anyway). GIFs are never compressed here; the server resizes them (D-203).
+ */
+export async function pickCover(): Promise<PickedCover | null> {
+  await ensureLibraryAccess();
+  const edit = Platform.OS === 'ios';
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    quality: 1,
+    allowsEditing: edit,
+    aspect: [16, 9],
+    exif: false,
+  });
+  const asset = res.canceled ? undefined : res.assets[0];
+  if (!asset) return null;
+  if (isGif(asset)) {
+    const sizeBytes = asset.fileSize ?? (await (await fetch(asset.uri)).blob()).size;
+    if (sizeBytes > LIMITS.upload.maxGifBytes) throw new GifTooLargeError();
+    return { kind: 'gif', image: { uri: asset.uri, sizeBytes } };
+  }
+  const crop =
+    !edit && asset.width > 0 && asset.height > 0 ? centreCrop(asset.width, asset.height) : null;
+  return { kind: 'photo', image: await compressImage(asset.uri, crop) };
+}
+
 /** A storage upload the phone could not complete; `status` is 0 when storage was never reached. */
 export class StorageUploadError extends Error {
   constructor(
@@ -93,18 +154,24 @@ async function postToStorage(
   if (status < 200 || status >= 300) throw new StorageUploadError(status);
 }
 
-/** Presigned POST straight to object storage, then tells the API the upload is complete. */
+/**
+ * Presigned POST straight to object storage, then tells the API the upload is complete. Compressed photos are
+ * JPEG; a GIF (plan covers only, D-203) goes as it is.
+ */
 export async function uploadImage(
   client: ApiClient,
   purpose: MediaPurpose,
   image: LocalImage,
+  contentType: 'image/jpeg' | 'image/gif' = 'image/jpeg',
 ): Promise<MediaAsset> {
-  if (image.sizeBytes > LIMITS.upload.maxImageBytes) throw new Error('Image too large');
+  const gif = contentType === LIMITS.upload.gifContentType;
+  if (image.sizeBytes > (gif ? LIMITS.upload.maxGifBytes : LIMITS.upload.maxImageBytes))
+    throw gif ? new GifTooLargeError() : new Error('Image too large');
   const created = await client.request('/v1/media/uploads', CreateUploadResponse, {
     method: 'POST',
-    body: { purpose, contentType: 'image/jpeg', sizeBytes: image.sizeBytes },
+    body: { purpose, contentType, sizeBytes: image.sizeBytes },
   });
-  await postToStorage(created.upload, image.uri, 'image/jpeg');
+  await postToStorage(created.upload, image.uri, contentType);
   return client.request(`/v1/media/${created.assetId}/complete`, MediaAsset, { method: 'POST' });
 }
 

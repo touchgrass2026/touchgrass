@@ -155,6 +155,7 @@ jest.mock('expo-image-manipulator', () => ({
   SaveFormat: { JPEG: 'jpeg' },
   ImageManipulator: {
     manipulate: jest.fn(() => ({
+      crop: jest.fn().mockReturnThis(),
       resize: jest.fn().mockReturnThis(),
       renderAsync: jest.fn(() =>
         Promise.resolve({

@@ -3,7 +3,7 @@ import { AppSettingKey, UpdateAppSettingBody, UpdateFeatureFlagBody } from './ad
 import { DeviceInfo, InviteCodeInput, OtpRequestBody, OtpVerifyBody, RefreshBody } from './auth';
 import { LocalizedName } from './catalog';
 import { BulkInviteBody } from './invites';
-import { CreateUploadBody, ImageContentType } from './media';
+import { CreateUploadBody, ImageContentType, isGifContentType } from './media';
 import { SetInterestsBody, SetPhotosBody, SetVibeTagsBody, UpdateProfileBody } from './profile';
 import {
   DeleteAccountBody,
@@ -98,6 +98,32 @@ describe('media, settings and admin schemas', () => {
         sizeBytes: 10 * 1024 * 1024 + 1,
       }).success,
     ).toBe(false);
+  });
+  it('accepts an animated GIF only as a plan cover, up to 8 MB (D-203)', () => {
+    const gif = { contentType: 'image/gif', sizeBytes: 8 * 1024 * 1024 };
+    expect(CreateUploadBody.safeParse({ purpose: 'event_cover', ...gif }).success).toBe(true);
+    expect(isGifContentType('image/gif')).toBe(true);
+    expect(isGifContentType('image/webp')).toBe(false);
+    // Stills keep their own list: GIF is not a general image type.
+    expect(ImageContentType.options).not.toContain('image/gif');
+    for (const purpose of [
+      'profile_photo',
+      'story',
+      'chat',
+      'lore',
+      'verification_selfie',
+      'report_screenshot',
+    ])
+      expect(CreateUploadBody.safeParse({ purpose, ...gif }).success).toBe(false);
+    const big = CreateUploadBody.safeParse({
+      purpose: 'event_cover',
+      ...gif,
+      sizeBytes: 8 * 1024 * 1024 + 1,
+    });
+    expect(big.success).toBe(false);
+    expect(big.error?.issues[0]?.path).toEqual(['sizeBytes']);
+    const wrong = CreateUploadBody.safeParse({ purpose: 'profile_photo', ...gif });
+    expect(wrong.error?.issues[0]?.path).toEqual(['contentType']);
   });
   it('accepts video only for stories, up to 30 MB (D-164)', () => {
     const video = { contentType: 'video/mp4', sizeBytes: 25 * 1024 * 1024 };

@@ -1,8 +1,11 @@
 import sharp from 'sharp';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FakeModerationProvider } from '../src/adapters/moderation/fake.moderation.js';
-import type { ImageModerationResult } from '../src/adapters/moderation/moderation.port.js';
+import {
+  type ImageModerationResult,
+  ModerationProvider,
+} from '../src/adapters/moderation/moderation.port.js';
 import { AccountService } from '../src/modules/account/account.service.js';
 import { MediaProcessor } from '../src/modules/media/media.processor.js';
 import { MediaService } from '../src/modules/media/media.service.js';
@@ -202,6 +205,117 @@ describe('media pipeline (F-ACC-06)', () => {
     }
     expect(await h.storage.head(asset?.originalKey ?? '')).toBeNull();
     expect(await h.app.get(MediaProcessor).process(assetId)).toBe('skipped');
+  });
+
+  it('keeps an animated GIF cover animated, moderates its frames, and caps it at 8 MB (D-203)', async () => {
+    const s = await signIn(h);
+    const frames = 6;
+    const raw = await Promise.all(
+      Array.from({ length: frames }, (_, i) =>
+        sharp({
+          create: {
+            width: 1600,
+            height: 900,
+            channels: 3,
+            background: { r: i * 40, g: 166, b: 55 },
+          },
+        })
+          .raw()
+          .toBuffer(),
+      ),
+    );
+    const gif = await sharp(Buffer.concat(raw), {
+      raw: { width: 1600, height: 900 * frames, channels: 3, pageHeight: 900 },
+    })
+      .gif({ delay: Array<number>(frames).fill(80), loop: 0 })
+      .toBuffer();
+    const created = await request(h.http)
+      .post('/v1/media/uploads')
+      .set(...bearer(s.accessToken))
+      .send({ purpose: 'event_cover', contentType: 'image/gif', sizeBytes: gif.length })
+      .expect(201);
+    const assetId = created.body.assetId as string;
+    h.storage.simulateUpload(created.body.upload.fields.key as string, gif, 'image/gif');
+    await request(h.http)
+      .post(`/v1/media/${assetId}/complete`)
+      .set(...bearer(s.accessToken))
+      .expect(200);
+    const screened = vi.spyOn(h.app.get(ModerationProvider), 'moderateImage');
+    try {
+      expect(await h.app.get(MediaProcessor).process(assetId)).toBe('ready');
+      // First, middle and last frames are screened.
+      expect(screened).toHaveBeenCalledTimes(3);
+    } finally {
+      screened.mockRestore();
+    }
+    const asset = await h.app.get(MediaService).byId(assetId);
+    expect(asset).toMatchObject({ status: 'ready', width: 1080, height: 608 });
+    for (const [key, edge] of [
+      ['sm', 160],
+      ['md', 480],
+      ['lg', 1080],
+    ] as const) {
+      if (!asset?.variantKeys) throw new Error('variants missing');
+      const meta = await sharp(await h.storage.get(asset.variantKeys[key]), {
+        animated: true,
+      }).metadata();
+      expect(meta).toMatchObject({ format: 'webp', width: edge, pages: frames, loop: 0 });
+      expect(meta.delay).toEqual(Array<number>(frames).fill(80));
+    }
+    expect(await h.storage.head(asset?.originalKey ?? '')).toBeNull();
+
+    // GIFs are for covers only, and the presigned policy holds them to 8 MB.
+    await request(h.http)
+      .post('/v1/media/uploads')
+      .set(...bearer(s.accessToken))
+      .send({ purpose: 'story', contentType: 'image/gif', sizeBytes: 100 })
+      .expect(400);
+    await request(h.http)
+      .post('/v1/media/uploads')
+      .set(...bearer(s.accessToken))
+      .send({ purpose: 'event_cover', contentType: 'image/gif', sizeBytes: 8 * 1024 * 1024 + 1 })
+      .expect(400);
+    const big = await request(h.http)
+      .post('/v1/media/uploads')
+      .set(...bearer(s.accessToken))
+      .send({ purpose: 'event_cover', contentType: 'image/gif', sizeBytes: 100 })
+      .expect(201);
+    expect(() => {
+      h.storage.simulateUpload(
+        big.body.upload.fields.key as string,
+        Buffer.alloc(8 * 1024 * 1024 + 1),
+        'image/gif',
+      );
+    }).toThrow('Content length outside policy');
+  });
+
+  it('rejects a GIF cover with more frames than allowed (D-203)', async () => {
+    const s = await signIn(h);
+    const frames = 201;
+    // Every frame is a different pattern (the encoder merges frames that look the same).
+    const raw = Buffer.concat(
+      Array.from({ length: frames }, (_, i) =>
+        Buffer.from(Array.from({ length: 4 * 4 * 3 }, (_, j) => (i * 7 + j * 13) % 256)),
+      ),
+    );
+    const gif = await sharp(raw, {
+      raw: { width: 4, height: 4 * frames, channels: 3, pageHeight: 4 },
+    })
+      .gif({ delay: Array<number>(frames).fill(20) })
+      .toBuffer();
+    const created = await request(h.http)
+      .post('/v1/media/uploads')
+      .set(...bearer(s.accessToken))
+      .send({ purpose: 'event_cover', contentType: 'image/gif', sizeBytes: gif.length })
+      .expect(201);
+    h.storage.simulateUpload(created.body.upload.fields.key as string, gif, 'image/gif');
+    await request(h.http)
+      .post(`/v1/media/${created.body.assetId}/complete`)
+      .set(...bearer(s.accessToken))
+      .expect(200);
+    expect(await h.app.get(MediaProcessor).process(created.body.assetId as string)).toBe(
+      'rejected',
+    );
   });
 
   it('enforces ownership, completion and type rules', async () => {

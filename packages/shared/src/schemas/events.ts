@@ -57,6 +57,17 @@ export const VenueSearchResponse = z.object({
   places: z.array(PlaceSuggestionDto),
 });
 export type VenueSearchResponse = z.infer<typeof VenueSearchResponse>;
+/** "Drop a pin" (D-203): a suggested address for a point, and whether TouchGrass serves that spot. */
+export const ReverseGeocodeQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
+export type ReverseGeocodeQuery = z.infer<typeof ReverseGeocodeQuery>;
+export const ReverseGeocodeResponse = z.object({
+  address: z.string().nullable(),
+  served: z.boolean(),
+});
+export type ReverseGeocodeResponse = z.infer<typeof ReverseGeocodeResponse>;
 export const VenueFromPlaceBody = z.object({
   placeId: z.string().min(1).max(300),
   sessionToken: z.string().min(1).max(100),
