@@ -7,7 +7,8 @@ import { StyleSheet, View } from 'react-native';
 import { useSavedVenues, useVenueFromPlace, useVenueSearch } from '../../src/features/events/api';
 import { errorMessage } from '../../src/lib/errors';
 import { VenueRowWithSave } from '../SaveVenueToggle';
-import { Chip, IconText, ListRow, TextField } from '../ui';
+import { PlaceRow } from '../plot/PlaceRow';
+import { Chip, IconText, TextField } from '../ui';
 
 export interface PickedPlace {
   where: EventWhere;
@@ -54,9 +55,9 @@ export function VenuePicker({
       />
       {search.data?.venues.map((v) => (
         <VenueRowWithSave key={v.id} venueId={v.id} name={v.name}>
-          <ListRow
-            label={v.name}
-            detail={v.address}
+          <PlaceRow
+            name={v.name}
+            address={v.address}
             testID={`${testID}-venue-${v.id}`}
             onPress={() => {
               choose({ where: { venueId: v.id }, label: v.name });
@@ -65,10 +66,10 @@ export function VenuePicker({
         </VenueRowWithSave>
       ))}
       {search.data?.places.map((p) => (
-        <ListRow
+        <PlaceRow
           key={p.placeId}
-          label={p.primaryText}
-          detail={p.secondaryText}
+          name={p.primaryText}
+          address={p.secondaryText}
           onPress={() => {
             void fromPlace.mutateAsync({ placeId: p.placeId, sessionToken: session }).then(
               (v) => {

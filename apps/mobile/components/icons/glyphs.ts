@@ -102,6 +102,8 @@ export const GLYPHS = {
   // Creative plans: a pair of beamed notes.
   music:
     '<path d="M9 17.5V6l11-2.5v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/>',
+  // Rows of a list, for the Explore list/map switch (D-206).
+  list: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.75" cy="6.5" r="1.25" fill="ACCENT" stroke="none"/><circle cx="4.75" cy="12" r="1.25"/><circle cx="4.75" cy="17.5" r="1.25"/>',
   grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><circle cx="16.75" cy="16.75" r="3.25" fill="ACCENT" stroke="none"/>',
   // Chat polls: three answer bars, the leading one picked.
   poll: '<path d="M4 6h9M4 12h16M4 18h6"/><circle cx="19" cy="6" r="1.6" fill="ACCENT" stroke="none"/>',

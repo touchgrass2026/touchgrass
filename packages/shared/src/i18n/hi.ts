@@ -21,7 +21,7 @@ export const hi: Translation = {
     next: 'आगे',
     done: 'समझ गया',
     viewTitle: 'लिस्ट या मैप',
-    viewBody: 'प्लान की लिस्ट और आपके पास हो रही चीज़ों के मैप के बीच बदलो.',
+    viewBody: 'प्लान मैप पर देखने के लिए मैप दबाओ, वापस आने के लिए लिस्ट.',
     discoverTitle: 'एक्सप्लोर',
     discoverBody: 'आपके आसपास होने वाले प्लान. समय, दूरी और मूड से फ़िल्टर करो.',
     plansTitle: 'प्लान',
@@ -1395,6 +1395,8 @@ export const hi: Translation = {
     },
   },
   discover: {
+    showMapHint: 'प्लान को मैप पर दिखाता है',
+    showListHint: 'प्लान को लिस्ट में दिखाता है',
     showPlans: 'प्लान दिखाओ',
     distanceLabel: 'दूरी',
     km: '{{km}} कि.मी.',

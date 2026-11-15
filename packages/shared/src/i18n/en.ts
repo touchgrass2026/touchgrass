@@ -24,7 +24,7 @@ export const en = {
     next: 'Next',
     done: 'Got it',
     viewTitle: 'List or map',
-    viewBody: 'Switch between a list of plans and a map of what is happening near you.',
+    viewBody: 'Tap Map to see plans on a map, and List to come back.',
     discoverTitle: 'Explore',
     discoverBody: 'Plans happening around you. Filter by time, distance and mood.',
     plansTitle: 'Plans',
@@ -1396,6 +1396,8 @@ export const en = {
     },
   },
   discover: {
+    showMapHint: 'Shows plans on a map',
+    showListHint: 'Shows plans as a list',
     showPlans: 'Show plans',
     distanceLabel: 'Distance',
     km: '{{km}} km',

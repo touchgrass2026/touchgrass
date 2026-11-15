@@ -31,7 +31,12 @@ export function ListRow({ label, detail, onPress, tone = 'default', testID }: Li
       <Text tone={tone === 'danger' ? 'danger' : 'default'} style={styles.label}>
         {label}
       </Text>
-      {detail ? <Text tone="muted">{detail}</Text> : null}
+      {/* The detail never squeezes the label away: it takes at most half the row, on one line. */}
+      {detail ? (
+        <Text tone="muted" numberOfLines={1} style={styles.detail}>
+          {detail}
+        </Text>
+      ) : null}
       <Text tone="muted" importantForAccessibility="no" accessibilityElementsHidden>
         ›
       </Text>
@@ -98,5 +103,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  label: { flex: 1 },
+  label: { flex: 1, minWidth: 0 },
+  detail: { flexShrink: 1, maxWidth: '50%' },
 });

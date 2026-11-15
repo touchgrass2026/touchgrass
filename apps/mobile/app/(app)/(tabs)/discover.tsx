@@ -6,7 +6,7 @@ import { StoryTray } from '../../../components/stories/StoryTray';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Search } from '../../../components/icons';
+import { ListIcon, MapFold, Search } from '../../../components/icons';
 import { BRAND } from '@touchgrass/shared';
 import { Avatar } from '../../../components/Avatar';
 import { BrandLogo } from '../../../components/BrandLogo';
@@ -16,7 +16,6 @@ import { FeedSkeleton } from '../../../components/FeedSkeleton';
 import { AllPlansRail } from '../../../components/explore/AllPlansRail';
 import { HeroCarousel } from '../../../components/explore/HeroCarousel';
 import { PlanRail } from '../../../components/explore/PlanRail';
-import { SegmentedTabs } from '../../../components/SegmentedTabs';
 import { useGuideTarget } from '../../../components/guide/targets';
 import {
   Button,
@@ -192,16 +191,31 @@ export default function DiscoverScreen() {
         </Text>
       </Pressable>
       {mapEnabled ? (
-        <View {...viewTarget}>
-          <SegmentedTabs
-            tabs={[
-              { key: 'list', label: t('discover.list') },
-              { key: 'map', label: t('discover.map') },
-            ]}
-            value={view}
-            onChange={setView}
-          />
-        </View>
+        // One button naming where it takes you (D-206): "Map" in the list, "List" on the map.
+        <Pressable
+          {...viewTarget}
+          accessibilityRole="button"
+          accessibilityLabel={view === 'list' ? t('discover.map') : t('discover.list')}
+          accessibilityHint={
+            view === 'list' ? t('discover.showMapHint') : t('discover.showListHint')
+          }
+          onPress={() => {
+            setView(view === 'list' ? 'map' : 'list');
+          }}
+          testID="view-switch"
+          style={[
+            styles.switch,
+            {
+              minHeight: theme.minTouchTarget,
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.inputBorder,
+              borderRadius: theme.radii.pill,
+            },
+          ]}
+        >
+          <Icon icon={view === 'list' ? MapFold : ListIcon} size={18} color={theme.colors.text} />
+          <Text variant="label">{view === 'list' ? t('discover.map') : t('discover.list')}</Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -324,6 +338,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brand: { fontSize: 22, lineHeight: 28, letterSpacing: -0.5 },
+  switch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+  },
   search: {
     flexGrow: 1,
     flexShrink: 1,

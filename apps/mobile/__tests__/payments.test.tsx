@@ -729,6 +729,24 @@ describe('hosting (F-HST-01/02, F-PAY-03)', () => {
     expect(screen.queryByRole('tab', { name: 'Paid' })).toBeNull();
     expect(screen.getByTestId('plot-paid-hint')).toBeOnTheScreen();
   });
+
+  it('with ticket sales off, nobody is told they need an approved host account (D-206)', async () => {
+    mockRouteParams.current = {};
+    api
+      .on('GET', '/v1/host/status', {
+        status: 200,
+        body: hostStatus({ ticketsEnabled: false }),
+      })
+      .on('GET', '/v1/interests', { status: 200, body: { items: interestsFixture } })
+      .on('GET', '/v1/venues/saved', { status: 200, body: { items: [] } });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('plot-submit')).toBeOnTheScreen();
+    await waitFor(() => {
+      expect(api.callsTo('GET', '/v1/host/status')).toHaveLength(1);
+    });
+    expect(screen.queryByTestId('plot-paid-hint')).toBeNull();
+    expect(screen.queryByText(/approved host/)).toBeNull();
+  });
 });
 
 describe('perk pass (F-PAY-04)', () => {

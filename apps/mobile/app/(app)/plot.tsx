@@ -45,6 +45,7 @@ import {
 } from '../../components/icons';
 import { interestOptions } from '../../components/interest-options';
 import { PickList } from '../../components/PickList';
+import { PlaceRow } from '../../components/plot/PlaceRow';
 import { CoHostsSheet } from '../../components/plot/CoHostsSheet';
 import {
   GroupNote,
@@ -62,7 +63,6 @@ import {
   ErrorState,
   FadeIn,
   Icon,
-  ListRow,
   LoadingState,
   Screen,
   staggerDelay,
@@ -906,7 +906,10 @@ function PlotForm({
           />
         ) : null}
       </SettingsGroup>
-      {!canSell ? <GroupNote testID="plot-paid-hint">{t('events.paidNeedsHost')}</GroupNote> : null}
+      {/* Only while ticket sales are on (D-165/D-206): with free plans only, nobody needs approval. */}
+      {!canSell && host.data?.ticketsEnabled === true ? (
+        <GroupNote testID="plot-paid-hint">{t('events.paidNeedsHost')}</GroupNote>
+      ) : null}
 
       <View
         style={styles.detailsWrap}
@@ -1272,9 +1275,10 @@ function PlotForm({
                         </Text>
                         {items.map((sug, i) => (
                           <FadeIn key={sug.key} delay={staggerDelay(i, 35)} distance={6}>
-                            <ListRow
-                              label={sug.label}
-                              detail={sug.detail}
+                            <PlaceRow
+                              name={sug.label}
+                              address={sug.detail}
+                              last={i === items.length - 1}
                               testID={sug.testID}
                               onPress={sug.onPick}
                             />

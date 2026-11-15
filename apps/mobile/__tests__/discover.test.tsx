@@ -376,8 +376,11 @@ describe('Discover tab (F-DSC-01..08)', () => {
       },
     });
     await renderWithProviders(<DiscoverScreen />, { fetchFn: api.fetch });
-    await fireEvent.press(await screen.findByRole('tab', { name: 'Map' }));
+    // One switch naming where it goes (D-206): "Map" in the list, "List" on the map.
+    expect(await screen.findByTestId('view-switch')).toHaveAccessibleName('Map');
+    await fireEvent.press(screen.getByRole('button', { name: 'Map' }));
     expect(await screen.findByTestId('pin-Slug0003')).toBeOnTheScreen();
+    expect(screen.getByTestId('view-switch')).toHaveAccessibleName('List');
     // Custom pins (D-204): a category badge with its name read out, a neutral lock for mystery plans.
     expect(screen.getByTestId('marker-Slug0004').props.accessibilityLabel).toMatch(
       /^Board game night, Board games, /,

@@ -1,11 +1,11 @@
-import { BadgeCheck } from './icons';
 import type { PersonCard } from '@touchgrass/shared';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../src/theme/theme';
 import { Avatar } from './Avatar';
-import { Icon, Text, Pressable } from './ui';
+import { Text, Pressable } from './ui';
+import { VerifiedMark } from './VerifiedMark';
 
 export interface PersonRowProps {
   person: PersonCard;
@@ -45,9 +45,7 @@ export function PersonRow({ person, detail, onOpen, actions }: PersonRowProps) {
             <Text variant="heading" style={styles.name}>
               {person.displayName}
             </Text>
-            {person.verified ? (
-              <Icon icon={BadgeCheck} size={16} color={theme.colors.primary} />
-            ) : null}
+            {person.verified ? <VerifiedMark size={16} /> : null}
           </View>
           {subtitle ? (
             <Text variant="caption" tone="muted">

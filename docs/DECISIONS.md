@@ -920,3 +920,10 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 - The first-launch tour measures what it points at: each target registers its on-screen box with `useGuideTarget` (`components/guide/targets.ts`) and the ring, arrow and tip are drawn from it, in a full-screen modal so the coordinates match. It now starts with the List / Map switch on Explore, then the dock; a step whose control is not on screen is left out. The storage key moved to v2, so everyone sees the corrected tour once.
 - An open ticket checks the plan every 4 seconds until a host scans it, then shows "You're checked in" instead of the code and stops checking. On the plan screen a checked-in guest sees that status instead of the ticket and "I'm here" buttons.
 - Badges are celebrated as they are won: checked on launch, on returning to the app and every 2 minutes while open; each earned badge this install has not shown gets a moment (medal, name, confetti that Reduce Motion turns off, See your badges / Nice). The first check on an install records existing badges silently. Off in e2e builds, like the tour.
+
+## D-206 Named list/map switch, no approval note on free plans, blue verified badge, place rows
+
+- Explore's list/map control is one button that names where it goes: "Map" (map icon) in the list, "List" (list icon) on the map, next to search. It is the tour's first stop.
+- Plot only mentions "needs an approved host account" while ticket sales are on (`HostStatus.ticketsEnabled`); with free plans only (D-165) every verified member just plots.
+- Verified people carry a filled sky-blue disc with a tick (`VerifiedMark`) next to their name on profiles and person rows, the mark people already read as verified.
+- Place results (Plot's Where, the venue picker) use `PlaceRow`: a pin, the name in bold on one line, the address under it, compact like a maps app. `ListRow` keeps its detail to half the row on one line, so a long detail can never squeeze the label to nothing (the cause of the tall, nameless rows).

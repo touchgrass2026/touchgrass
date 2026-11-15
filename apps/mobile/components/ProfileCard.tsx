@@ -1,5 +1,4 @@
 import { media } from '@touchgrass/shared';
-import { BadgeCheck } from './icons';
 import type {
   HostRatingSummary,
   Interest,
@@ -13,7 +12,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { localized } from '../src/features/catalog/api';
 import { useTheme } from '../src/theme/theme';
-import { Icon, Text } from './ui';
+import { Text } from './ui';
+import { VerifiedMark } from './VerifiedMark';
 
 export interface ProfileCardProps {
   displayName: string;
@@ -87,11 +87,7 @@ export function ProfileCard(p: ProfileCardProps) {
               {t('profile.age', { age: p.age })}
             </Text>
           ) : null}
-          {p.verified ? (
-            <View accessible accessibilityRole="image" accessibilityLabel={t('profile.verified')}>
-              <Icon icon={BadgeCheck} size={20} color={theme.colors.text} />
-            </View>
-          ) : null}
+          {p.verified ? <VerifiedMark size={20} testID="profile-verified" /> : null}
         </View>
         {p.subtitle ? <Text tone="muted">{p.subtitle}</Text> : null}
         {p.hostRating && p.hostRating.average !== null ? (

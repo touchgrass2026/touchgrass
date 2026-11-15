@@ -625,6 +625,9 @@ describe('Plot flow (F-EVT-01/02)', () => {
     for (const q of ['la', 'lak', 'lake'])
       await fireEvent.changeText(screen.getByTestId('plot-place-search'), q);
     expect(await screen.findByTestId('place-fx_lake')).toBeOnTheScreen();
+    // Like a maps app (D-206): the place's name, then its address under it, in one compact row.
+    expect(screen.getByText('Lake View Park')).toBeOnTheScreen();
+    expect(screen.getByTestId('place-fx_lake')).toHaveAccessibleName('Lake View Park, Gachibowli');
     const searches = api.calls.filter((c) => c.path === '/v1/venues/search');
     expect(searches).toHaveLength(1);
     expect(searches[0]?.url).toContain('q=lake');
