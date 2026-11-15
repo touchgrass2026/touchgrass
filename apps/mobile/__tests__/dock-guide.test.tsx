@@ -29,6 +29,17 @@ describe('first-launch dock guide (D-198)', () => {
     expect(screen.queryByTestId('dock-guide')).toBeNull();
   });
 
+  it('Back returns to the previous tip, and the first tip has none', async () => {
+    await renderWithProviders(<DockGuide slots={slots} dockHeight={70} />);
+    expect(await screen.findByText('1 of 5')).toBeOnTheScreen();
+    expect(screen.queryByTestId('dock-guide-back')).toBeNull();
+    await fireEvent.press(screen.getByTestId('dock-guide-next'));
+    expect(await screen.findByText('2 of 5')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('dock-guide-back'));
+    expect(await screen.findByText('1 of 5')).toBeOnTheScreen();
+    expect(await AsyncStorage.getItem(DOCK_GUIDE_KEY)).toBeNull();
+  });
+
   it('Skip ends it at once', async () => {
     await renderWithProviders(<DockGuide slots={slots} dockHeight={70} />);
     await fireEvent.press(await screen.findByTestId('dock-guide-skip'));

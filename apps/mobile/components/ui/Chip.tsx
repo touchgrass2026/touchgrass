@@ -46,6 +46,7 @@ export function Chip({
     >
       <Text
         variant="label"
+        numberOfLines={1}
         style={{
           color: selected ? theme.colors.onPrimary : theme.colors.text,
           fontWeight: selected ? '700' : '500',

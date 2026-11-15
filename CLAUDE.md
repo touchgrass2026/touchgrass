@@ -57,3 +57,5 @@ Social app for meeting people IRL (Hyderabad launch). Tagline "Log off. Pull up.
 ## Phase workflow
 
 Build phases in order (spec section 9). At the end of each phase run every gate (types, lint, unit+coverage, integration, web e2e, mobile tests), update `docs/FEATURES.md` (columns + gate log), `docs/A11Y.md`, `docs/DECISIONS.md`, then summarise.
+
+- UI work (D-201): the `ui-ux-pro-max` project skill (`.claude/skills/ui-ux-pro-max`, MIT, vendored) is the design reference. Use its `--domain ux` and `--stack react-native` lookups and its pre-delivery checklist, but keep our brand: matcha tokens and Inter, never its suggested palette or fonts. House rules from it: sentence-case section labels (no tracked all-caps), the accent once per surface, running text in the ink colour, touch targets 44pt iOS / 48dp Android (`theme.minTouchTarget`), compact chips and pills on one line, every tour skippable with Back.

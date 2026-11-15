@@ -19,3 +19,4 @@ apps/web/e2e/.auth/
 
 # Agent worktrees (local only)
 .claude/worktrees/
+__pycache__/

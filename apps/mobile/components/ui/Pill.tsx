@@ -34,7 +34,7 @@ export function Pill({
       ]}
     >
       {icon ? <Icon icon={icon} size={12} color={look.fg} strokeWidth={2.5} /> : null}
-      <Text variant="caption" style={{ color: look.fg, fontWeight: '700' }}>
+      <Text variant="caption" numberOfLines={1} style={{ color: look.fg, fontWeight: '700' }}>
         {label}
       </Text>
     </View>

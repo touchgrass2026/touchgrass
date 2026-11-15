@@ -90,6 +90,16 @@ export function DockGuide({
               onPress={finish}
               testID="dock-guide-skip"
             />
+            {step > 0 ? (
+              <Button
+                label={t('common.back')}
+                variant="ghost"
+                onPress={() => {
+                  setStep(step - 1);
+                }}
+                testID="dock-guide-back"
+              />
+            ) : null}
             <Button
               label={last ? t('guide.done') : t('guide.next')}
               onPress={() => {

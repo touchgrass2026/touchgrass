@@ -7,7 +7,7 @@ import {
   typography,
 } from '@touchgrass/shared';
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import { AccessibilityInfo, useColorScheme } from 'react-native';
+import { AccessibilityInfo, Platform, useColorScheme } from 'react-native';
 import { useSettingsStore } from '../stores/settings-store';
 
 export interface Theme {
@@ -27,7 +27,8 @@ export function buildTheme(scheme: 'light' | 'dark', reduceMotion: boolean): The
     spacing,
     radii,
     typography,
-    minTouchTarget: MIN_TOUCH_TARGET,
+    // Platform minimums (ui-ux-pro-max `touch-target-size`, D-201): 44pt on iOS, 48dp on Android.
+    minTouchTarget: Platform.OS === 'android' ? 48 : MIN_TOUCH_TARGET,
     reduceMotion,
   };
 }
