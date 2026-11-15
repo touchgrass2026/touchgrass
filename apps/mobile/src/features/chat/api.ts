@@ -12,6 +12,7 @@ import {
   EventSignal,
   IcebreakerCard,
   IcebreakerDeck,
+  LIMITS,
   Message,
   MessagePage,
   type MuteBody,
@@ -20,9 +21,33 @@ import {
   type Reaction,
 } from '@touchgrass/shared';
 import { z } from 'zod';
+import { ApiError } from '../../lib/api-client';
 import { useApi } from '../../providers/api-context';
 
 const Empty = z.undefined();
+
+/** A plan chat that has closed for good (D-208): the API answers CHAT_UNAVAILABLE with reason CHAT_ENDED. */
+export function isChatEnded(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.code !== 'CHAT_UNAVAILABLE') return false;
+  const d = err.details;
+  return typeof d === 'object' && d !== null && 'reason' in d && d.reason === 'CHAT_ENDED';
+}
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Whole hours left before an open plan chat closes, when that is within the warning window (D-208): 0 means
+ * under an hour; null means no warning (not closing soon, already closed, or not a plan chat).
+ */
+export function closingInHours(
+  c: Pick<ConversationSummary, 'kind' | 'readOnly' | 'closesAt'>,
+  now: number,
+): number | null {
+  if (c.kind !== 'event' || c.readOnly || !c.closesAt) return null;
+  const left = Date.parse(c.closesAt) - now;
+  if (left <= 0 || left > LIMITS.chat.eventChatClosingNoticeMs) return null;
+  return Math.floor(left / HOUR_MS);
+}
 
 export const CHAT_KEYS = {
   all: ['chat'] as const,

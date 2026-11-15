@@ -106,12 +106,16 @@ export const ConversationSummary = z.object({
     .nullable(),
   unreadCount: z.number().int(),
   muted: z.boolean(),
-  /** Event chats are read-only after they close; DM requests until accepted (for the receiver). */
+  /**
+   * Event chats are read-only before they open and once the plan is cancelled; DM requests until accepted (for
+   * the receiver). A closed event chat is not returned at all (409 CHAT_UNAVAILABLE, reason CHAT_ENDED, D-208).
+   */
   readOnly: z.boolean(),
   /** Hosts can start polls in their plan's chat. */
   canCreatePoll: z.boolean(),
   /** Event chats open 24 h before the start. */
   opensAt: z.iso.datetime().nullable(),
+  /** Event chats close then (48 h after the plan ends or is cancelled) and leave everyone's inbox (D-208). */
   closesAt: z.iso.datetime().nullable(),
 });
 export type ConversationSummary = z.infer<typeof ConversationSummary>;

@@ -15,7 +15,7 @@ import {
   TimeIdCursor,
   type ModerationPreview,
 } from '@touchgrass/shared';
-import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { AppError } from '../../common/errors/app-error.js';
 import { DB, type Database, type Tx } from '../../infra/database/database.module.js';
@@ -43,6 +43,7 @@ import {
   canDeleteForEveryone,
   directKey,
   dmPermission,
+  eventChatEnded,
   excerpt,
   muteUntil,
   uuidV7Time,
@@ -56,6 +57,10 @@ export const CHAT_REQUEST_CREATED_EVENT = 'chat.request_created';
 type ConversationRow = typeof conversations.$inferSelect;
 type MemberRow = typeof conversationMembers.$inferSelect;
 type MessageRow = typeof messages.$inferSelect;
+
+/** A closed event chat (D-208): its members get this instead of the conversation. */
+export const chatEndedError = (): AppError =>
+  new AppError('CHAT_UNAVAILABLE', "This plan's chat has ended", { reason: 'CHAT_ENDED' });
 
 const C = LIMITS.chat;
 const PageCursor = TimeIdCursor;
@@ -126,11 +131,15 @@ export class ChatService {
     return null;
   }
 
-  /** Resolves access; invisible conversations are 404 (their existence never leaks). */
+  /**
+   * Resolves access; invisible conversations are 404 (their existence never leaks). A closed event chat is
+   * CHAT_ENDED for its members (D-208) unless `allowEnded` (reports of what they saw still work).
+   */
   async access(
     userId: string,
     conversationId: string,
     now: Date = new Date(),
+    opts: { allowEnded?: boolean } = {},
   ): Promise<ConversationAccess> {
     const conv = await this.conversation(conversationId);
     if (!conv) throw AppError.notFound('Conversation');
@@ -169,6 +178,7 @@ export class ChatService {
       });
     const gate = await g.gate.access(userId, g.refId, now);
     if (!gate.read) throw AppError.notFound('Conversation');
+    if (gate.ended && !opts.allowEnded) throw chatEndedError();
     return {
       conv,
       me,
@@ -344,6 +354,7 @@ export class ChatService {
     if (!gate) throw new AppError('CHAT_UNAVAILABLE', 'Event chat is not available');
     const access = await gate.access(userId, eventId, now);
     if (!access.read) throw AppError.notFound('Conversation');
+    if (access.ended) throw chatEndedError();
     const id = await this.ensureEventConversation(eventId);
     await this.ensureMember(id, userId);
     return this.summary(userId, id, now);
@@ -373,11 +384,17 @@ export class ChatService {
     return this.summary(userId, row.id, now);
   }
 
+  /** Creates the event's chat if needed, and keeps its closing time in step with the plan (D-208). */
   async ensureEventConversation(eventId: string, db: DbOrTx = this.db): Promise<string> {
+    const closesAt = (await this.gates.get('event')?.closesAt?.(eventId)) ?? null;
     await db
       .insert(conversations)
-      .values({ id: uuidv7(), kind: 'event', eventId })
-      .onConflictDoNothing({ target: conversations.eventId });
+      .values({ id: uuidv7(), kind: 'event', eventId, closesAt })
+      .onConflictDoUpdate({
+        target: conversations.eventId,
+        set: { closesAt },
+        setWhere: sql`${conversations.closesAt} IS DISTINCT FROM ${closesAt}`,
+      });
     const [row] = await db
       .select({ id: conversations.id })
       .from(conversations)
@@ -433,6 +450,20 @@ export class ChatService {
     return row?.id ?? null;
   }
 
+  /** Worker: the plan moved or was cancelled, so its chat closes at a different time (D-208). */
+  async refreshEventChatClose(eventId: string): Promise<void> {
+    const closesAt = (await this.gates.get('event')?.closesAt?.(eventId)) ?? null;
+    await this.db
+      .update(conversations)
+      .set({ closesAt })
+      .where(
+        and(
+          eq(conversations.eventId, eventId),
+          sql`${conversations.closesAt} IS DISTINCT FROM ${closesAt}`,
+        ),
+      );
+  }
+
   /** Worker: membership follows seats (joined people see the chat in their inbox; leavers drop out). */
   async syncEventMember(eventId: string, userId: string, member: boolean): Promise<void> {
     const id = await this.eventConversationId(eventId);
@@ -452,12 +483,16 @@ export class ChatService {
     conversationId: string,
     now: Date = new Date(),
   ): Promise<ConversationSummary> {
-    const [item] = await this.summaries(userId, [conversationId], now);
+    // One conversation asked for by id: why it cannot be shown is the answer (404, or CHAT_ENDED, D-208).
+    const [item] = await this.summaries(userId, [conversationId], now, { strict: true });
     if (!item) throw AppError.notFound('Conversation');
     return item;
   }
 
-  /** Inbox (F-CHT-04): newest activity first; requests are listed separately. */
+  /**
+   * Inbox (F-CHT-04): newest activity first; requests are listed separately. Closed event chats are left out
+   * in the query itself (D-208), so pages stay full and cursors stay stable.
+   */
   async list(
     userId: string,
     q: ConversationListQuery,
@@ -473,6 +508,7 @@ export class ChatService {
         and(
           eq(conversationMembers.userId, userId),
           eq(conversationMembers.status, q.filter === 'requests' ? 'request' : 'active'),
+          or(isNull(conversations.closesAt), gte(conversations.closesAt, now)),
           after
             ? sql`(${sortKey}, ${conversations.id}) < (${new Date(after.t)}, ${after.id})`
             : undefined,
@@ -496,11 +532,15 @@ export class ChatService {
     };
   }
 
-  /** Builds summaries for conversations the viewer can still read (others are silently dropped). */
+  /**
+   * Builds summaries for conversations the viewer can still read (others are silently dropped, or with
+   * `strict` the reason is thrown).
+   */
   private async summaries(
     userId: string,
     ids: string[],
     now: Date,
+    opts: { strict?: boolean } = {},
   ): Promise<ConversationSummary[]> {
     if (ids.length === 0) return [];
     const convs = await this.db.select().from(conversations).where(inArray(conversations.id, ids));
@@ -508,8 +548,9 @@ export class ChatService {
     for (const c of convs) {
       try {
         accessById.set(c.id, await this.access(userId, c.id, now));
-      } catch {
-        // No longer readable (blocked, left the plan): not shown.
+      } catch (err) {
+        if (opts.strict) throw err;
+        // No longer readable (blocked, left the plan, chat closed): not shown.
       }
     }
     const visible = ids.flatMap((id) =>
@@ -1037,6 +1078,9 @@ export class ChatService {
   ): Promise<{ conv: ConversationRow; userIds: string[] } | null> {
     const conv = await this.conversation(conversationId);
     if (!conv) return null;
+    // A closed event chat notifies nobody, even for a message sent just before it closed (D-208).
+    const closesAt = conv.eventId ? await this.gates.get('event')?.closesAt?.(conv.eventId) : null;
+    if (closesAt && eventChatEnded(closesAt, now)) return null;
     const to = (await this.recipients(conv, senderId)).filter((id) => id !== senderId);
     const muted = new Set(
       (await this.members(conversationId))
@@ -1133,7 +1177,13 @@ export class ChatService {
     messageId: string,
   ): Promise<{ cityId: string | null; ownerUserId: string | null } | null> {
     const msg = await this.rawMessage(messageId);
-    if (!msg || !(await this.canJoin(reporterId, msg.conversationId))) return null;
+    if (!msg) return null;
+    try {
+      // Former members of a closed plan chat can still report what they saw (D-208).
+      await this.access(reporterId, msg.conversationId, new Date(), { allowEnded: true });
+    } catch {
+      return null;
+    }
     return { cityId: null, ownerUserId: msg.senderId };
   }
 

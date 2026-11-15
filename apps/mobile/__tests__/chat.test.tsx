@@ -461,6 +461,74 @@ describe('thread (F-CHT-01, F-CHT-04)', () => {
     await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
     expect(await screen.findByTestId('readonly-banner')).toHaveTextContent(/Chat opens/);
     expect(screen.queryByTestId('composer')).toBeNull();
+    expect(screen.queryByTestId('closing-soon')).toBeNull();
+  });
+
+  const planChat = (closesInMs: number) =>
+    conversation({
+      kind: 'event',
+      peer: null,
+      eventId: EVENT_ID,
+      title: 'Sunset frisbee',
+      opensAt: '2026-01-01T00:00:00.000Z',
+      closesAt: new Date(Date.now() + closesInMs).toISOString(),
+    });
+
+  it('warns when a plan chat closes within a day (D-208)', async () => {
+    const H = 3_600_000;
+    api
+      .on('GET', `/v1/chats/${CONV}`, { status: 200, body: planChat(5 * H + 20 * 60_000) })
+      .on('GET', `/v1/chats/${CONV}/messages`, page([]));
+    const first = await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('closing-soon')).toHaveTextContent(
+      'This chat closes in 5 hours',
+    );
+    expect(screen.getByTestId('composer')).toBeOnTheScreen();
+    await first.unmount();
+
+    api.on('GET', `/v1/chats/${CONV}`, { status: 200, body: planChat(70 * H) });
+    const later = await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('composer')).toBeOnTheScreen();
+    expect(screen.queryByTestId('closing-soon')).toBeNull();
+    await later.unmount();
+
+    api.on('GET', `/v1/chats/${CONV}`, { status: 200, body: planChat(1 * H + 60_000) });
+    const one = await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('closing-soon')).toHaveTextContent(
+      'This chat closes in 1 hour',
+    );
+    await one.unmount();
+
+    api.on('GET', `/v1/chats/${CONV}`, { status: 200, body: planChat(20 * 60_000) });
+    await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('closing-soon')).toHaveTextContent(
+      'This chat closes in less than an hour',
+    );
+  });
+
+  it('a closed plan chat shows that it has ended, with a way back (D-208)', async () => {
+    const ended = {
+      status: 409,
+      body: {
+        error: {
+          code: 'CHAT_UNAVAILABLE',
+          message: "This plan's chat has ended",
+          details: { reason: 'CHAT_ENDED' },
+        },
+      },
+    };
+    api.on('GET', `/v1/chats/${CONV}`, ended).on('GET', `/v1/chats/${CONV}/messages`, ended);
+    await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('chat-ended')).toBeOnTheScreen();
+    expect(screen.getByText("This plan's chat has ended")).toBeOnTheScreen();
+    expect(screen.queryByTestId('composer')).toBeNull();
+    expect(api.callsTo('POST', `/v1/chats/${CONV}/read`)).toHaveLength(0);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to chats' }));
+    expect(mockRouter.back).toHaveBeenCalled();
+    mockRouter.canGoBack.mockReturnValueOnce(false);
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to chats' }));
+    expect(mockRouter.replace).toHaveBeenCalledWith('/chats');
   });
 });
 
@@ -577,6 +645,26 @@ describe('at the plan (F-ATE-01..03)', () => {
     expect(await screen.findByText('Best biryani in town?')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('dismiss-icebreaker'));
     expect(useRealtime.getState().icebreaker).toBeNull();
+  });
+
+  it('says the plan chat has ended once it closed (D-208)', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}/chat`, {
+      status: 409,
+      body: {
+        error: {
+          code: 'CHAT_UNAVAILABLE',
+          message: "This plan's chat has ended",
+          details: { reason: 'CHAT_ENDED' },
+        },
+      },
+    });
+    await renderWithProviders(<EventTogetherTools event={eventFixture()} />, {
+      fetchFn: api.fetch,
+    });
+    expect(await screen.findByTestId('event-chat-ended')).toHaveTextContent(
+      "This plan's chat has ended",
+    );
+    expect(screen.queryByTestId('event-chat-preview')).toBeNull();
   });
 
   const threadPage = (items: Message[]) => ({

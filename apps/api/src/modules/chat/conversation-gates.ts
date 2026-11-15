@@ -3,9 +3,14 @@ import type { MediaVariants } from '@touchgrass/shared';
 import { EventAccessService } from '../events/event-access.service.js';
 import { canViewEvent, holdsSeat } from '../events/event.policy.js';
 import { EventSearchService } from '../events/event-search.service.js';
-import { EventStore } from '../events/event-store.service.js';
+import { type EventCore, EventStore } from '../events/event-store.service.js';
 import { MediaService } from '../media/media.service.js';
-import { eventChatClosesAt, eventChatOpensAt, eventChatState } from './chat.policy.js';
+import {
+  eventChatClosesAt,
+  eventChatOpensAt,
+  eventChatState,
+  type EventChatTimes,
+} from './chat.policy.js';
 
 export type GateReason = 'NOT_OPEN' | 'CHAT_CLOSED' | 'NOT_MEMBER';
 
@@ -17,6 +22,11 @@ export interface GateAccess {
   host: boolean;
   opensAt: Date | null;
   closesAt: Date | null;
+  /**
+   * The chat has closed for good (event chats, D-208): members get CHAT_ENDED instead of the conversation and
+   * it leaves their inbox. `read` stays true so former members can still report what they saw.
+   */
+  ended: boolean;
 }
 
 /**
@@ -29,6 +39,8 @@ export interface ConversationGate {
   /** Everyone who should receive messages right now. */
   members(refId: string): Promise<string[]>;
   info(refIds: string[]): Promise<Map<string, { title: string; avatar: MediaVariants | null }>>;
+  /** When the conversation closes for good (kept on the conversation row to filter the inbox); null: never. */
+  closesAt?(refId: string): Promise<Date | null>;
 }
 
 @Injectable()
@@ -52,9 +64,13 @@ const NO_ACCESS: GateAccess = {
   host: false,
   opensAt: null,
   closesAt: null,
+  ended: false,
 };
 
-/** Event chats (F-CHT-02): seat holders and hosts; open 24 h before, writable until 48 h after the end. */
+/**
+ * Event chats (F-CHT-02): seat holders and hosts; open 24 h before, writable until 48 h after the end, then
+ * ended (D-208). Cancelled plans' chats are read-only until they close.
+ */
 @Injectable()
 export class EventChatGate implements ConversationGate {
   constructor(
@@ -72,14 +88,31 @@ export class EventChatGate implements ConversationGate {
     const member = facts.hostRole !== null || holdsSeat(facts.rsvp);
     // The host switched the group chat off for this plan (D-156): nobody can read or post.
     if (!core.chatEnabled || !member || !canViewEvent(facts, core)) return NO_ACCESS;
-    const state = eventChatState(core, now);
+    const times = await this.times(core);
+    const state = eventChatState(times, now);
     return {
       read: true,
       write: state === 'open',
       reason: state === 'open' ? null : state === 'not_open' ? 'NOT_OPEN' : 'CHAT_CLOSED',
       host: facts.hostRole !== null,
-      opensAt: eventChatOpensAt(core),
-      closesAt: core.status === 'cancelled' ? now : eventChatClosesAt(core),
+      opensAt: eventChatOpensAt(times),
+      closesAt: eventChatClosesAt(times),
+      ended: state === 'ended',
+    };
+  }
+
+  async closesAt(eventId: string): Promise<Date | null> {
+    const core = await this.store.core(eventId);
+    return core ? eventChatClosesAt(await this.times(core)) : null;
+  }
+
+  /** The cancellation time is only looked up for cancelled plans (it is not part of the cached core). */
+  private async times(core: EventCore): Promise<EventChatTimes> {
+    return {
+      startsAt: core.startsAt,
+      endsAt: core.endsAt,
+      status: core.status,
+      cancelledAt: core.status === 'cancelled' ? await this.store.cancelledAt(core.id) : null,
     };
   }
 

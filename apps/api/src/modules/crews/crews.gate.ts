@@ -17,6 +17,7 @@ export class CrewChatGate implements ConversationGate {
       host: a.host,
       opensAt: null,
       closesAt: null,
+      ended: false,
     };
   }
 

@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { type NotificationParam, resources, SUPPORTED_LANGUAGES } from '@touchgrass/shared';
 import type { DomainEventBus } from '../../worker/domain-event-bus.js';
-import { EVENT_HOST_ADDED_EVENT } from '../events/events.service.js';
+import {
+  EVENT_CANCELLED_EVENT,
+  EVENT_HOST_ADDED_EVENT,
+  EVENT_UPDATED_EVENT,
+} from '../events/events.service.js';
 import { RSVP_GOING_EVENT } from '../events/plus-one/plus-one-claim.service.js';
 import { RSVP_CANCELLED_EVENT } from '../events/rsvp.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -49,6 +53,13 @@ export class ChatHandlers {
     });
     bus.subscribe(EVENT_HOST_ADDED_EVENT, 'chat.join-event-host', async (e) => {
       await this.chat.syncEventMember(e.aggregateId, String(e.payload.userId), true);
+    });
+    // The chat closes 48 h after the plan ends or is cancelled (D-208): keep the inbox filter in step.
+    bus.subscribe(EVENT_UPDATED_EVENT, 'chat.event-close-time', async (e) => {
+      await this.chat.refreshEventChatClose(e.aggregateId);
+    });
+    bus.subscribe(EVENT_CANCELLED_EVENT, 'chat.event-cancelled-close', async (e) => {
+      await this.chat.refreshEventChatClose(e.aggregateId);
     });
     bus.subscribe(RSVP_CANCELLED_EVENT, 'chat.leave-event', async (e) => {
       if (e.payload.hadSeat === true)
