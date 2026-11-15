@@ -56,11 +56,21 @@ export function useMyEvents(scope: MyEventsScope) {
   });
 }
 
-export function useEvent(id: string) {
+/** `pollEveryMs` refetches until `pollUntil` holds for the loaded plan (e.g. a ticket waiting for its scan). */
+export function useEvent(
+  id: string,
+  opts: { pollEveryMs?: number; pollUntil?: (event: EventDetail) => boolean } = {},
+) {
   const { client } = useApi();
+  const { pollEveryMs, pollUntil } = opts;
   return useQuery({
     queryKey: EVENT_KEYS.detail(id),
     queryFn: ({ signal }) => client.request(`/v1/events/${id}`, EventDetail, { signal }),
+    refetchInterval: (query) => {
+      if (!pollEveryMs) return false;
+      const data = query.state.data;
+      return data && pollUntil?.(data) ? false : pollEveryMs;
+    },
   });
 }
 

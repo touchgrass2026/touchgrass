@@ -17,6 +17,7 @@ import { AllPlansRail } from '../../../components/explore/AllPlansRail';
 import { HeroCarousel } from '../../../components/explore/HeroCarousel';
 import { PlanRail } from '../../../components/explore/PlanRail';
 import { SegmentedTabs } from '../../../components/SegmentedTabs';
+import { useGuideTarget } from '../../../components/guide/targets';
 import {
   Button,
   Card,
@@ -62,6 +63,8 @@ export default function DiscoverScreen() {
   const [locationAsked, setLocationAsked] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [view, setView] = useState<'list' | 'map'>('list');
+  // The list/map switch is the tour's first stop (D-205).
+  const viewTarget = useGuideTarget('view');
   const mapEnabled = useFlag('map_view');
   const feed = useFeed(filters, location);
   const click = useFeedClick();
@@ -189,14 +192,16 @@ export default function DiscoverScreen() {
         </Text>
       </Pressable>
       {mapEnabled ? (
-        <SegmentedTabs
-          tabs={[
-            { key: 'list', label: t('discover.list') },
-            { key: 'map', label: t('discover.map') },
-          ]}
-          value={view}
-          onChange={setView}
-        />
+        <View {...viewTarget}>
+          <SegmentedTabs
+            tabs={[
+              { key: 'list', label: t('discover.list') },
+              { key: 'map', label: t('discover.map') },
+            ]}
+            value={view}
+            onChange={setView}
+          />
+        </View>
       ) : null}
     </View>
   );

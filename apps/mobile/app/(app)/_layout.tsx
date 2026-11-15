@@ -4,6 +4,7 @@ import { UpdatePrompt } from '../../components/UpdatePrompt';
 import { useTrack } from '../../src/features/analytics/analytics';
 import { IcebreakerOverlay } from '../../components/at-event/IcebreakerOverlay';
 import { AfterEventPrompter } from '../../src/features/after/prompter';
+import { BadgeCelebration } from '../../components/BadgeCelebration';
 import { RealtimeConnector } from '../../src/features/chat/realtime';
 import { PushLinkHandler } from '../../src/features/notifications/push-links';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +20,7 @@ export default function AppLayout() {
       <IcebreakerOverlay />
       <PushLinkHandler />
       <AfterEventPrompter />
+      <BadgeCelebration />
       <AppOpened />
       <TutorialGate />
       <Stack

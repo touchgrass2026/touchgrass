@@ -246,11 +246,13 @@ export function useCancelProposal(id: string) {
 
 // ---------- gamification (F-GAM-01..04) ----------
 
-export function useBadges() {
+export function useBadges(opts: { enabled?: boolean; refetchEvery?: number } = {}) {
   const { client } = useApi();
   return useQuery({
     queryKey: ENGAGEMENT_KEYS.badges,
+    enabled: opts.enabled ?? true,
     queryFn: ({ signal }) => client.request('/v1/me/badges', BadgeList, { signal }),
+    refetchInterval: opts.refetchEvery ?? false,
   });
 }
 

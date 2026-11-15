@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { EventDetail } from '@touchgrass/shared';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -866,6 +866,59 @@ describe('Tickets, scanning, invites, +1s', () => {
     await renderWithProviders(<TicketScreen />, { fetchFn: api.fetch });
     expect(await screen.findByLabelText('Your check-in code')).toBeOnTheScreen();
     expect(screen.getByText(/^Valid /)).toBeOnTheScreen();
+  });
+
+  it('swaps the code for "You\'re checked in" once a host scans it (D-205)', async () => {
+    jest.useFakeTimers();
+    try {
+      api
+        .on('GET', `/v1/events/${EVENT_ID}`, {
+          status: 200,
+          body: eventFixture({}, { rsvp: 'going', canRsvp: false }),
+        })
+        .on('GET', `/v1/events/${EVENT_ID}/ticket`, {
+          status: 200,
+          body: {
+            qr: `tg1.${EVENT_ID}.${ids.me}.${'a'.repeat(32)}`,
+            eventId: EVENT_ID,
+            validFrom: '2026-11-03T12:00:00.000Z',
+            validUntil: '2026-11-03T14:30:00.000Z',
+          },
+        });
+      await renderWithProviders(<TicketScreen />, { fetchFn: api.fetch });
+      expect(await screen.findByLabelText('Your check-in code')).toBeOnTheScreen();
+      expect(screen.queryByTestId('ticket-checked-in')).toBeNull();
+      // The host scans it; the open ticket notices on its next check.
+      api.on('GET', `/v1/events/${EVENT_ID}`, {
+        status: 200,
+        body: eventFixture({}, { rsvp: 'checked_in', canRsvp: false }),
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(4500);
+      });
+      expect(await screen.findByTestId('ticket-checked-in')).toBeOnTheScreen();
+      expect(screen.getByText("You're checked in")).toBeOnTheScreen();
+      expect(screen.queryByLabelText('Your check-in code')).toBeNull();
+      // Once in, it stops asking.
+      const asked = api.callsTo('GET', `/v1/events/${EVENT_ID}`).length;
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(12_000);
+      });
+      expect(api.callsTo('GET', `/v1/events/${EVENT_ID}`)).toHaveLength(asked);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('a checked-in guest sees their status on the plan instead of the code', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture({}, { rsvp: 'checked_in', canRsvp: false }),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('checked-in-status')).toBeOnTheScreen();
+    expect(screen.queryByTestId('open-ticket')).toBeNull();
+    expect(screen.queryByTestId('self-check-in')).toBeNull();
   });
 
   it('hosts check people in with a typed code when the camera is unavailable', async () => {

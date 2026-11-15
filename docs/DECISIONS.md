@@ -896,3 +896,10 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 - Photo overlays: text, shadows, scrims and chips over photos come from the shared `media` tokens instead of hex values repeated in five components.
 - Accent once per surface: on plan cards the date and people icons and the going count are ink, the action button keeps the accent, and the decorative arrow on every card button is gone (a check shows only when you are going).
 - Type and icons: nothing under 12px apart from notification counts (dock labels and chat kind tags 11 → 12); icon sizes on the 14/16/18/20/24 scale (13 and 15 removed).
+
+## D-205 Tour aligned to real controls, checked-in tickets, badge celebrations
+
+- The first-launch tour measures what it points at: each target registers its on-screen box with `useGuideTarget` (`components/guide/targets.ts`) and the ring, arrow and tip are drawn from it, in a full-screen modal so the coordinates match. It now starts with the List / Map switch on Explore, then the dock; a step whose control is not on screen is left out. The storage key moved to v2, so everyone sees the corrected tour once.
+- An open ticket checks the plan every 4 seconds until a host scans it, then shows "You're checked in" instead of the code and stops checking. On the plan screen a checked-in guest sees that status instead of the ticket and "I'm here" buttons.
+- Badges are celebrated as they are won: checked on launch, on returning to the app and every 2 minutes while open; each earned badge this install has not shown gets a moment (medal, name, confetti that Reduce Motion turns off, See your badges / Nice). The first check on an install records existing badges silently. Off in e2e builds, like the tour.
+

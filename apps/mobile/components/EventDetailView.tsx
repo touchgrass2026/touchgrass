@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { MapPin } from './icons';
+import { Check, MapPin } from './icons';
 import { type EventDetail, LIMITS } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
@@ -456,7 +456,12 @@ export function EventDetailView({
             />
           ) : null}
 
-          {holdsSeat && open && !v.isHost ? (
+          {v.rsvp === 'checked_in' && open && !v.isHost ? (
+            <IconText icon={Check} tone="primary" variant="heading" testID="checked-in-status">
+              {t('events.checkedInTitle')}
+            </IconText>
+          ) : null}
+          {v.rsvp === 'going' && open && !v.isHost ? (
             <>
               <Button
                 label={t('events.ticket')}
