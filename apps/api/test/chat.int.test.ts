@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import type { ConversationSummary, Message, MessagePage, PollView } from '@touchgrass/shared';
+import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { io, type Socket } from 'socket.io-client';
@@ -9,6 +10,8 @@ import { FakePushSender } from '../src/adapters/push/fake.push.js';
 import { AtEventService } from '../src/modules/at-event/at-event.service.js';
 import { ChatPresence } from '../src/modules/chat/chat-presence.js';
 import { ChatHandlers } from '../src/modules/chat/chat.handlers.js';
+import { ChatService } from '../src/modules/chat/chat.service.js';
+import { EventStore } from '../src/modules/events/event-store.service.js';
 import { createRealtimeApp } from '../src/realtime/bootstrap-realtime.js';
 import { DomainEventBus } from '../src/worker/domain-event-bus.js';
 import { idem, plot, rsvp, shiftEvent, verifiedMember } from './event-helpers.js';
@@ -17,6 +20,7 @@ import {
   befriend,
   createHarness,
   type Harness,
+  interestIds,
   member,
   type Member,
   testJpeg,
@@ -517,18 +521,41 @@ describe('event group chat (F-CHT-02) and polls (F-CHT-05)', () => {
       .set(...bearer(b.token))
       .expect(404);
 
-    await shiftEvent(h, e.id, -60 * H, H);
-    const after = (
+    // Still writable a day after the plan, with the closing time on the summary.
+    await shiftEvent(h, e.id, -26 * H, H);
+    const lastDay = (
       await request(h.http)
         .get(`/v1/chats/${early.id}`)
         .set(...bearer(a.token))
         .expect(200)
     ).body as ConversationSummary;
-    expect(after.readOnly).toBe(true);
-    expect((await send(a, early.id, { body: 'late' }).expect(409)).body.error.details).toEqual({
-      reason: 'CHAT_CLOSED',
-    });
-    expect((await page(a, early.id)).items[0]?.body).toBe('See you all there!');
+    expect(lastDay.readOnly).toBe(false);
+    expect(Date.parse(lastDay.closesAt ?? '')).toBeGreaterThan(Date.now() + 22 * H);
+    expect(Date.parse(lastDay.closesAt ?? '')).toBeLessThan(Date.now() + 24 * H);
+
+    // 48 h after the end the chat has ended (D-208): no reading, no writing, but the messages are kept.
+    await shiftEvent(h, e.id, -60 * H, H);
+    const ended = { reason: 'CHAT_ENDED' };
+    expect(
+      (
+        await request(h.http)
+          .get(`/v1/chats/${early.id}`)
+          .set(...bearer(a.token))
+          .expect(409)
+      ).body.error,
+    ).toMatchObject({ code: 'CHAT_UNAVAILABLE', details: ended });
+    expect((await send(a, early.id, { body: 'late' }).expect(409)).body.error.details).toEqual(
+      ended,
+    );
+    await request(h.http)
+      .get(`/v1/chats/${early.id}/messages`)
+      .set(...bearer(a.token))
+      .expect(409);
+    const { rows } = await h.pool.query<{ body: string }>(
+      "SELECT body FROM messages WHERE conversation_id = $1 AND kind = 'text'",
+      [early.id],
+    );
+    expect(rows.map((r) => r.body)).toEqual(['See you all there!']);
   });
 
   it('hosts run polls; votes are single or multiple choice, anonymous hides voters, results go live', async () => {
@@ -613,6 +640,212 @@ describe('event group chat (F-CHT-02) and polls (F-CHT-05)', () => {
         .expect(200)
     ).body as PollView;
     expect(anonView.options.every((o) => o.votes === 1 && o.voters.length === 0)).toBe(true);
+  });
+});
+
+/** What the worker does when a plan moves or is cancelled: the chat's closing time follows (D-208). */
+async function planChanged(
+  eventId: string,
+  type: 'event.updated' | 'event.cancelled',
+): Promise<void> {
+  const bus = new DomainEventBus();
+  h.app.get(ChatHandlers).registerOn(bus);
+  await bus.dispatch({
+    eventId: randomUUID(),
+    aggregateType: 'event',
+    aggregateId: eventId,
+    type,
+    payload: { eventId },
+    occurredAt: new Date().toISOString(),
+  });
+}
+
+async function inboxPages(m: Member, limit: number): Promise<ConversationSummary[][]> {
+  const pages: ConversationSummary[][] = [];
+  let cursor: string | null = null;
+  do {
+    const res = await request(h.http)
+      .get('/v1/chats')
+      .query(cursor ? { limit, cursor } : { limit })
+      .set(...bearer(m.token))
+      .expect(200);
+    const body = res.body as { items: ConversationSummary[]; nextCursor: string | null };
+    pages.push(body.items);
+    cursor = body.nextCursor;
+  } while (cursor && pages.length < 10);
+  return pages;
+}
+
+describe('closed plan chats (D-208)', () => {
+  it('leave the inbox and unread counts, open as CHAT_ENDED, notify nobody; DMs and crews stay', async () => {
+    const host = await verifiedMember(h);
+    // Verified so they can start a crew.
+    const a = await verifiedMember(h);
+    const [friend, outsider] = [await member(h), await member(h)];
+    await befriend(h, a, friend);
+    const dm = (await startDm(friend, a).expect(201)).body as ConversationSummary;
+    await send(friend, dm.id, { body: 'dm before the plan' }).expect(201);
+
+    const planChat = async (): Promise<{ eventId: string; conv: ConversationSummary }> => {
+      const e = await plot(h, host);
+      await rsvp(h, a, e.id).expect(200);
+      await shiftEvent(h, e.id, 3 * H);
+      const conv = (
+        await request(h.http)
+          .get(`/v1/events/${e.id}/chat`)
+          .set(...bearer(a.token))
+          .expect(200)
+      ).body as ConversationSummary;
+      return { eventId: e.id, conv };
+    };
+    const closing = await planChat();
+    const host1 = (await send(host, closing.conv.id, { body: 'see you at 6' }).expect(201))
+      .body as Message;
+    const staying = await planChat();
+    await send(host, staying.conv.id, { body: 'bring water' }).expect(201);
+
+    const [interestId] = await interestIds(h, 1);
+    const crew = (
+      await request(h.http)
+        .post('/v1/crews')
+        .set(...bearer(a.token))
+        .set(...idem())
+        .send({ name: 'Lake walkers', description: 'Slow loops.', interestId })
+        .expect(201)
+    ).body as { id: string };
+    const crewChat = (
+      await request(h.http)
+        .get(`/v1/crews/${crew.id}/chat`)
+        .set(...bearer(a.token))
+        .expect(200)
+    ).body as ConversationSummary;
+
+    const all = [dm.id, closing.conv.id, staying.conv.id, crewChat.id];
+    const before = await inbox(a);
+    expect(new Set(before.map((c) => c.id))).toEqual(new Set(all));
+    expect(before.find((c) => c.id === closing.conv.id)?.unreadCount).toBe(1);
+
+    // The plan was two and a half days ago: its chat closed 12 h ago.
+    await shiftEvent(h, closing.eventId, -62 * H);
+    await planChanged(closing.eventId, 'event.updated');
+    const after = await inbox(a);
+    expect(new Set(after.map((c) => c.id))).toEqual(new Set([dm.id, staying.conv.id, crewChat.id]));
+    expect(after.reduce((n, c) => n + c.unreadCount, 0)).toBe(
+      before.reduce((n, c) => n + c.unreadCount, 0) - 1,
+    );
+    expect((await inbox(host)).map((c) => c.id)).not.toContain(closing.conv.id);
+
+    // Filtered in the query: every page is full and the cursor walks straight past the closed chat.
+    const pages = await inboxPages(a, 1);
+    expect(pages.map((p) => p.length)).toEqual([1, 1, 1]);
+    expect(new Set(pages.flat().map((c) => c.id))).toEqual(
+      new Set([dm.id, staying.conv.id, crewChat.id]),
+    );
+
+    // Opening it directly (old push, deep link) says it has ended, for members and hosts alike.
+    for (const m of [a, host]) {
+      const res = await request(h.http)
+        .get(`/v1/chats/${closing.conv.id}`)
+        .set(...bearer(m.token))
+        .expect(409);
+      expect(res.body.error).toMatchObject({
+        code: 'CHAT_UNAVAILABLE',
+        details: { reason: 'CHAT_ENDED' },
+      });
+    }
+    expect(
+      (
+        await request(h.http)
+          .get(`/v1/events/${closing.eventId}/chat`)
+          .set(...bearer(a.token))
+          .expect(409)
+      ).body.error.details,
+    ).toEqual({ reason: 'CHAT_ENDED' });
+    // Outsiders still learn nothing about it.
+    await request(h.http)
+      .get(`/v1/chats/${closing.conv.id}`)
+      .set(...bearer(outsider.token))
+      .expect(404);
+
+    // No pushes for it, even for a message sent just before it closed.
+    const chat = h.app.get(ChatService);
+    expect(await chat.pushRecipients(closing.conv.id, host.id, () => Promise.resolve(false))).toBe(
+      null,
+    );
+    expect(
+      (await chat.pushRecipients(staying.conv.id, host.id, () => Promise.resolve(false)))?.userIds,
+    ).toEqual([a.id]);
+
+    // The messages stay for moderation: people who were in it can still report what they saw.
+    await request(h.http)
+      .post('/v1/reports')
+      .set(...bearer(a.token))
+      .set(...idem())
+      .send({ targetType: 'message', targetId: host1.id, category: 'harassment' })
+      .expect(201);
+    await request(h.http)
+      .post('/v1/reports')
+      .set(...bearer(outsider.token))
+      .set(...idem())
+      .send({ targetType: 'message', targetId: host1.id, category: 'harassment' })
+      .expect(404);
+
+    // Moving the plan later brings the chat back while it is open again.
+    await shiftEvent(h, closing.eventId, 2 * H);
+    await planChanged(closing.eventId, 'event.updated');
+    expect((await inbox(a)).map((c) => c.id)).toContain(closing.conv.id);
+  });
+
+  it('a cancelled plan’s chat is read-only, then closes 48 h after the cancellation', async () => {
+    const host = await verifiedMember(h);
+    const a = await member(h);
+    const e = await plot(h, host);
+    await rsvp(h, a, e.id).expect(200);
+    await shiftEvent(h, e.id, 30 * H);
+    const conv = (
+      await request(h.http)
+        .get(`/v1/events/${e.id}/chat`)
+        .set(...bearer(a.token))
+        .expect(200)
+    ).body as ConversationSummary;
+    await request(h.http)
+      .post(`/v1/events/${e.id}/cancel`)
+      .set(...bearer(host.token))
+      .set(...idem())
+      .send({ reason: 'Rain' })
+      .expect(200);
+    await planChanged(e.id, 'event.cancelled');
+    const readOnly = (
+      await request(h.http)
+        .get(`/v1/chats/${conv.id}`)
+        .set(...bearer(a.token))
+        .expect(200)
+    ).body as ConversationSummary;
+    expect(readOnly.readOnly).toBe(true);
+    // 48 h after the cancellation (sooner than 48 h after the planned end).
+    expect(Math.abs(Date.parse(readOnly.closesAt ?? '') - (Date.now() + 48 * H))).toBeLessThan(
+      5 * 60_000,
+    );
+    expect((await send(a, conv.id, { body: 'still on?' }).expect(409)).body.error.details).toEqual({
+      reason: 'CHAT_CLOSED',
+    });
+    expect((await inbox(a)).map((c) => c.id)).toContain(conv.id);
+
+    await h.pool.query(
+      "UPDATE events SET cancelled_at = now() - interval '49 hours' WHERE id = $1",
+      [e.id],
+    );
+    await h.app.get(EventStore).invalidate(e.id);
+    await planChanged(e.id, 'event.cancelled');
+    expect((await inbox(a)).map((c) => c.id)).not.toContain(conv.id);
+    expect(
+      (
+        await request(h.http)
+          .get(`/v1/chats/${conv.id}`)
+          .set(...bearer(a.token))
+          .expect(409)
+      ).body.error.details,
+    ).toEqual({ reason: 'CHAT_ENDED' });
   });
 });
 

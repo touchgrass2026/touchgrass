@@ -1,4 +1,5 @@
 import { LIMITS, type Message, REACTIONS } from '@touchgrass/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +19,7 @@ import { fontFamilyFor } from '../../../../src/theme/fonts';
 import { MessageBubble } from '../../../../components/chat/MessageBubble';
 import {
   Button,
+  EmptyState,
   ErrorState,
   FadeIn,
   Icon,
@@ -28,6 +30,8 @@ import {
   Pressable,
 } from '../../../../components/ui';
 import {
+  closingInHours,
+  isChatEnded,
   useClosePoll,
   useConversation,
   useDeleteMessage,
@@ -91,6 +95,13 @@ export default function ThreadScreen() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const lastTyping = useRef(0);
+  const queryClient = useQueryClient();
+  // A plan chat closes for good 48 h after the plan (D-208); an old push or link lands here instead.
+  const ended = isChatEnded(conv.error) || isChatEnded(msgs.error);
+
+  useEffect(() => {
+    if (ended) void queryClient.invalidateQueries({ queryKey: ['chat', 'inbox'] });
+  }, [ended, queryClient]);
 
   // Presence: while this screen is open the server knows we are looking (no push for this chat).
   useEffect(() => {
@@ -116,11 +127,28 @@ export default function ThreadScreen() {
 
   // Read up to the newest message from someone else.
   useEffect(() => {
-    if (latestFromOthers) markRead.mutate(latestFromOthers.id);
+    if (latestFromOthers && !ended) markRead.mutate(latestFromOthers.id);
     // markRead is stable per conversation; re-run only when the newest incoming message changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestFromOthers?.id]);
 
+  if (ended)
+    return (
+      <SafeAreaView
+        style={[styles.screen, { backgroundColor: theme.colors.background }]}
+        testID="chat-ended"
+      >
+        <EmptyState
+          title={t('chat.endedTitle')}
+          body={t('chat.endedBody')}
+          actionLabel={t('chat.backToChats')}
+          onAction={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/chats');
+          }}
+        />
+      </SafeAreaView>
+    );
   if (conv.isPending || msgs.isPending) return <LoadingState />;
   if (conv.isError)
     return (
@@ -144,6 +172,7 @@ export default function ThreadScreen() {
   const group = c.kind !== 'direct';
   const canWrite = !c.readOnly;
   const names = Object.values(typing ?? {}).filter((n) => n.length > 0);
+  const closingIn = closingInHours(c, Date.now());
 
   const rows: Row[] = [
     ...[...pending].reverse().map((p) => ({ kind: 'pending' as const, clientId: p.clientId })),
@@ -238,6 +267,19 @@ export default function ThreadScreen() {
         {c.opensAt && new Date(c.opensAt).getTime() > Date.now()
           ? t('chat.opensAt', { time: formatWhen(c.opensAt, i18n.language) })
           : t('chat.closed')}
+      </Text>
+    ) : closingIn !== null ? (
+      // So the chat never vanishes by surprise (D-208).
+      <Text
+        variant="caption"
+        tone="muted"
+        style={styles.notice}
+        accessibilityLiveRegion="polite"
+        testID="closing-soon"
+      >
+        {closingIn === 0
+          ? t('chat.closesInUnderHour')
+          : t('chat.closesInHours', { count: closingIn })}
       </Text>
     ) : null;
 
@@ -596,6 +638,7 @@ const styles = StyleSheet.create({
   },
   chatTitle: { fontSize: 20, lineHeight: 26 },
   banner: { padding: 16, gap: 8 },
+  notice: { paddingHorizontal: 16, paddingVertical: 8 },
   list: { paddingHorizontal: 16, paddingVertical: 8 },
   typing: { paddingHorizontal: 16 },
   composer: { borderTopWidth: 1, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },

@@ -11,6 +11,8 @@ import {
   canDeleteForEveryone,
   directKey,
   dmPermission,
+  eventChatClosesAt,
+  eventChatEnded,
   eventChatState,
   excerpt,
   MUTED_FOREVER,
@@ -29,15 +31,39 @@ describe('event chat window (F-CHT-02)', () => {
     endsAt: new Date(NOW.getTime() + (startsInH + hours) * H),
     status,
   });
-  it('opens 24 h before, stays writable until 48 h after the end, then read-only', () => {
+  it('opens 24 h before, stays writable until 48 h after the end, then has ended (D-208)', () => {
     expect(eventChatState(plan(25), NOW)).toBe('not_open');
     expect(eventChatState(plan(24), NOW)).toBe('open');
     expect(eventChatState(plan(-49, 1), NOW)).toBe('open');
-    expect(eventChatState(plan(-51, 2), NOW)).toBe('read_only');
+    expect(eventChatState(plan(-51, 2), NOW)).toBe('ended');
+    expect(eventChatState({ ...plan(-51, 2), status: 'completed' }, NOW)).toBe('ended');
   });
-  it('cancelled plans are read-only, drafts never open', () => {
+  it('closes 48 h after the end, inclusive of the closing instant', () => {
+    const p = plan(-10, 2);
+    const closes = eventChatClosesAt(p);
+    expect(closes.toISOString()).toBe(new Date(NOW.getTime() + 40 * H).toISOString());
+    expect(eventChatEnded(closes, closes)).toBe(false);
+    expect(eventChatEnded(closes, new Date(closes.getTime() + 1))).toBe(true);
+  });
+  it('cancelled plans are read-only until 48 h after the cancellation (or the end, if sooner)', () => {
+    const cancelled = { ...plan(72, 2, 'cancelled'), cancelledAt: new Date(NOW.getTime() - H) };
+    expect(eventChatState(cancelled, NOW)).toBe('read_only');
+    expect(eventChatClosesAt(cancelled).toISOString()).toBe(
+      new Date(NOW.getTime() + 47 * H).toISOString(),
+    );
+    expect(eventChatState(cancelled, new Date(NOW.getTime() + 48 * H))).toBe('ended');
+    // Cancelled after it was over: the planned end still decides.
+    const late = { ...plan(-30, 2, 'cancelled'), cancelledAt: NOW };
+    expect(eventChatClosesAt(late).toISOString()).toBe(
+      new Date(NOW.getTime() + 20 * H).toISOString(),
+    );
+    // Unknown cancellation time: the planned end decides.
     expect(eventChatState(plan(2, 2, 'cancelled'), NOW)).toBe('read_only');
+    expect(eventChatState(plan(-60, 2, 'cancelled'), NOW)).toBe('ended');
+  });
+  it('drafts never open', () => {
     expect(eventChatState(plan(2, 2, 'draft'), NOW)).toBe('not_open');
+    expect(eventChatState(plan(-60, 2, 'draft'), NOW)).toBe('not_open');
   });
 });
 

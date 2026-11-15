@@ -177,6 +177,16 @@ export class EventStore {
     return row?.id ?? null;
   }
 
+  /** When a cancelled event was called off (null if it was not, or the time is unknown). */
+  async cancelledAt(id: string): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ at: events.cancelledAt })
+      .from(events)
+      .where(eq(events.id, id))
+      .limit(1);
+    return row?.at ?? null;
+  }
+
   async invalidate(id: string): Promise<void> {
     await this.redis.del(`cache:event:v3:${id}`);
   }

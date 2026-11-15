@@ -39,6 +39,8 @@ export const conversations = pgTable('conversations', {
   createdBy: uuid('created_by'),
   lastMessageId: uuid('last_message_id'),
   lastMessageAt: ts('last_message_at'),
+  /** Event chats only: closed for good after this (leaves the inbox, D-208). */
+  closesAt: ts('closes_at'),
   ...timestamps,
 });
 

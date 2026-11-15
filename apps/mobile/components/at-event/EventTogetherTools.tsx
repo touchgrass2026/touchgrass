@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import type { Message } from '@touchgrass/shared';
 import { flatten } from '../../src/features/social/api';
-import { useEventChat, useMessages } from '../../src/features/chat/api';
+import { isChatEnded, useEventChat, useMessages } from '../../src/features/chat/api';
 import { useRealtime } from '../../src/features/chat/realtime';
 import { Button, Card, Text } from '../ui';
 
@@ -50,7 +50,12 @@ export function EventTogetherTools({ event }: { event: EventDetail }) {
           {t('events.chatOff')}
         </Text>
       ) : null}
-      {chat.data ? (
+      {isChatEnded(chat.error) ? (
+        // Plan chats close 48 h after the plan (D-208), even if an older copy is still cached.
+        <Text tone="muted" testID="event-chat-ended">
+          {t('chat.endedTitle')}
+        </Text>
+      ) : chat.data ? (
         <Card testID="event-chat-preview">
           <ChatPreview id={chat.data.id} />
           <EventChatButton id={chat.data.id} unread={chat.data.unreadCount} />

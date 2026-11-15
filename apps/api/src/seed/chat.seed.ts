@@ -11,7 +11,7 @@ import {
   polls,
   pollVotes,
 } from '../infra/database/schema/index.js';
-import { directKey, uuidV7At, uuidV7Time } from '../modules/chat/chat.policy.js';
+import { directKey, eventChatClosesAt, uuidV7At, uuidV7Time } from '../modules/chat/chat.policy.js';
 
 type Category = 'light' | 'deep' | 'playful' | 'local';
 
@@ -316,9 +316,17 @@ export async function seedChat(
     }
   }
 
-  // Group chats for the five most recent completed seeded plans, with history and a poll.
-  const recent = await tx.execute<{ id: string; starts_at: Date; creator_user_id: string }>(sql`
-    SELECT id, starts_at, creator_user_id FROM events WHERE slug LIKE 'seedev%' AND status = 'completed'
+  // Group chats for the five most recent completed seeded plans, with history and a poll. They close 48 h after
+  // each plan ends (D-208), so the older ones are already gone from the inbox.
+  const recent = await tx.execute<{
+    id: string;
+    starts_at: Date;
+    ends_at: Date;
+    status: string;
+    creator_user_id: string;
+  }>(sql`
+    SELECT id, starts_at, ends_at, status, creator_user_id FROM events
+    WHERE slug LIKE 'seedev%' AND status = 'completed'
     ORDER BY starts_at DESC LIMIT 5`);
   for (const ev of recent.rows) {
     const [exists] = await tx
@@ -328,7 +336,12 @@ export async function seedChat(
       .limit(1);
     if (exists) continue;
     const id = uuidv7();
-    await tx.insert(conversations).values({ id, kind: 'event', eventId: ev.id });
+    await tx.insert(conversations).values({
+      id,
+      kind: 'event',
+      eventId: ev.id,
+      closesAt: eventChatClosesAt({ endsAt: new Date(ev.ends_at), status: ev.status }),
+    });
     const attendees = await tx.execute<{ user_id: string }>(sql`
       SELECT user_id FROM rsvps WHERE event_id = ${ev.id} AND status IN ('going','checked_in') ORDER BY created_at LIMIT 8`);
     const people = attendees.rows.map((r) => r.user_id);

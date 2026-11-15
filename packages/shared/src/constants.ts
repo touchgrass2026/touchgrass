@@ -119,7 +119,10 @@ export const LIMITS = {
   },
   chat: {
     eventChatOpensBeforeMs: 24 * HOUR_MS,
+    /** Writable until then, and gone from everyone's inbox right after (D-208). */
     eventChatClosesAfterMs: 48 * HOUR_MS,
+    /** The app warns that an event chat is about to close this long before (D-208). */
+    eventChatClosingNoticeMs: 24 * HOUR_MS,
     deleteForEveryoneWindowMs: HOUR_MS,
     dmSharedEventWindowMs: 30 * DAY_MS,
     maxMessageLength: 4000,

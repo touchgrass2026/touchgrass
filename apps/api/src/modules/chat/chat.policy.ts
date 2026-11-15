@@ -2,26 +2,44 @@ import { LIMITS } from '@touchgrass/shared';
 
 const C = LIMITS.chat;
 
-export type EventChatState = 'not_open' | 'open' | 'read_only';
+export type EventChatState = 'not_open' | 'open' | 'read_only' | 'ended';
+
+export interface EventChatTimes {
+  startsAt: Date;
+  endsAt: Date;
+  status: string;
+  /** When a cancelled plan was called off (unknown: the planned end is used instead). */
+  cancelledAt?: Date | null;
+}
 
 /**
- * Event chats (F-CHT-02): open 24 h before the start and stay writable until 48 h after the end; after that,
- * or once the plan is cancelled, they are read-only history.
+ * Event chats (F-CHT-02, D-208): open 24 h before the start and stay writable until they close, 48 h after the
+ * end. A cancelled plan's chat is read-only straight away and closes 48 h after the cancellation (or the planned
+ * end, if that is sooner). A closed chat has ended: it leaves everyone's inbox and cannot be opened, but its
+ * messages are kept (moderation, reports, account export and erasure).
  */
-export function eventChatState(
-  e: { startsAt: Date; endsAt: Date; status: string },
-  now: Date,
-): EventChatState {
-  if (e.status === 'cancelled' || e.status === 'draft')
-    return e.status === 'draft' ? 'not_open' : 'read_only';
+export function eventChatState(e: EventChatTimes, now: Date): EventChatState {
+  if (e.status === 'draft') return 'not_open';
+  if (eventChatEnded(eventChatClosesAt(e), now)) return 'ended';
+  if (e.status === 'cancelled') return 'read_only';
   if (now.getTime() < eventChatOpensAt(e).getTime()) return 'not_open';
-  if (now.getTime() > eventChatClosesAt(e).getTime()) return 'read_only';
   return 'open';
 }
 export const eventChatOpensAt = (e: { startsAt: Date }): Date =>
   new Date(e.startsAt.getTime() - C.eventChatOpensBeforeMs);
-export const eventChatClosesAt = (e: { endsAt: Date }): Date =>
-  new Date(e.endsAt.getTime() + C.eventChatClosesAfterMs);
+/** When the chat closes and leaves the inbox. */
+export function eventChatClosesAt(
+  e: Pick<EventChatTimes, 'endsAt' | 'status' | 'cancelledAt'>,
+): Date {
+  const until =
+    e.status === 'cancelled' && e.cancelledAt
+      ? Math.min(e.endsAt.getTime(), e.cancelledAt.getTime())
+      : e.endsAt.getTime();
+  return new Date(until + C.eventChatClosesAfterMs);
+}
+/** Still usable up to and including the closing instant (the inbox query uses the same `>=`). */
+export const eventChatEnded = (closesAt: Date, now: Date): boolean =>
+  now.getTime() > closesAt.getTime();
 
 /**
  * Direct messages (F-CHT-01): squad, or people who shared a plan in the last 30 days, chat freely; anyone else
