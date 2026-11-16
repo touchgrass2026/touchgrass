@@ -1003,3 +1003,7 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 
 - Squad has a "Find people" field: from two letters it searches people (the existing `/v1/discover/search?type=people`, same privacy rules) and the results take the place of the tabs and the suggestion strip. Each result carries `relationship` (squad / request_sent / request_received / none, default none) so the row offers the right Add / Requested / Accept button.
 - Lists no longer wait for a restart: TanStack Query's focus manager follows AppState (stale queries refetch when the app returns to the foreground; polling pauses in the background); Explore, Plans, Chats and Squad refresh when you return to their tab (`useRefreshOnFocus`) and on pull-down (`Screen onRefresh`); the feed, story tray and who's free also refresh every minute while on screen. The feed snapshot cache already moves on when plans change (D-196), so a refetch shows new plans at once.
+
+## D-216 The tour re-measures its targets when it opens and on every step
+
+- A view's onLayout only fires when its box changes relative to its parent. On Explore the safe area inset and the header settle after the first layout and move the List/Map switch down without its own layout changing, so the tour kept its first, stale box (a status bar too high). Targets now register a "measure me now" with the tour, which re-measures every target and its own overlay when it opens, on each step, and again 0.3 s and 1 s later. Storage key v4, so testers see the corrected tour once.

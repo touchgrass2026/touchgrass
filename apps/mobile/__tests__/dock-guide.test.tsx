@@ -45,7 +45,7 @@ describe('first-launch tour (D-198, D-205, D-214)', () => {
       done(OVERLAY.x, OVERLAY.y, OVERLAY.width, OVERLAY.height);
     });
     resetStores();
-    useGuideTargets.setState({ rects: {} });
+    useGuideTargets.setState({ rects: {}, measurers: {} });
     await AsyncStorage.clear();
   });
 
@@ -82,6 +82,25 @@ describe('first-launch tour (D-198, D-205, D-214)', () => {
     };
     // The raised + button's box (y 752 in the window) moved into the overlay's own coordinates (y - 24).
     expect(ring).toMatchObject({ left: 162, top: 722, width: 66, height: 66 });
+  });
+
+  it('re-measures when it opens, so a control moved after its first layout is ringed where it is now (D-216)', async () => {
+    // First measured at y 120; the safe area inset then pushed the screen down 30 without the switch's own
+    // layout changing, so only a fresh measurement knows it is now at y 150.
+    measureAll();
+    const moved = { ...BOXES.view, y: 150 };
+    const measureView = jest.fn(() => {
+      useGuideTargets.getState().set('view', moved);
+    });
+    useGuideTargets.getState().setMeasurer('view', measureView);
+    await renderTour();
+    await screen.findByText('List or map');
+    expect(measureView).toHaveBeenCalled();
+    const ring = StyleSheet.flatten(screen.getByTestId('dock-guide-ring').props.style) as {
+      top: number;
+    };
+    // 150 in the window, minus the overlay's 24 origin, minus the 6 ring padding.
+    expect(ring.top).toBe(120);
   });
 
   it('leaves out a control that is not on screen, and waits for the dock', async () => {

@@ -15,7 +15,7 @@ import { Button, Text } from './ui';
 
 export { GUIDE_STEPS as DOCK_GUIDE_STEPS, type GuideStep as DockGuideStep } from './guide/targets';
 /** v2 (D-205): the tour measures its targets and starts with List / Map; v1 drew the ring from a guess. */
-export const DOCK_GUIDE_KEY = 'tg:dock-guide:v3';
+export const DOCK_GUIDE_KEY = 'tg:dock-guide:v4';
 
 /** Has this install seen the guide? Reset from Settings → Replay tutorial. */
 export async function resetDockGuide(): Promise<void> {
@@ -88,6 +88,26 @@ export function DockGuide() {
       sub.remove();
     };
   }, [active]);
+
+  // Measure where everything is right now, not where it was at first layout (D-216): when the tour opens,
+  // on every step, and again as late layout (safe area, header, loaded rows) settles.
+  const remeasure = useGuideTargets((s) => s.remeasure);
+  useEffect(() => {
+    if (!active) return undefined;
+    const now = (): void => {
+      remeasure();
+      requestAnimationFrame(() => {
+        measureInWindowOf(root.current, (x, y, width, height) => {
+          if (width > 0 && height > 0) setFrame({ x, y, width, height });
+        });
+      });
+    };
+    now();
+    const timers = [setTimeout(now, 300), setTimeout(now, 1000)];
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [active, index, remeasure]);
 
   // Wait until the dock itself has been measured before starting.
   if (!active || rects.plot === undefined) return null;

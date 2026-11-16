@@ -17,10 +17,26 @@ export interface GuideRect {
 interface GuideTargets {
   rects: Partial<Record<GuideStep, GuideRect>>;
   set: (key: GuideStep, rect: GuideRect | null) => void;
+  /** Each mounted target's "measure me now" (D-216). */
+  measurers: Partial<Record<GuideStep, () => void>>;
+  setMeasurer: (key: GuideStep, measure: (() => void) | null) => void;
+  /** Re-measures every target where it is right now. */
+  remeasure: () => void;
 }
 
-export const useGuideTargets = create<GuideTargets>((set) => ({
+export const useGuideTargets = create<GuideTargets>((set, get) => ({
   rects: {},
+  measurers: {},
+  setMeasurer: (key, measure) => {
+    set((s) => ({
+      measurers: measure
+        ? { ...s.measurers, [key]: measure }
+        : Object.fromEntries(Object.entries(s.measurers).filter(([k]) => k !== key)),
+    }));
+  },
+  remeasure: () => {
+    for (const measure of Object.values(get().measurers)) measure();
+  },
   set: (key, rect) => {
     set((s) => {
       const prev = s.rects[key];
@@ -53,7 +69,9 @@ export function measureInWindowOf(
 
 /**
  * Registers a view as a tour target. Spread the result on the view: its real on-screen box is measured
- * after each layout, so the ring and the tip line up with it on every device.
+ * after each layout, and again whenever the tour asks (`remeasure`), so the ring and the tip line up with
+ * it on every device. A view's own onLayout does not fire when something above it moves it (the safe
+ * area inset arriving, a header growing), so layout alone left a stale box (D-216).
  */
 export function useGuideTarget(key: GuideStep): {
   ref: React.RefObject<HostInstance | null>;
@@ -62,20 +80,23 @@ export function useGuideTarget(key: GuideStep): {
 } {
   const ref = useRef<HostInstance | null>(null);
   const setRect = useGuideTargets((s) => s.set);
-  // Forget the box when the view goes away, so the tour never points at a stale spot.
-  useEffect(
-    () => () => {
-      setRect(key, null);
-    },
-    [key, setRect],
-  );
-  const onLayout = useCallback(() => {
-    // Measure on the next frame, once the layout has been applied on screen.
+  const setMeasurer = useGuideTargets((s) => s.setMeasurer);
+  const measure = useCallback(() => {
+    // On the next frame, once the latest layout has been applied on screen.
     requestAnimationFrame(() => {
       measureInWindowOf(ref.current, (x, y, width, height) => {
         if (width > 0 && height > 0) setRect(key, { x, y, width, height });
       });
     });
   }, [key, setRect]);
-  return { ref, onLayout, collapsable: false };
+  // Offer "measure me now" to the tour; forget the box when the view goes away, so the tour never points
+  // at a stale spot.
+  useEffect(() => {
+    setMeasurer(key, measure);
+    return () => {
+      setMeasurer(key, null);
+      setRect(key, null);
+    };
+  }, [key, measure, setMeasurer, setRect]);
+  return { ref, onLayout: measure, collapsable: false };
 }
