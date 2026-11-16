@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import type { EventDetail } from '@touchgrass/shared';
-import { AccessibilityInfo, Dimensions, Share, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Dimensions, Keyboard, Share, StyleSheet } from 'react-native';
+import * as targets from '../components/guide/targets';
 import EventScreen from '../app/(app)/events/[id]/index';
 import PlansScreen from '../app/(app)/(tabs)/plans';
 import {
@@ -365,6 +366,34 @@ describe('Plan deck (D-219)', () => {
     });
     await fireEvent.press(screen.getByRole('button', { name: 'Close plan' }));
     expect(mockRouter.back).toHaveBeenCalled();
+  });
+
+  it('the keyboard never covers the comment box: the card lifts above it (D-223)', async () => {
+    const handlers: Record<string, (e: { endCoordinates: { screenY: number } }) => void> = {};
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((
+      event: string,
+      fn: (e: { endCoordinates: { screenY: number } }) => void,
+    ) => {
+      handlers[event] = fn;
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+    // The card fills y 80..880 of the window.
+    jest.spyOn(targets, 'measureInWindowOf').mockImplementation((_node, done) => {
+      done(0, 80, 400, 800);
+    });
+    openFromRow(PLAN(1), [PLAN(1), PLAN(2)]);
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    await screen.findByText('Plan number 1');
+    const card = (): { paddingBottom?: number } =>
+      StyleSheet.flatten(screen.getByTestId('plan-card').props.style) as { paddingBottom?: number };
+    expect(card().paddingBottom).toBe(0);
+    const show = handlers.keyboardDidShow ?? handlers.keyboardWillShow;
+    await act(async () => {
+      show?.({ endCoordinates: { screenY: 580 } });
+      await Promise.resolve();
+    });
+    // 880 - 580: the part of the card the keyboard would cover.
+    expect(card().paddingBottom).toBe(300);
   });
 
   it('Pull up works from the pinned button of the visible plan', async () => {

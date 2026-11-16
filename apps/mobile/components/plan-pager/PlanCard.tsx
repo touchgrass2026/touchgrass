@@ -1,7 +1,7 @@
 import { type EventDetail, media } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
@@ -9,8 +9,11 @@ import {
   type NativeSyntheticEvent,
   StyleSheet,
   View,
+  type HostInstance,
+  type ScrollViewInstance,
 } from 'react-native';
 import { formatWhen } from '../../src/features/events/format';
+import { rememberScrollOffset, useKeyboardLift } from '../../src/hooks/use-keyboard-lift';
 import { useTheme, TOUCH_TARGET } from '../../src/theme/theme';
 import { EventTogetherTools } from '../at-event/EventTogetherTools';
 import { CategoryPill } from '../CategoryPill';
@@ -115,13 +118,23 @@ export function PlanCard({
 }) {
   const { t } = useTranslation();
   const theme = useTheme();
+  // The comment box (and anything typed in) stays above the keyboard, like every Screen (D-222, D-223).
+  const cardRef = useRef<HostInstance | null>(null);
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
+  const lift = useKeyboardLift(cardRef, scrollRef);
   return (
     <EventDetailView
       event={event}
       afterRsvp={<EventTogetherTools event={event} />}
       card={({ body, action, share }) => (
-        <View style={[styles.card, { backgroundColor: theme.colors.surface }]} testID="plan-card">
+        <View
+          ref={cardRef}
+          collapsable={false}
+          style={[styles.card, { backgroundColor: theme.colors.surface, paddingBottom: lift }]}
+          testID="plan-card"
+        >
           <Animated.ScrollView
+            ref={scrollRef}
             style={styles.fill}
             contentOffset={{ x: 0, y: initialScrollY }}
             onScroll={
@@ -129,11 +142,15 @@ export function PlanCard({
                 ? // JS driver: the card's insets and corners it drives are layout props.
                   Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
                     useNativeDriver: false,
-                    listener: (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-                      onScrollY?.(e.nativeEvent.contentOffset.y),
+                    listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                      rememberScrollOffset(scrollRef.current, e.nativeEvent.contentOffset.y);
+                      onScrollY?.(e.nativeEvent.contentOffset.y);
+                    },
                   })
-                : (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-                    onScrollY?.(e.nativeEvent.contentOffset.y)
+                : (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                    rememberScrollOffset(scrollRef.current, e.nativeEvent.contentOffset.y);
+                    onScrollY?.(e.nativeEvent.contentOffset.y);
+                  }
             }
             scrollEventThrottle={16}
             // Inside a sideways pager: Android needs nested scrolling, iOS locks to the first direction.

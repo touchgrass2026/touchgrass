@@ -1050,3 +1050,7 @@ District's behaviour on top of the plan deck (D-219): scrolling down inside the 
 ## D-222 The keyboard never covers the field being typed in
 
 - The app draws edge to edge, so Android no longer shrinks the window for the keyboard and fields (and pinned buttons such as Publish) ended up under it; only the chat screen and sheets handled the keyboard. The kit `Screen` now handles it for every screen: `useKeyboardLift` measures how far the keyboard overlaps the screen body in window coordinates (so stack headers and safe areas don't skew it) and pads the body by that much, which lifts the scroll area and the pinned footer above the keyboard; then it scrolls the focused field into view with 24 pt to spare. iOS reacts on keyboardWillShow, Android on keyboardDidShow.
+
+## D-223 The plan card's comment box stays above the keyboard
+
+- Plans opened from a row show in the swipe deck (D-219), whose card has its own scroll view rather than the kit `Screen`, so D-222 did not reach it and the keyboard covered the comment box. `PlanCard` now uses the same `useKeyboardLift`: the card pads by the keyboard's overlap (lifting the sheet and the pinned Pull up) and scrolls the focused field into view. Single-plan screens already used `Screen`.
