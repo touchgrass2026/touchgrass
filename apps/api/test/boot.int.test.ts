@@ -60,6 +60,8 @@ describe('process wiring', () => {
         'recaps.generate',
         'safety.end-expired-shares',
         'safety.purge-locations',
+        'safety.got-home',
+        'safety.got-home-prune',
         'sanctions.lift-expired',
         'notifications.flush-pending',
         'notifications.purge-old',

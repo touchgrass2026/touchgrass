@@ -1,7 +1,9 @@
 import {
+  boolean,
   doublePrecision,
   integer,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -68,6 +70,28 @@ export const liveLocationPoints = pgTable('live_location_points', {
   accuracy: real('accuracy'),
   recordedAt: ts('recorded_at').notNull().defaultNow(),
 });
+
+/** A member's safety settings (D-212); no row means the defaults. Owner: `safety`. */
+export const safetySettings = pgTable('safety_settings', {
+  userId: uuid('user_id').primaryKey(),
+  gotHomeCheck: boolean('got_home_check').notNull().default(true),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+/** "Got home safe?" per member and plan (D-212): asked for, snoozed, answered. Owner: `safety`. */
+export const gotHomeChecks = pgTable(
+  'got_home_checks',
+  {
+    userId: uuid('user_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    requestedAt: ts('requested_at'),
+    snoozes: integer('snoozes').notNull().default(0),
+    askAfter: ts('ask_after'),
+    homeAt: ts('home_at'),
+    ...timestamps,
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.eventId] })],
+);
 
 export const userSanctions = pgTable('user_sanctions', {
   id: uuid('id').primaryKey(),

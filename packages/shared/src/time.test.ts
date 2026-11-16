@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageInYears, isAdult, isoWeekKey, isQuietHours, zonedParts } from './time';
+import { ageInYears, isAdult, isLatePlan, isoWeekKey, isQuietHours, zonedParts } from './time';
 
 describe('time (IST)', () => {
   it('derives IST wall-clock parts', () => {
@@ -33,5 +33,20 @@ describe('time (IST)', () => {
     expect(isAdult('2008-11-01', now)).toBe(false);
     expect(ageInYears('2000-01-15', now)).toBe(26);
     expect(() => ageInYears('31/10/2008', now)).toThrow(RangeError);
+  });
+});
+
+describe('late plans (D-212)', () => {
+  it('ends at or after 21:00 or before 05:00 in the plan zone', () => {
+    expect(isLatePlan(new Date('2026-11-14T15:29:00Z'))).toBe(false); // 20:59 IST
+    expect(isLatePlan(new Date('2026-11-14T15:30:00Z'))).toBe(true); // 21:00 IST
+    expect(isLatePlan(new Date('2026-11-14T21:00:00Z'))).toBe(true); // 02:30 IST
+    expect(isLatePlan(new Date('2026-11-14T23:30:00Z'))).toBe(false); // 05:00 IST
+  });
+  it('uses the plan zone, not IST', () => {
+    const at = new Date('2026-11-14T17:30:00Z'); // 23:00 IST, 21:30 Dubai, 17:30 London
+    expect(isLatePlan(at, 'Asia/Kolkata')).toBe(true);
+    expect(isLatePlan(at, 'Asia/Dubai')).toBe(true);
+    expect(isLatePlan(at, 'Europe/London')).toBe(false);
   });
 });

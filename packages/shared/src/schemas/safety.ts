@@ -103,6 +103,45 @@ export type LocationPointBody = z.infer<typeof LocationPointBody>;
 export const SosBody = z.object({ point: LocationPointBody.nullable().default(null) });
 export type SosBody = z.infer<typeof SosBody>;
 
+// ---------- "Got home safe?" (D-212) ----------
+
+/** The member's safety settings, kept on the server. */
+export const SafetySettings = z.object({
+  /** Ask "Got home safe?" after late plans they checked in to. On unless they turn it off. */
+  gotHomeCheck: z.boolean(),
+});
+export type SafetySettings = z.infer<typeof SafetySettings>;
+export const UpdateSafetySettingsBody = SafetySettings.partial().refine(
+  (b) => Object.keys(b).length > 0,
+  { message: 'Nothing to change' },
+);
+export type UpdateSafetySettingsBody = z.infer<typeof UpdateSafetySettingsBody>;
+
+/** Where one member stands with "Got home safe?" for one plan. */
+export const GotHomeStatus = z.object({
+  eventId: z.uuid(),
+  title: z.string(),
+  endsAt: z.iso.datetime(),
+  /** The plan's zone (IANA), for showing times. */
+  timezone: z.string(),
+  /** The plan ends late in its own zone, so checked-in members are asked if the setting is on. */
+  late: z.boolean(),
+  /** The member asked to be checked on after this plan, late or not. */
+  requested: z.boolean(),
+  /** They will be asked after this plan (going or checked in, and late with the setting on, or requested). */
+  willAsk: z.boolean(),
+  /** Show "Got home safe?" now: the plan has ended, they checked in, and they have not answered yet. */
+  due: z.boolean(),
+  homeAt: z.iso.datetime().nullable(),
+  snoozes: z.number().int(),
+  canSnooze: z.boolean(),
+  /** After "Not yet": when they are asked again. */
+  askAgainAt: z.iso.datetime().nullable(),
+});
+export type GotHomeStatus = z.infer<typeof GotHomeStatus>;
+export const GotHomeRequestBody = z.object({ ask: z.boolean() });
+export type GotHomeRequestBody = z.infer<typeof GotHomeRequestBody>;
+
 export const LiveShare = z.object({
   id: z.uuid(),
   eventId: z.uuid().nullable(),

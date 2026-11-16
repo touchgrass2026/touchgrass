@@ -235,6 +235,19 @@ export const LIMITS = {
     /** The public viewer shows this many recent points as a trail. */
     trailPoints: 20,
     maxAccuracyMeters: 5000,
+    /**
+     * "Got home safe?" (D-212): plans ending at or after `lateFromHour` (or before `lateUntilHour`) in the plan's
+     * zone count as late. The ask comes `gotHomeDelayMs` after the end, "Not yet" asks again after
+     * `gotHomeSnoozeMs` (at most `gotHomeMaxSnoozes` times), and nothing is asked after `gotHomeWindowMs`.
+     */
+    gotHome: {
+      lateFromHour: 21,
+      lateUntilHour: 5,
+      delayMs: 30 * MINUTE_MS,
+      snoozeMs: 30 * MINUTE_MS,
+      maxSnoozes: 3,
+      windowMs: 6 * HOUR_MS,
+    },
   },
   verification: {
     /** A pose challenge must be answered with a selfie within this time. */

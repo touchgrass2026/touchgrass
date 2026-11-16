@@ -103,6 +103,7 @@ export default function AppLayout() {
         <Stack.Screen name="safety/index" options={{ title: t('safety.title') }} />
         <Stack.Screen name="safety/contacts" options={{ title: t('safety.contactsTitle') }} />
         <Stack.Screen name="safety/share" options={{ title: t('safety.shareTitle') }} />
+        <Stack.Screen name="safety/got-home/[id]" options={{ title: t('safety.gotHome.title') }} />
         <Stack.Screen name="verification" options={{ title: t('verification.title') }} />
         <Stack.Screen name="notifications" options={{ title: t('notifications.title') }} />
         <Stack.Screen name="events/[id]/story" options={{ title: t('share.sharePlan') }} />

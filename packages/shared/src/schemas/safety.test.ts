@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GotHomeRequestBody,
   LocationPointBody,
   ResolveModerationBody,
   ReviewVerificationBody,
@@ -7,6 +8,7 @@ import {
   StartShareBody,
   SubmitVerificationBody,
   TrustedContactBody,
+  UpdateSafetySettingsBody,
   VERIFICATION_POSES,
   VerificationPose,
 } from './safety';
@@ -75,5 +77,14 @@ describe('safety schemas (F-SAF-01, F-SAF-04, F-SAF-05)', () => {
       sanction: null,
       note: '',
     });
+  });
+
+  it('safety settings change one thing at a time; got-home asks are on or off (D-212)', () => {
+    expect(UpdateSafetySettingsBody.parse({ gotHomeCheck: false })).toEqual({
+      gotHomeCheck: false,
+    });
+    expect(UpdateSafetySettingsBody.safeParse({}).success).toBe(false);
+    expect(GotHomeRequestBody.safeParse({ ask: 'yes' }).success).toBe(false);
+    expect(GotHomeRequestBody.parse({ ask: true })).toEqual({ ask: true });
   });
 });

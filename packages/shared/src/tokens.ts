@@ -219,6 +219,48 @@ export const categoryHues: Record<CategoryHueName, CategoryHue> = {
     art: ['#4A5650', '#28302C', '#0E1210'],
   },
 };
+/**
+ * Story card backgrounds (D-212): gradients drawn from the category hues plus the brand's own matcha, and a row
+ * of solid colours. Each carries the ink its text is set in; tokens.test.ts checks it against every stop. Photo
+ * backgrounds (a plan's cover, or the member's own picture) use `media.text` on the `media` scrims instead.
+ */
+export interface StoryFill {
+  colors: readonly [string, string];
+  ink: string;
+}
+export const STORY_GRADIENT_NAMES = [
+  'sunset',
+  'dusk',
+  'lagoon',
+  'bloom',
+  'matcha',
+  'night',
+] as const;
+export type StoryGradientName = (typeof STORY_GRADIENT_NAMES)[number];
+export const storyGradients: Record<StoryGradientName, StoryFill> = {
+  // amber to coral
+  sunset: { colors: [categoryHues.amber.solid, categoryHues.coral.solid], ink: palette.forest950 },
+  // violet to sky
+  dusk: { colors: [categoryHues.violet.solid, categoryHues.sky.solid], ink: palette.forest950 },
+  // teal to green
+  lagoon: { colors: [categoryHues.teal.solid, categoryHues.green.solid], ink: palette.forest950 },
+  // rose to violet
+  bloom: { colors: [categoryHues.rose.solid, categoryHues.violet.solid], ink: palette.forest950 },
+  // dark matcha
+  matcha: { colors: [categoryHues.green.art[1], palette.forest950], ink: palette.bone50 },
+  // deep sky to night violet
+  night: { colors: [categoryHues.sky.art[1], categoryHues.violet.art[2]], ink: palette.bone50 },
+};
+export const STORY_SOLID_NAMES = ['lime', 'forest', 'bone', 'coral', 'sky', 'violet'] as const;
+export type StorySolidName = (typeof STORY_SOLID_NAMES)[number];
+export const storySolids: Record<StorySolidName, { color: string; ink: string }> = {
+  lime: { color: palette.lime400, ink: palette.forest950 },
+  forest: { color: palette.forest950, ink: palette.bone50 },
+  bone: { color: palette.bone50, ink: palette.forest950 },
+  coral: { color: categoryHues.coral.solid, ink: palette.forest950 },
+  sky: { color: categoryHues.sky.solid, ink: palette.forest950 },
+  violet: { color: categoryHues.violet.solid, ink: palette.forest950 },
+};
 export const motion = { fast: 150, normal: 250, slow: 400, signalPulse: 2400 } as const;
 /** Minimum touch target (pt) for F-A11Y-01. */
 export const MIN_TOUCH_TARGET = 44;

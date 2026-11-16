@@ -293,6 +293,16 @@ export class EventSearchService {
     return res.rows.map((r) => r.user_id);
   }
 
+  /** Plans that took place (published or completed, not held) and ended in [after, before) ("Got home safe?", D-212). */
+  async endedBetween(after: Date, before: Date): Promise<string[]> {
+    const res = await this.replica.execute<{ id: string }>(sql`
+      SELECT id FROM events
+      WHERE status IN ('published', 'completed') AND held_at IS NULL
+        AND ends_at >= ${after} AND ends_at < ${before}
+      ORDER BY ends_at`);
+    return res.rows.map((r) => r.id);
+  }
+
   /** Completed paid plans that ended in [after, before) (payout candidates, F-PAY-03). */
   async completedPaidEndedBetween(after: Date, before: Date): Promise<string[]> {
     const res = await this.replica.execute<{ id: string }>(sql`

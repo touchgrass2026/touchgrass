@@ -24,6 +24,7 @@ import { useTheme } from '../src/theme/theme';
 import { readAppEnvironment } from '../src/config';
 import { calendarFields, saveToCalendar } from '../src/features/calendar/device';
 import { CalendarButton } from './CalendarButton';
+import { GotHomeSection } from './GotHomeSection';
 import { SosButton } from './SosButton';
 import { useTrustedContacts } from '../src/features/safety/api';
 import { PersonRow } from './PersonRow';
@@ -570,6 +571,7 @@ export function EventDetailView({
               testID="event-share-location"
             />
           ) : null}
+          {holdsSeat ? <GotHomeSection event={event} now={Date.now()} /> : null}
           {/* SOS from the plan (D-180): for people going and hosts, until the plan is over. */}
           {(holdsSeat || v.isHost) && event.status === 'published' ? (
             <View style={styles.wrap} testID="event-sos">
