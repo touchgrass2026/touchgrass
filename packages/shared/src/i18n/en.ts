@@ -18,6 +18,12 @@ export const en = {
     lore: 'Lore',
     crew: 'Crew',
   },
+  update: {
+    title: 'A new version is ready',
+    body: 'Restart TouchGrass to get the latest fixes and features.',
+    restart: 'Restart now',
+    later: 'Later',
+  },
   guide: {
     progress: '{{current}} of {{total}}',
     skip: 'Skip',

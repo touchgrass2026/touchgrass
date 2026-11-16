@@ -15,6 +15,12 @@ export const hi: Translation = {
     lore: 'यादें',
     crew: 'क्रू',
   },
+  update: {
+    title: 'नया वर्शन तैयार है',
+    body: 'नए सुधार और फ़ीचर पाने के लिए टचग्रास को रीस्टार्ट करो.',
+    restart: 'अभी रीस्टार्ट करो',
+    later: 'बाद में',
+  },
   guide: {
     progress: '{{total}} में से {{current}}',
     skip: 'छोड़ो',

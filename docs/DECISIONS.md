@@ -1007,3 +1007,7 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 ## D-216 The tour re-measures its targets when it opens and on every step
 
 - A view's onLayout only fires when its box changes relative to its parent. On Explore the safe area inset and the header settle after the first layout and move the List/Map switch down without its own layout changing, so the tour kept its first, stale box (a status bar too high). Targets now register a "measure me now" with the tour, which re-measures every target and its own overlay when it opens, on each step, and again 0.3 s and 1 s later. Storage key v4, so testers see the corrected tour once.
+
+## D-217 The app says when a new version is ready
+
+- `UpdateBanner` (root layout, every screen) checks for a published update on launch, on returning to the app and every 30 minutes, downloads it quietly, and once it is ready shows a card: "A new version is ready" with Restart now (`Updates.reloadAsync`, applies it at once) or Later (hidden until the next update). Before, an update only applied on the second cold start and testers missed fixes. Off in development and e2e builds; `expo-updates` is mocked in jest.

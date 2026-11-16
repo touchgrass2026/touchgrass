@@ -104,6 +104,8 @@ export const GLYPHS = {
   // Creative plans: a pair of beamed notes.
   music:
     '<path d="M9 17.5V6l11-2.5v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/>',
+  // A new version is ready (D-217).
+  download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
   // Rows of a list, for the Explore list/map switch (D-206).
   list: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.75" cy="6.5" r="1.25" fill="ACCENT" stroke="none"/><circle cx="4.75" cy="12" r="1.25"/><circle cx="4.75" cy="17.5" r="1.25"/>',
   grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><circle cx="16.75" cy="16.75" r="3.25" fill="ACCENT" stroke="none"/>',

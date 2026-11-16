@@ -130,6 +130,17 @@ jest.mock('expo-video', () => {
     VideoView: (props: object) => createElement(View, { ...props, testID: 'video-view' }),
   };
 });
+jest.mock('expo-updates', () => ({
+  isEnabled: false,
+  useUpdates: jest.fn(() => ({
+    isUpdatePending: false,
+    isUpdateAvailable: false,
+    isDownloading: false,
+  })),
+  checkForUpdateAsync: jest.fn(() => Promise.resolve({ isAvailable: false })),
+  fetchUpdateAsync: jest.fn(() => Promise.resolve({ isNew: false })),
+  reloadAsync: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('expo-sms', () => ({
   isAvailableAsync: jest.fn(() => Promise.resolve(true)),
   sendSMSAsync: jest.fn(() => Promise.resolve({ result: 'sent' })),

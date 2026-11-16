@@ -15,6 +15,12 @@ export const te: Translation = {
     lore: 'జ్ఞాపకాలు',
     crew: 'క్రూ',
   },
+  update: {
+    title: 'కొత్త వెర్షన్ రెడీ',
+    body: 'తాజా మార్పులు పొందటానికి టచ్‌గ్రాస్‌ని రీస్టార్ట్ చెయ్.',
+    restart: 'ఇప్పుడే రీస్టార్ట్ చెయ్',
+    later: 'తర్వాత',
+  },
   guide: {
     progress: '{{total}}లో {{current}}',
     skip: 'స్కిప్',

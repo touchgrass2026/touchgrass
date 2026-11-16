@@ -97,6 +97,7 @@ export const Book = glyph('book');
 export const Music = glyph('music');
 export const Grid = glyph('grid');
 export const ListIcon = glyph('list');
+export const Download = glyph('download');
 export const ShareIcon = glyph('share');
 export const Gear = glyph('gear');
 export const Poll = glyph('poll');

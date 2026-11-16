@@ -2,6 +2,7 @@ import { useFonts } from 'expo-font';
 import { type Href, Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { LaunchAnimation } from '../components/LaunchAnimation';
+import { UpdateBanner } from '../components/UpdateBanner';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef } from 'react';
 import { readAppEnvironment } from '../src/config';
@@ -109,6 +110,7 @@ export default function RootLayout() {
       <ThemedStatusBar />
       {fontsReady ? <RootNavigator /> : null}
       {fontsReady ? <LaunchAnimation /> : null}
+      {fontsReady ? <UpdateBanner /> : null}
     </AppProviders>
   );
 }
