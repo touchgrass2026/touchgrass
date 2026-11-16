@@ -72,6 +72,7 @@ function eventFixture(
     indoor: false,
     accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: null,
       isHost: false,
@@ -103,6 +104,7 @@ function eventFixture(
     lore: null,
     crew: null,
     held: false,
+    friendsGoing: { people: [], total: 0 },
     ...overrides,
   };
 }
@@ -279,6 +281,36 @@ describe('Event detail', () => {
     const positions = order.map((id) => tree.indexOf(`"testID":"${id}"`));
     expect(positions.every((p) => p >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  it('shows friends going near who is pulling up and the top host badge by the host (D-210)', async () => {
+    const meera = person('0192f3a4-5b6c-7d8e-9f01-00000000f001', 'Meera');
+    const ravi = person('0192f3a4-5b6c-7d8e-9f01-00000000f002', 'Ravi');
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture({
+        host: { topHost: true },
+        friendsGoing: { people: [meera, ravi], total: 4 },
+      }),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    const row = await screen.findByTestId('friends-going');
+    expect(row).toHaveTextContent(/Meera, Ravi and 2 friends are going$/);
+    expect(row.props.accessibilityLabel).toBe('Meera, Ravi and 2 friends are going');
+    expect(
+      screen.getByTestId(`top-host-${host.id}`, { includeHiddenElements: true }),
+    ).toHaveTextContent('Top host');
+    expect(
+      screen.getByRole('button', { name: /^Rohan K\., Verified, Top host/ }),
+    ).toBeOnTheScreen();
+  });
+
+  it('shows no friends line and no badge when neither applies', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, { status: 200, body: eventFixture() });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    await screen.findByTestId('event-hero');
+    expect(screen.queryByTestId('friends-going')).toBeNull();
+    expect(screen.queryByTestId(`top-host-${host.id}`, { includeHiddenElements: true })).toBeNull();
   });
 
   it('pulls up with an idempotency key and shows the new state', async () => {

@@ -1,4 +1,4 @@
-import { media } from '@touchgrass/shared';
+import { LIMITS, media } from '@touchgrass/shared';
 import type {
   HostRatingSummary,
   Interest,
@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { localized } from '../src/features/catalog/api';
 import { useTheme } from '../src/theme/theme';
 import { Text } from './ui';
+import { TopHostBadge } from './TopHostBadge';
 import { VerifiedMark } from './VerifiedMark';
 
 export interface ProfileCardProps {
@@ -32,6 +33,8 @@ export interface ProfileCardProps {
   highlightInterestIds?: string[];
   /** Shown once the person has enough host ratings (F-AFT-02). */
   hostRating?: HostRatingSummary | null;
+  /** "Top host" badge (D-210). */
+  topHost?: boolean;
 }
 
 /** Width used before the photo strip has been measured (first frame, tests). */
@@ -88,6 +91,7 @@ export function ProfileCard(p: ProfileCardProps) {
             </Text>
           ) : null}
           {p.verified ? <VerifiedMark size={20} testID="profile-verified" /> : null}
+          {p.topHost ? <TopHostBadge testID="profile-top-host" /> : null}
         </View>
         {p.subtitle ? <Text tone="muted">{p.subtitle}</Text> : null}
         {p.hostRating && p.hostRating.average !== null ? (
@@ -95,6 +99,14 @@ export function ProfileCard(p: ProfileCardProps) {
             {t('profile.hostRating', {
               rating: p.hostRating.average.toFixed(1),
               count: p.hostRating.count,
+            })}
+          </Text>
+        ) : null}
+        {p.topHost ? (
+          <Text variant="caption" tone="muted">
+            {t('events.topHostAbout', {
+              average: LIMITS.after.topHostMinAverage,
+              days: LIMITS.after.topHostWindowDays,
             })}
           </Text>
         ) : null}

@@ -256,6 +256,21 @@ export const ViewerState = z.object({
 });
 export type ViewerState = z.infer<typeof ViewerState>;
 
+/** Badges about the plan's primary host (D-210). */
+export const EventHostBadges = z.object({ topHost: z.boolean().default(false) });
+export type EventHostBadges = z.infer<typeof EventHostBadges>;
+
+/**
+ * Squad members holding a seat (D-210): up to three faces and how many in all. Only friends who show in
+ * who's-going lists and are not blocked either way are shown or counted.
+ */
+export const FriendsGoing = z.object({
+  people: z.array(PersonCard).max(3),
+  total: z.number().int().min(0),
+});
+export type FriendsGoing = z.infer<typeof FriendsGoing>;
+export const NO_FRIENDS_GOING: FriendsGoing = { people: [], total: 0 };
+
 export const EventSummary = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -280,6 +295,8 @@ export const EventSummary = z.object({
   indoor: z.boolean(),
   accessibility: AccessibilityInfo,
   category: Interest.nullable(),
+  /** The primary host's badges; never names them, so mystery and private plans are unaffected. */
+  host: EventHostBadges.default({ topHost: false }),
   viewer: ViewerState,
 });
 export type EventSummary = z.infer<typeof EventSummary>;
@@ -309,6 +326,8 @@ export const EventDetail = EventSummary.extend({
   crew: z.object({ id: z.uuid(), name: z.string() }).nullable(),
   /** Held for review by the text filter: only its hosts can see it until then (F-SAF-06). */
   held: z.boolean(),
+  /** Squad members going (D-210), shown near "Who's pulling up". */
+  friendsGoing: FriendsGoing.default(NO_FRIENDS_GOING),
 });
 export type EventDetail = z.infer<typeof EventDetail>;
 

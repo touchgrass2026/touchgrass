@@ -123,6 +123,7 @@ function completedEvent(
     indoor: false,
     accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: 'checked_in',
       isHost: false,
@@ -154,6 +155,7 @@ function completedEvent(
     lore: { count: 3, canAdd: true },
     crew: null,
     held: false,
+    friendsGoing: { people: [], total: 0 },
     ...over,
   };
 }
@@ -202,7 +204,9 @@ describe('How was it? (F-AFT-01/02)', () => {
     await fireEvent.changeText(screen.getByTestId('feedback-comment'), '  Loved the pace  ');
     await fireEvent.press(send);
     expect(await screen.findByTestId('feedback-thanks')).toHaveTextContent(/Thanks!/);
-    expect(api.callsTo('PUT', `/v1/events/${EVENT_ID}/feedback`)[0]?.body).toEqual({
+    // Each star saved on its own (one tap), then Send carries everything.
+    expect(api.callsTo('PUT', `/v1/events/${EVENT_ID}/feedback`)).toHaveLength(3);
+    expect(api.callsTo('PUT', `/v1/events/${EVENT_ID}/feedback`).at(-1)?.body).toEqual({
       rating: 4,
       hostRating: 5,
       // Tags keep their canonical order whatever order they were tapped in.
@@ -210,6 +214,33 @@ describe('How was it? (F-AFT-01/02)', () => {
       improve: ['started_late'],
       comment: '  Loved the pace  ',
     });
+  });
+
+  it('one tap on "How was the vibe?" saves the rating straight away (D-210)', async () => {
+    api
+      .on('GET', `/v1/events/${EVENT_ID}/after`, { status: 200, body: card() })
+      .on('PUT', `/v1/events/${EVENT_ID}/feedback`, (c) => ({
+        status: 200,
+        body: { ...(c.body as object), createdAt: '2026-11-01T10:00:00.000Z' },
+      }));
+    await renderWithProviders(<AfterEventScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByText('How was the vibe?')).toBeOnTheScreen();
+    // A host star before the vibe has nothing to save yet.
+    await fireEvent.press(screen.getByTestId('rate-host-4'));
+    expect(api.callsTo('PUT', `/v1/events/${EVENT_ID}/feedback`)).toHaveLength(0);
+    await fireEvent.press(screen.getByTestId('rate-event-5'));
+    expect(await screen.findByTestId('vibe-saved')).toHaveTextContent(
+      'Saved. Add more below if you like.',
+    );
+    expect(api.callsTo('PUT', `/v1/events/${EVENT_ID}/feedback`)[0]?.body).toEqual({
+      rating: 5,
+      hostRating: 4,
+      great: [],
+      improve: [],
+      comment: '',
+    });
+    // The rest of the form stays open for extras.
+    expect(screen.getByRole('button', { name: 'Send feedback' })).toBeEnabled();
   });
 
   it('prefills earlier feedback; no host means no host rating', async () => {

@@ -21,7 +21,7 @@ const SKIP_SECOND = new Set(['search', 'map']);
 
 export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Bumped whenever cached shapes change, so an old cache is dropped instead of misread. */
-export const PERSIST_BUSTER = 'p10-1';
+export const PERSIST_BUSTER = 'p10-2';
 
 export function shouldPersist(query: Pick<Query, 'queryKey' | 'state'>): boolean {
   if (query.state.status !== 'success') return false;

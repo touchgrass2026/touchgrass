@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   EventDetail,
   EventLocationView,
+  FriendsGoing,
   EventSummary,
   MediaVariants,
   PersonCard,
@@ -39,6 +40,8 @@ import { MYSTERY_AREA_RADIUS_M } from './mystery.js';
 import { WaitlistService } from './waitlist.service.js';
 import { EventHooks } from './event-hooks.js';
 import { ReliabilityReader } from '../reliability/reliability-reader.js';
+import { HostRatingReader } from '../feedback/host-rating-reader.js';
+import { friendsGoing, guestListVisible } from './friends-going.js';
 
 /**
  * The ONE serializer for events (F-EVT-12 leak prevention). Every endpoint that returns an event goes through
@@ -60,6 +63,7 @@ export class EventViewService {
     private readonly waitlist: WaitlistService,
     private readonly hooks: EventHooks,
     private readonly reliability: ReliabilityReader,
+    private readonly hostRatings: HostRatingReader,
   ) {}
 
   shareUrl(slug: string): string {
@@ -80,20 +84,23 @@ export class EventViewService {
         return f !== undefined && isLocationRevealed(f, c, now);
       })
       .map((c) => c.id);
-    const [counts, exact, covers, categories, hoods, offers, plusOnes, zones] = await Promise.all([
-      this.store.seatCountsMany(ids),
-      this.store.exactLocations(revealedIds),
-      this.covers(cores),
-      this.interests.interestsByIds([
-        ...new Set(cores.flatMap((c) => (c.categoryInterestId ? [c.categoryInterestId] : []))),
-      ]),
-      this.cities.neighbourhoodNames([
-        ...new Set(cores.flatMap((c) => (c.neighbourhoodId ? [c.neighbourhoodId] : []))),
-      ]),
-      this.openOffers(ctx.userId, ids, now),
-      this.plusOnes(ctx.userId, ids),
-      this.cities.timezones([...new Set(cores.map((c) => c.cityId))]),
-    ]);
+    const [counts, exact, covers, categories, hoods, offers, plusOnes, zones, topHosts] =
+      await Promise.all([
+        this.store.seatCountsMany(ids),
+        this.store.exactLocations(revealedIds),
+        this.covers(cores),
+        this.interests.interestsByIds([
+          ...new Set(cores.flatMap((c) => (c.categoryInterestId ? [c.categoryInterestId] : []))),
+        ]),
+        this.cities.neighbourhoodNames([
+          ...new Set(cores.flatMap((c) => (c.neighbourhoodId ? [c.neighbourhoodId] : []))),
+        ]),
+        this.openOffers(ctx.userId, ids, now),
+        this.plusOnes(ctx.userId, ids),
+        this.cities.timezones([...new Set(cores.map((c) => c.cityId))]),
+        // One grouped query per page (D-210); the primary host is the plan's creator.
+        this.hostRatings.topHosts([...new Set(cores.map((c) => c.creatorUserId))], now),
+      ]);
     const cooldown = await this.reliability.cooldownUntil(ctx.userId, now);
     const cardIds = [
       ...[...facts.values()].flatMap((f) => (f.invitedById ? [f.invitedById] : [])),
@@ -140,6 +147,7 @@ export class EventViewService {
           indoor: c.indoor,
           accessibility: c.accessibility,
           category: categories.find((i) => i.id === c.categoryInterestId) ?? null,
+          host: { topHost: topHosts.has(c.creatorUserId) },
           viewer: {
             ...this.viewerState(
               c,
@@ -166,7 +174,7 @@ export class EventViewService {
   ): Promise<EventDetail> {
     const [summary] = await this.summaries(ctx, [core], new Map([[core.id, facts]]), now);
     if (!summary) throw AppError.notFound('Event');
-    const [taxonomy, hostCards, soloPercent] = await Promise.all([
+    const [taxonomy, hostCards, soloPercent, friends] = await Promise.all([
       this.store.taxonomy(core.id),
       this.people.cards(
         ctx.userId,
@@ -174,6 +182,7 @@ export class EventViewService {
         { includeSelf: true },
       ),
       this.soloPercent(core.id),
+      this.friendsGoing(ctx, core, facts),
     ]);
     const [payment, perks, lore, crew] = await Promise.all([
       core.pricePaise > 0 ? this.hooks.viewerPayment(ctx.userId, core.id) : Promise.resolve(null),
@@ -210,10 +219,43 @@ export class EventViewService {
       lore,
       crew,
       held: core.held,
+      friendsGoing: friends,
       pendingJoinRequests:
         core.visibility === 'approval' && facts.hostRole !== null
           ? await this.pendingJoinRequests(core.id)
           : 0,
+    };
+  }
+
+  /** Squad members holding a seat at this plan (D-210), with the same privacy rules as who's-going lists. */
+  private async friendsGoing(
+    ctx: ViewerContext,
+    core: EventCore,
+    facts: EventViewerFacts,
+  ): Promise<FriendsGoing> {
+    if (ctx.squad.size === 0 || !guestListVisible(core.visibility, facts))
+      return { people: [], total: 0 };
+    const rows = await this.db
+      .select({ userId: rsvps.userId })
+      .from(rsvps)
+      .where(
+        and(
+          eq(rsvps.eventId, core.id),
+          inArray(rsvps.status, ['going', 'checked_in']),
+          inArray(rsvps.userId, [...ctx.squad]),
+        ),
+      )
+      .orderBy(rsvps.createdAt);
+    const holders = rows.map((r) => r.userId);
+    const shown = await this.profiles.withPrivacyFlag(holders, 'showInWhoIsGoing');
+    const { ids, total } = friendsGoing(holders, ctx, shown);
+    const cards = await this.people.cards(ctx.userId, ids);
+    return {
+      people: ids.flatMap((id) => {
+        const card = cards.get(id);
+        return card ? [card] : [];
+      }),
+      total,
     };
   }
 

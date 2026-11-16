@@ -5,10 +5,18 @@ import { Calendar, Check, EyeOff, Heart, Lock, People } from './icons';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { localized } from '../src/features/catalog/api';
-import { capacityLabel, formatWhen, locationLabel, rsvpLabel } from '../src/features/events/format';
+import {
+  capacityLabel,
+  formatWhen,
+  friendsGoingText,
+  locationLabel,
+  rsvpLabel,
+} from '../src/features/events/format';
 import { useTheme } from '../src/theme/theme';
 import { Avatar } from './Avatar';
 import { CategoryPill } from './CategoryPill';
+import { FriendFaces } from './FriendsGoing';
+import { TopHostBadge } from './TopHostBadge';
 import { PlanArt } from './PlanArt';
 import { AnimatedPressable, Icon, Pill, Text, usePressScale } from './ui';
 
@@ -67,6 +75,10 @@ export function EventCard({
             .join(' '),
         })
       : null;
+  // Friends going (D-210) lead when there are any; otherwise the general preview above.
+  const friends = feed?.preview.friends;
+  const friendsLine = friends ? friendsGoingText(t, friends) : null;
+  const topHost = event.host.topHost ? t('events.topHost') : null;
   const extras = feed ? feedDetails(t, feed) : [];
   const categoryName = event.category ? localized(event.category.name, i18n.language) : null;
   const summary = [
@@ -77,7 +89,8 @@ export function EventCard({
     capacityLabel(t, event),
     status,
     ...tags,
-    pullingUp,
+    topHost,
+    friendsLine ?? pullingUp,
     distance,
     ...extras,
   ]
@@ -210,9 +223,14 @@ export function EventCard({
             {status}
           </Text>
         ) : null}
+        {event.host.topHost ? <TopHostBadge decorative testID={`top-host-${event.slug}`} /> : null}
         <View style={[styles.row, styles.footer, { borderTopColor: theme.colors.border }]}>
           <View style={[styles.row, styles.grow]}>
-            {faces.length > 0 ? (
+            {friends && friendsLine ? (
+              <View testID={`friends-going-${event.slug}`}>
+                <FriendFaces people={friends.people} />
+              </View>
+            ) : faces.length > 0 ? (
               <View style={styles.faces}>
                 {faces.slice(0, 3).map((p, i) => (
                   <View key={p.id} style={i > 0 ? styles.overlap : null}>
@@ -227,7 +245,7 @@ export function EventCard({
               </View>
             ) : null}
             <Text variant="caption" tone="muted" numberOfLines={2} style={styles.grow}>
-              {pullingUp ?? extras[0] ?? capacityLabel(t, event)}
+              {friendsLine ?? pullingUp ?? extras[0] ?? capacityLabel(t, event)}
             </Text>
           </View>
           <View style={[styles.cta, { backgroundColor: ctaBg, borderRadius: theme.radii.md }]}>

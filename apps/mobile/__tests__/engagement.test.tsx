@@ -1042,6 +1042,7 @@ function eventFixture(
     indoor: false,
     accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: 'checked_in',
       isHost: false,
@@ -1073,6 +1074,7 @@ function eventFixture(
     lore: { count: 3, canAdd: true },
     crew: null,
     held: false,
+    friendsGoing: { people: [], total: 0 },
     ...over,
   };
 }

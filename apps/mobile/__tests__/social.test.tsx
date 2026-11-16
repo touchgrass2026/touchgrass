@@ -328,6 +328,18 @@ describe('Profiles: squad actions, block and report (F-SOC-05)', () => {
     await renderWithProviders(<UserProfileScreen />, { fetchFn: api.fetch });
     await screen.findByRole('button', { name: 'Add to squad' });
     expect(screen.queryByTestId('host-rating')).toBeNull();
+    expect(screen.queryByTestId('profile-top-host')).toBeNull();
+  });
+
+  it('marks top hosts next to their name and says what it means (D-210)', async () => {
+    api.on('GET', `/v1/users/${ids.other}/profile`, {
+      status: 200,
+      body: { ...profile('none'), hostRating: { average: 4.8, count: 9 }, topHost: true },
+    });
+    await renderWithProviders(<UserProfileScreen />, { fetchFn: api.fetch });
+    const badge = await screen.findByTestId('profile-top-host');
+    expect(badge.props.accessibilityLabel).toBe('Top host');
+    expect(screen.getByText('Guests rated them 4.5 or more in the last 90 days')).toBeOnTheScreen();
   });
 
   it('blocks after confirmation and goes back', async () => {

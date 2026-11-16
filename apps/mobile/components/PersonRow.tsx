@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../src/theme/theme';
 import { Avatar } from './Avatar';
 import { Text, Pressable } from './ui';
+import { TopHostBadge } from './TopHostBadge';
 import { VerifiedMark } from './VerifiedMark';
 
 export interface PersonRowProps {
@@ -12,10 +13,12 @@ export interface PersonRowProps {
   detail?: string | null;
   onOpen: () => void;
   actions?: ReactNode;
+  /** Shows the "Top host" badge by the name (D-210). */
+  topHost?: boolean;
 }
 
 /** Person in a list: tap the name area to open the profile; action buttons sit beside it. */
-export function PersonRow({ person, detail, onOpen, actions }: PersonRowProps) {
+export function PersonRow({ person, detail, onOpen, actions, topHost }: PersonRowProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const subtitle =
@@ -31,6 +34,7 @@ export function PersonRow({ person, detail, onOpen, actions }: PersonRowProps) {
         accessibilityLabel={[
           person.displayName,
           person.verified ? t('profile.verified') : null,
+          topHost ? t('events.topHost') : null,
           subtitle,
         ]
           .filter(Boolean)
@@ -46,6 +50,7 @@ export function PersonRow({ person, detail, onOpen, actions }: PersonRowProps) {
               {person.displayName}
             </Text>
             {person.verified ? <VerifiedMark size={16} /> : null}
+            {topHost ? <TopHostBadge decorative testID={`top-host-${person.id}`} /> : null}
           </View>
           {subtitle ? (
             <Text variant="caption" tone="muted">
@@ -60,7 +65,7 @@ export function PersonRow({ person, detail, onOpen, actions }: PersonRowProps) {
 }
 
 const styles = StyleSheet.create({
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   name: { flexShrink: 1 },
   row: {
     flexDirection: 'row',

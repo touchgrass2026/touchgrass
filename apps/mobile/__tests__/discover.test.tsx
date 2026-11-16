@@ -5,6 +5,10 @@ import DiscoverScreen from '../app/(app)/(tabs)/discover';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SearchScreen from '../app/(app)/search';
 import { AllPlansRail } from '../components/explore/AllPlansRail';
+import { HeroCarousel } from '../components/explore/HeroCarousel';
+import { EventCard } from '../components/EventCard';
+import { friendsGoingText } from '../src/features/events/format';
+import { createI18n } from '../src/i18n/i18n';
 import {
   activeFilterCount,
   DEFAULT_FILTERS,
@@ -62,6 +66,7 @@ function item(n: number, overrides: Partial<FeedItem> = {}): FeedItem {
     indoor: true,
     accessibility: { stepFree: false, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: null,
       isHost: false,
@@ -76,7 +81,7 @@ function item(n: number, overrides: Partial<FeedItem> = {}): FeedItem {
       payment: null,
       cooldownUntil: null,
     },
-    preview: { people: [pal], total: 5 },
+    preview: { people: [pal], total: 5, friends: { people: [], total: 0 } },
     via: null,
     reasons: ['squad_going', 'interests'],
     distanceMeters: 1200,
@@ -110,7 +115,7 @@ beforeEach(async () => {
               item(1),
               item(2, {
                 via: mutual,
-                preview: { people: [], total: 0 },
+                preview: { people: [], total: 0, friends: { people: [], total: 0 } },
                 reasons: ['friends_of_friends'],
                 weather: null,
               }),
@@ -556,5 +561,87 @@ describe('plan rows and the keyboard', () => {
     );
     // The row's own scroll view must let taps through, or the first tap only closes the keyboard.
     expect(JSON.stringify(screen.toJSON())).toContain('"keyboardShouldPersistTaps":"handled"');
+  });
+});
+
+describe('friends going and top hosts (D-210)', () => {
+  const meera = person('0192f3a4-5b6c-7d8e-9f01-00000000f001', 'Meera');
+  const ravi = person('0192f3a4-5b6c-7d8e-9f01-00000000f002', 'Ravi');
+  const kabir = person('0192f3a4-5b6c-7d8e-9f01-00000000f003', 'Kabir');
+
+  it('words the line for one, two and more friends, in every language', () => {
+    const en = createI18n('en');
+    const t = en.t.bind(en);
+    expect(friendsGoingText(t, { people: [], total: 0 })).toBeNull();
+    expect(friendsGoingText(t, { people: [meera], total: 1 })).toBe('Meera is going');
+    expect(friendsGoingText(t, { people: [meera, ravi], total: 2 })).toBe(
+      'Meera and Ravi are going',
+    );
+    expect(friendsGoingText(t, { people: [meera, ravi, kabir], total: 3 })).toBe(
+      'Meera, Ravi and 1 friend are going',
+    );
+    expect(friendsGoingText(t, { people: [meera, ravi, kabir], total: 4 })).toBe(
+      'Meera, Ravi and 2 friends are going',
+    );
+    for (const lang of ['te', 'hi'] as const) {
+      const i = createI18n(lang);
+      const line = friendsGoingText(i.t.bind(i), { people: [meera, ravi, kabir], total: 5 });
+      expect(line).toContain('Meera');
+      expect(line).toContain('3');
+      expect(line).not.toContain('discover.');
+    }
+  });
+
+  it('a card leads with friends going: their faces and the line, friends only', async () => {
+    const friendly = item(7, {
+      preview: {
+        people: [meera, pal],
+        total: 6,
+        friends: { people: [meera, ravi, kabir], total: 4 },
+      },
+      host: { topHost: true },
+    });
+    await renderWithProviders(<EventCard event={friendly} feed={friendly} onOpen={jest.fn()} />);
+    const card = screen.getByTestId('event-Slug0007');
+    expect(card.props.accessibilityLabel).toEqual(
+      expect.stringContaining('Meera, Ravi and 2 friends are going'),
+    );
+    expect(card.props.accessibilityLabel).not.toContain('pulling up');
+    expect(card.props.accessibilityLabel).toEqual(expect.stringContaining('Top host'));
+    expect(
+      screen.getByTestId('friends-going-Slug0007', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByText('Meera, Ravi and 2 friends are going', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('top-host-Slug0007', { includeHiddenElements: true }),
+    ).toHaveTextContent('Top host');
+  });
+
+  it('without friends going the card keeps who is pulling up and shows no badge', async () => {
+    const plain = item(8);
+    await renderWithProviders(<EventCard event={plain} feed={plain} onOpen={jest.fn()} />);
+    const card = screen.getByTestId('event-Slug0008');
+    expect(card.props.accessibilityLabel).toEqual(expect.stringContaining('Rohan K. +4 more'));
+    expect(
+      screen.queryByTestId('friends-going-Slug0008', { includeHiddenElements: true }),
+    ).toBeNull();
+    expect(screen.queryByTestId('top-host-Slug0008', { includeHiddenElements: true })).toBeNull();
+  });
+
+  it('the hero card says which friends are going and marks top hosts', async () => {
+    const hero = item(9, {
+      preview: { people: [meera], total: 5, friends: { people: [meera], total: 1 } },
+      host: { topHost: true },
+    });
+    await renderWithProviders(<HeroCarousel items={[hero]} gutter={20} onOpen={jest.fn()} />);
+    expect(screen.getByTestId('friends-going-hero-Slug0009')).toHaveTextContent(/Meera is going$/);
+    expect(
+      screen.getByTestId('top-host-hero-Slug0009', { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('hero-Slug0009').props.accessibilityLabel).toEqual(
+      expect.stringContaining('Top host'),
+    );
   });
 });

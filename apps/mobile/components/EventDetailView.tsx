@@ -27,6 +27,7 @@ import { CalendarButton } from './CalendarButton';
 import { SosButton } from './SosButton';
 import { useTrustedContacts } from '../src/features/safety/api';
 import { PersonRow } from './PersonRow';
+import { FriendsGoingRow } from './FriendsGoing';
 import { useTrack } from '../src/features/analytics/analytics';
 import { Button, FadeIn, IconText, Pop, Text, TextField } from './ui';
 import { CategoryPill } from './CategoryPill';
@@ -700,6 +701,7 @@ export function EventDetailView({
             <PersonRow
               key={h.person.id}
               person={h.person}
+              topHost={h.role === 'host' && event.host.topHost}
               detail={
                 h.role === 'host'
                   ? null
@@ -746,6 +748,7 @@ export function EventDetailView({
               testID="open-feedback"
             />
           ) : null}
+          <FriendsGoingRow friends={event.friendsGoing} />
           <Button
             label={t('events.whoIsGoing')}
             variant="ghost"

@@ -359,6 +359,7 @@ const upcoming = (startsInMs: number): EventSummary => ({
   indoor: false,
   accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
   category: null,
+  host: { topHost: false },
   viewer: {
     rsvp: 'going',
     isHost: false,

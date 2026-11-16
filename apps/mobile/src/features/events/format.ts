@@ -110,3 +110,23 @@ export function rsvpLabel(t: T, e: Pick<EventSummary, 'status' | 'viewer'>): str
       return null;
   }
 }
+
+/**
+ * "Meera is going" / "Meera and Ravi are going" / "Meera, Ravi and 2 friends are going" (D-210): up to two
+ * names, then how many other squad members hold a seat. Null when none of your friends are going.
+ */
+export function friendsGoingText(
+  t: T,
+  friends: { people: { displayName: string }[]; total: number },
+): string | null {
+  const names = friends.people.slice(0, 2).map((p) => p.displayName);
+  const [first, second] = names;
+  if (friends.total <= 0 || first === undefined) return null;
+  if (friends.total === 1) return t('discover.friendsOne', { name: first });
+  if (friends.total === 2 && second !== undefined)
+    return t('discover.friendsTwo', { first, second });
+  return t('discover.friendsMore', {
+    names: names.join(', '),
+    count: friends.total - names.length,
+  });
+}

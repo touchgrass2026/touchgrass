@@ -7,6 +7,7 @@ import {
   type FeedItem,
   type FeedQuery,
   type FeedReason,
+  type FriendsGoing,
   type GeoPoint,
   LIMITS,
   type MapQuery,
@@ -42,6 +43,7 @@ import {
 import { type EventCore, EventStore } from '../events/event-store.service.js';
 import { EventViewService } from '../events/event-view.service.js';
 import { MYSTERY_AREA_RADIUS_M } from '../events/mystery.js';
+import { friendsGoing, guestListVisible } from '../events/friends-going.js';
 import { PeopleService } from '../profiles/people.service.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { SocialGraphService } from '../social/graph/social-graph.service.js';
@@ -379,7 +381,7 @@ export class DiscoveryService {
     const [previews, vias, forecasts] = await Promise.all([
       this.previews(
         ctx,
-        visible.map((v) => v.core.id),
+        visible.map((v) => ({ id: v.core.id, open: guestListVisible(v.core.visibility, v.facts) })),
       ),
       this.vias(
         ctx,
@@ -399,7 +401,11 @@ export class DiscoveryService {
       return [
         {
           ...summary,
-          preview: { people: previews.get(core.id) ?? [], total: summary.goingCount },
+          preview: {
+            people: previews.get(core.id)?.people ?? [],
+            total: summary.goingCount,
+            friends: previews.get(core.id)?.friends ?? { people: [], total: 0 },
+          },
           via: vias.get(core.id) ?? null,
           reasons: entry.reasons,
           distanceMeters: entry.distanceMeters,
@@ -410,14 +416,18 @@ export class DiscoveryService {
   }
 
   /**
-   * "Who's pulling up" (F-DSC-05): up to three faces — squad first, then the people you share most mutuals
-   * with. Anyone who hid themselves from who's-going lists, or is blocked, never appears.
+   * "Who's pulling up" (F-DSC-05): up to three faces (squad first, then the people you share most mutuals
+   * with) and the squad members going on their own (D-210), from the same page-wide queries. Anyone who hid
+   * themselves from who's-going lists, or is blocked, never appears or counts; private plans show nobody to
+   * people the host has not let in.
    */
   private async previews(
     ctx: ViewerContext,
-    eventIds: string[],
-  ): Promise<Map<string, PersonCard[]>> {
-    const holders = await this.search.seatHoldersMany(eventIds);
+    events: { id: string; open: boolean }[],
+  ): Promise<Map<string, { people: PersonCard[]; friends: FriendsGoing }>> {
+    const holders = await this.search.seatHoldersMany(
+      events.filter((e) => e.open).map((e) => e.id),
+    );
     const everyone = [...new Set([...holders.values()].flat())].filter(
       (u) => u !== ctx.userId && !ctx.blocked.has(u),
     );
@@ -425,7 +435,7 @@ export class DiscoveryService {
       this.profiles.withPrivacyFlag(everyone, 'showInWhoIsGoing'),
       this.graph.mutualCounts(ctx.userId, everyone),
     ]);
-    const picks = new Map<string, string[]>();
+    const picks = new Map<string, { faces: string[]; friends: string[]; friendTotal: number }>();
     for (const [eventId, users] of holders) {
       const ranked = users
         .filter((u) => shown.has(u))
@@ -434,13 +444,22 @@ export class DiscoveryService {
             Number(ctx.squad.has(b)) - Number(ctx.squad.has(a)) ||
             (mutuals.get(b) ?? 0) - (mutuals.get(a) ?? 0),
         );
-      picks.set(eventId, ranked.slice(0, D.previewSize));
+      const friends = friendsGoing(users, ctx, shown);
+      picks.set(eventId, {
+        faces: ranked.slice(0, D.previewSize),
+        friends: friends.ids,
+        friendTotal: friends.total,
+      });
     }
-    const cards = await this.people.cards(ctx.userId, [...picks.values()].flat());
+    const cards = await this.people.cards(ctx.userId, [
+      ...new Set([...picks.values()].flatMap((p) => [...p.faces, ...p.friends])),
+    ]);
+    const toCards = (ids: string[]): PersonCard[] =>
+      ids.flatMap((id) => (cards.has(id) ? [cards.get(id) as PersonCard] : []));
     return new Map(
-      [...picks].map(([eventId, ids]) => [
+      [...picks].map(([eventId, p]) => [
         eventId,
-        ids.flatMap((id) => (cards.has(id) ? [cards.get(id) as PersonCard] : [])),
+        { people: toCards(p.faces), friends: { people: toCards(p.friends), total: p.friendTotal } },
       ]),
     );
   }

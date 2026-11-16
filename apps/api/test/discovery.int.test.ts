@@ -1,4 +1,4 @@
-import type { Feed, FeedItem, MapResponse } from '@touchgrass/shared';
+import type { EventDetail, Feed, FeedItem, MapResponse, PublicProfile } from '@touchgrass/shared';
 import { haversineMeters } from '@touchgrass/shared';
 import { Redis } from 'ioredis';
 import request from 'supertest';
@@ -10,7 +10,7 @@ import { WeatherService } from '../src/modules/discovery/weather.service.js';
 import { FEED_EPOCH_KEY } from '../src/modules/discovery/discovery.service.js';
 import { REDIS } from '../src/infra/redis/redis.module.js';
 import { timeWindow } from '../src/modules/discovery/ranking.js';
-import { ADDRESS, idem, PLACE, plot, rsvp, SPOT, verifiedMember } from './event-helpers.js';
+import { ADDRESS, detail, idem, PLACE, plot, rsvp, SPOT, verifiedMember } from './event-helpers.js';
 import { bearer, befriend, createHarness, type Harness, member, type Member } from './harness.js';
 
 let h: Harness;
@@ -532,5 +532,109 @@ describe('search (F-DSC-09)', () => {
       .query({ q: 'z' })
       .set(...bearer(me.token))
       .expect(400);
+  });
+});
+
+describe('friends going and top hosts (D-210)', () => {
+  it('counts only squad members holding a seat, with privacy and private plans respected', async () => {
+    const host = await verifiedMember(h);
+    const me = await member(h);
+    const [meera, ravi, kabir, shy, blocked, stranger] = [
+      await member(h),
+      await member(h),
+      await member(h),
+      await member(h),
+      await member(h),
+      await member(h),
+    ];
+    for (const f of [meera, ravi, kabir, shy, blocked]) await befriend(h, me, f);
+    await request(h.http)
+      .put('/v1/me/settings/privacy')
+      .set(...bearer(shy.token))
+      .send({ showInWhoIsGoing: false })
+      .expect(200);
+    const e = await plot(h, host, { title: uniqueTitle('Friends'), ...at(30 * H) });
+    for (const m of [stranger, meera, ravi, shy, blocked, kabir])
+      await rsvp(h, m, e.id).expect(200);
+    await request(h.http)
+      .post('/v1/social/blocks')
+      .set(...bearer(blocked.token))
+      .set(...idem())
+      .send({ userId: me.id })
+      .expect(204);
+
+    const item = (await allItems(me)).find((i) => i.id === e.id);
+    expect(item?.preview.friends.total).toBe(3);
+    expect(item?.preview.friends.people.map((p) => p.id)).toEqual([meera.id, ravi.id, kabir.id]);
+    // Friends lead the general preview too.
+    expect(item?.preview.people.map((p) => p.id).slice(0, 3)).toEqual(
+      expect.arrayContaining([meera.id, ravi.id, kabir.id]),
+    );
+    // A cancelled seat stops counting.
+    await request(h.http)
+      .delete(`/v1/events/${e.id}/rsvp`)
+      .set(...bearer(kabir.token))
+      .set(...idem())
+      .expect(204);
+    const friends = ((await detail(h, me, e.id).expect(200)).body as EventDetail).friendsGoing;
+    expect(friends.total).toBe(2);
+    expect(friends.people.map((p) => p.id)).toEqual([meera.id, ravi.id]);
+
+    // No friends going: nothing to show.
+    const other = (await allItems(stranger)).find((i) => i.id === e.id);
+    expect(other?.preview.friends).toEqual({ people: [], total: 0 });
+
+    // Private plans keep their guest list from people the host has not let in.
+    const secret = await plot(h, host, {
+      title: uniqueTitle('Private friends'),
+      visibility: 'approval',
+      ...at(31 * H),
+    });
+    await h.pool.query(`INSERT INTO rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, [
+      secret.id,
+      meera.id,
+    ]);
+    const hidden = (await allItems(me, { radiusKm: 5 })).find((i) => i.id === secret.id);
+    expect(hidden?.preview.friends).toEqual({ people: [], total: 0 });
+    expect(hidden?.preview.people).toEqual([]);
+    const secretDetail = (await detail(h, me, secret.id).expect(200)).body as EventDetail;
+    expect(secretDetail.friendsGoing).toEqual({ people: [], total: 0 });
+  });
+
+  it('marks top hosts (5+ ratings averaging 4.5+ in 90 days) on feed, detail and profile', async () => {
+    const host = await verifiedMember(h);
+    const me = await member(h);
+    const e = await plot(h, host, { title: uniqueTitle('Top host'), ...at(30 * H) });
+    const before = (await allItems(me)).find((i) => i.id === e.id);
+    expect(before?.host.topHost).toBe(false);
+
+    const raters: Member[] = [];
+    for (let i = 0; i < 5; i += 1) raters.push(await member(h));
+    const rate = async (stars: number[], daysAgo: number): Promise<void> => {
+      await h.pool.query('DELETE FROM host_ratings WHERE event_id = $1', [e.id]);
+      for (const [i, r] of raters.entries())
+        await h.pool.query(
+          `INSERT INTO host_ratings (event_id, rater_id, host_user_id, rating, created_at)
+           VALUES ($1, $2, $3, $4, now() - make_interval(days => $5))`,
+          [e.id, r.id, host.id, stars[i], daysAgo],
+        );
+    };
+    const topHost = async (): Promise<boolean> =>
+      ((await detail(h, me, e.id).expect(200)).body as EventDetail).host.topHost;
+    // Old ratings do not count.
+    await rate([5, 5, 5, 5, 5], 120);
+    expect(await topHost()).toBe(false);
+    // Recent but averaging 4.4.
+    await rate([5, 5, 4, 4, 4], 10);
+    expect(await topHost()).toBe(false);
+    await rate([5, 5, 5, 4, 4], 10);
+    expect(await topHost()).toBe(true);
+    await redis.incr(FEED_EPOCH_KEY);
+    expect((await allItems(me)).find((i) => i.id === e.id)?.host.topHost).toBe(true);
+    const profile = await request(h.http)
+      .get(`/v1/users/${host.id}/profile`)
+      .set(...bearer(me.token))
+      .expect(200);
+    expect((profile.body as PublicProfile).topHost).toBe(true);
   });
 });
