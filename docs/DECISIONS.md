@@ -998,3 +998,8 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 
 - The first-launch tour is an overlay over the tabs (rendered by the tabs layout), not a Modal. On Android a Modal is a separate window that starts at the top of the screen while targets are measured from below the status bar, so the ring sat a status bar too high. The overlay measures its own window origin and subtracts it; Android Back skips the tour. The storage key moved to v3 so testers see the corrected tour once.
 - Plan chats always show when they go away: a quiet note with the date ("This plan chat disappears <date>, 2 days after the plan.") from the start, an amber warning in the last 24 hours, and a "Closes soon" tag on the row in Chats during that last day.
+
+## D-215 Find people by name in Squad; lists refresh while the app is open
+
+- Squad has a "Find people" field: from two letters it searches people (the existing `/v1/discover/search?type=people`, same privacy rules) and the results take the place of the tabs and the suggestion strip. Each result carries `relationship` (squad / request_sent / request_received / none, default none) so the row offers the right Add / Requested / Accept button.
+- Lists no longer wait for a restart: TanStack Query's focus manager follows AppState (stale queries refetch when the app returns to the foreground; polling pauses in the background); Explore, Plans, Chats and Squad refresh when you return to their tab (`useRefreshOnFocus`) and on pull-down (`Screen onRefresh`); the feed, story tray and who's free also refresh every minute while on screen. The feed snapshot cache already moves on when plans change (D-196), so a refetch shows new plans at once.

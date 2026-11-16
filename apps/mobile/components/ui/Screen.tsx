@@ -1,5 +1,12 @@
 import type { ReactNode, RefObject } from 'react';
-import { ScrollView, type ScrollViewInstance, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  type ScrollViewInstance,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/theme';
 import { OfflineBanner } from './OfflineBanner';
@@ -12,14 +19,33 @@ export interface ScreenProps {
   scrollRef?: RefObject<ScrollViewInstance | null>;
   /** Pinned under the scrolling content, above the safe area (e.g. a form's main action). */
   footer?: ReactNode;
+  /** Pull to refresh (D-215): called on pull-down; the spinner shows until it settles. */
+  onRefresh?: () => Promise<unknown>;
 }
 
 /** Room between blocks on a screen: generous, so each section reads on its own (D-151). */
 const SECTION_GAP = 22;
 
 /** Base screen: safe area, themed background, offline banner, scroll so 200% text never clips. */
-export function Screen({ children, scroll = true, testID, scrollRef, footer }: ScreenProps) {
+export function Screen({
+  children,
+  scroll = true,
+  testID,
+  scrollRef,
+  footer,
+  onRefresh,
+}: ScreenProps) {
   const theme = useTheme();
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = (): void => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    void onRefresh()
+      .catch(() => undefined)
+      .finally(() => {
+        setRefreshing(false);
+      });
+  };
   const content = (
     <View
       style={[
@@ -51,6 +77,17 @@ export function Screen({ children, scroll = true, testID, scrollRef, footer }: S
           keyboardShouldPersistTaps="handled"
           testID={testID ? `${testID}-scroll` : undefined}
           keyboardDismissMode="on-drag"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={refresh}
+                tintColor={theme.colors.primary}
+                colors={[theme.colors.primary]}
+                progressBackgroundColor={theme.colors.surface}
+              />
+            ) : undefined
+          }
         >
           {content}
         </ScrollView>

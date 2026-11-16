@@ -30,6 +30,9 @@ export function useWeekendPicks(ids: string | undefined) {
 }
 
 /** Ranked feed; pages share one server snapshot, so the order stays stable while scrolling (F-DSC-01). */
+/** How often lists that change under you (feed, stories, who's free) refresh while on screen. */
+export const LIVE_REFRESH_MS = 60_000;
+
 export function useFeed(filters: DiscoverFilters, location: GeoPoint | null) {
   const { client } = useApi();
   return useInfiniteQuery({
@@ -42,6 +45,8 @@ export function useFeed(filters: DiscoverFilters, location: GeoPoint | null) {
       return client.request(`/v1/discover/feed?${p.toString()}`, Feed, { signal });
     },
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    // New plans show up while Explore is open (D-215); paused while the app is in the background.
+    refetchInterval: LIVE_REFRESH_MS,
   });
 }
 

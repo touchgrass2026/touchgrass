@@ -83,12 +83,14 @@ export class SearchService {
       (id) => id !== userId,
     );
     if (ids.length === 0) return [];
-    const [blocked, squad, mutuals, visibility, active] = await Promise.all([
+    const [blocked, squad, mutuals, visibility, active, sent, received] = await Promise.all([
       this.graph.blockedSet(userId),
       this.graph.friendIds(userId),
       this.graph.mutualCounts(userId, ids),
       this.profiles.visibilities(ids),
       this.users.activeIds(ids),
+      this.graph.pendingRequests(userId, 'outgoing'),
+      this.graph.pendingRequests(userId, 'incoming'),
     ]);
     const squadSet = new Set(squad);
     const allowed = ids.filter((id) => {
@@ -108,7 +110,20 @@ export class SearchService {
         }) === 'full'
       );
     });
-    return this.people.list(userId, allowed.slice(0, limit));
+    // Where the viewer stands with each person, so a result can offer Add / Requested / Accept (D-215).
+    const sentSet = new Set(sent.map((r) => r.id));
+    const receivedSet = new Set(received.map((r) => r.id));
+    const cards = await this.people.list(userId, allowed.slice(0, limit));
+    return cards.map((c) => ({
+      ...c,
+      relationship: squadSet.has(c.id)
+        ? 'squad'
+        : sentSet.has(c.id)
+          ? 'request_sent'
+          : receivedSet.has(c.id)
+            ? 'request_received'
+            : 'none',
+    }));
   }
 
   private async places(userId: string, q: SearchQuery): Promise<SearchResponse['venues']> {

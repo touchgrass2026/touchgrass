@@ -21,6 +21,7 @@ import { closingInHours, useInbox } from '../../../src/features/chat/api';
 import { formatTime } from '../../../src/features/events/format';
 import { flatten } from '../../../src/features/social/api';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
+import { useRefreshOnFocus } from '../../../src/hooks/use-refresh-on-focus';
 import { errorMessage } from '../../../src/lib/errors';
 import { useTheme } from '../../../src/theme/theme';
 
@@ -49,6 +50,9 @@ export default function ChatsScreen() {
   const [filter, setFilter] = useState<'all' | 'requests'>('all');
   const q = useInbox(filter);
   const requests = useInbox('requests');
+  // Fresh when you come back to the tab, and on pull-down (D-215).
+  const refresh = (): Promise<unknown> => Promise.all([q.refetch(), requests.refetch()]);
+  useRefreshOnFocus([refresh]);
   const requestCount = flatten(requests.data).length;
 
   let body;
@@ -167,7 +171,7 @@ export default function ChatsScreen() {
   }
 
   return (
-    <Screen testID="chats-screen">
+    <Screen testID="chats-screen" onRefresh={refresh}>
       <Text variant="title" accessibilityRole="header">
         {t('chat.title')}
       </Text>

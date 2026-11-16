@@ -15,8 +15,12 @@ import {
   OfflineState,
   Screen,
   Text,
+  TextField,
 } from '../../../components/ui';
+import { useSearch } from '../../../src/features/discovery/api';
+import { useDebouncedValue } from '../../../src/hooks/use-debounced-value';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
+import { useRefreshOnFocus } from '../../../src/hooks/use-refresh-on-focus';
 import {
   flatten,
   useActivity,
@@ -55,10 +59,18 @@ export default function SquadScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const [section, setSection] = useState<Section>('squad');
+  // Find anyone by name and add them (D-215); while searching, results replace the tab's list.
+  const [query, setQuery] = useState('');
+  const searching = query.trim().length >= 2;
+  const found = useSearch(useDebouncedValue(query, 250), 'people');
   const squad = useSquad();
   const requests = useRequests();
   const suggestions = useSuggestions();
   const activity = useActivity();
+  // Fresh when you come back to the tab, and on pull-down (D-215).
+  const refresh = (): Promise<unknown> =>
+    Promise.all([squad.refetch(), requests.refetch(), suggestions.refetch(), activity.refetch()]);
+  useRefreshOnFocus([refresh]);
   const dismiss = useSquadAction();
   // People requested from "Suggested" stay on the list showing "Requested" (the server stops suggesting them).
   const [requested, setRequested] = useState<Map<string, Suggestion>>(new Map());
@@ -215,8 +227,27 @@ export default function SquadScreen() {
     }
   }
 
+  if (searching) {
+    if (found.isPending) body = <LoadingState />;
+    else if (found.isError)
+      body = <QueryState error={found.error} onRetry={() => void found.refetch()} />;
+    else if (found.data.people.length === 0)
+      body = <EmptyState body={t('squad.findNoOne', { q: query.trim() })} />;
+    else
+      body = found.data.people.map((p) => (
+        <PersonRow
+          key={p.id}
+          person={p}
+          onOpen={() => {
+            open(p.id);
+          }}
+          actions={<SquadActions userId={p.id} relationship={p.relationship} compact />}
+        />
+      ));
+  }
+
   return (
-    <Screen testID="squad-screen">
+    <Screen testID="squad-screen" onRefresh={refresh}>
       {/* Title with Crews as a compact header action (it was a full-width bar). */}
       <View style={styles.header}>
         <Text variant="title" style={styles.grow}>
@@ -231,24 +262,36 @@ export default function SquadScreen() {
           testID="open-crews"
         />
       </View>
-      {section !== 'suggestions' && (suggestions.data?.items.length ?? 0) > 0 ? (
+      {!searching && section !== 'suggestions' && (suggestions.data?.items.length ?? 0) > 0 ? (
         <SuggestionStrip
           items={suggestions.data?.items.slice(0, 10) ?? []}
           gutter={20}
           onOpen={open}
         />
       ) : null}
-      <SegmentedTabs<Section>
-        value={section}
-        onChange={setSection}
-        tabs={[
-          { key: 'squad', label: t('squad.tabSquad') },
-          { key: 'requests', label: t('squad.tabRequests'), badge: incoming },
-          { key: 'suggestions', label: t('squad.tabSuggestions') },
-          { key: 'activity', label: t('squad.tabActivity') },
-        ]}
+      <TextField
+        label={t('squad.findPeople')}
+        placeholder={t('squad.findPeoplePlaceholder')}
+        value={query}
+        onChangeText={setQuery}
+        autoCapitalize="words"
+        autoCorrect={false}
+        returnKeyType="search"
+        testID="find-people"
       />
-      {squadIsEmpty ? null : (
+      {searching ? null : (
+        <SegmentedTabs<Section>
+          value={section}
+          onChange={setSection}
+          tabs={[
+            { key: 'squad', label: t('squad.tabSquad') },
+            { key: 'requests', label: t('squad.tabRequests'), badge: incoming },
+            { key: 'suggestions', label: t('squad.tabSuggestions') },
+            { key: 'activity', label: t('squad.tabActivity') },
+          ]}
+        />
+      )}
+      {squadIsEmpty || searching ? null : (
         <Button
           label={t('squad.findContacts')}
           variant="secondary"

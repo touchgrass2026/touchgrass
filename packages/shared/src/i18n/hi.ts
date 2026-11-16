@@ -975,6 +975,9 @@ export const hi: Translation = {
     },
   },
   squad: {
+    findPeople: 'लोगों को ढूँढो',
+    findPeoplePlaceholder: 'नाम से खोजो',
+    findNoOne: '"{{q}}" नाम का अभी कोई नहीं है. दूसरा नाम आज़माओ, या उन्हें इनवाइट करो.',
     showMoreContacts: 'और दिखाओ ({{count}} बाकी)',
     searchContacts: 'कॉन्टैक्ट्स में खोजो',
     title: 'तुम्हारा स्क्वॉड',

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { type FeedWhen, type GeoPoint } from '@touchgrass/shared';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -17,6 +18,9 @@ import { AllPlansRail } from '../../../components/explore/AllPlansRail';
 import { HeroCarousel } from '../../../components/explore/HeroCarousel';
 import { PlanRail } from '../../../components/explore/PlanRail';
 import { useGuideTarget } from '../../../components/guide/targets';
+import { ENGAGEMENT_KEYS } from '../../../src/features/engagement/api';
+import { STORY_KEYS } from '../../../src/features/stories/api';
+import { useRefreshOnFocus } from '../../../src/hooks/use-refresh-on-focus';
 import {
   Button,
   Card,
@@ -66,6 +70,16 @@ export default function DiscoverScreen() {
   const viewTarget = useGuideTarget('view');
   const mapEnabled = useFlag('map_view');
   const feed = useFeed(filters, location);
+  // New plans, stories and who's free, without restarting the app (D-215): on returning to the tab, on
+  // pull-down, and every minute while Explore is open (see the queries).
+  const queryClient = useQueryClient();
+  const refresh = (): Promise<unknown> =>
+    Promise.all([
+      feed.refetch(),
+      queryClient.invalidateQueries({ queryKey: STORY_KEYS.tray }),
+      queryClient.invalidateQueries({ queryKey: ENGAGEMENT_KEYS.free }),
+    ]);
+  useRefreshOnFocus([refresh]);
   const click = useFeedClick();
 
   useEffect(() => {
@@ -239,7 +253,7 @@ export default function DiscoverScreen() {
     );
 
   return (
-    <Screen testID="discover-screen">
+    <Screen testID="discover-screen" onRefresh={refresh}>
       <View style={styles.header}>
         <View style={styles.grow}>
           <View style={styles.brandRow}>

@@ -55,6 +55,7 @@ export function useFreeNow() {
   return useQuery({
     queryKey: ENGAGEMENT_KEYS.free,
     queryFn: ({ signal }) => client.request('/v1/me/availability', FreeNowList, { signal }),
+    refetchInterval: 60_000,
   });
 }
 

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Text } from 'react-native';
 
@@ -21,4 +22,8 @@ export const expoRouterMock = {
   Redirect: ({ href }: { href: string }) => <Text testID="redirect">{href}</Text>,
   Stack: Navigator,
   Tabs: Navigator,
+  /** A screen in a test is focused once, when it mounts. */
+  useFocusEffect: (effect: React.EffectCallback) => {
+    useEffect(effect, [effect]);
+  },
 };

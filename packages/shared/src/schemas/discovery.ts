@@ -3,7 +3,7 @@ import { Interest } from './catalog';
 import { GeoPoint } from './common';
 import { EventSummary, FriendsGoing, NO_FRIENDS_GOING, Venue } from './events';
 import { CrewSummary } from './engagement';
-import { PersonCard } from './social';
+import { PersonCard, RelationshipStatus } from './social';
 
 /** Query-string boolean: only the literal strings "true"/"false" (z.coerce.boolean would read "false" as true). */
 const QueryFlag = z
@@ -196,9 +196,12 @@ export const SearchQuery = z.object({
   ...Coords,
 });
 export type SearchQuery = z.infer<typeof SearchQuery>;
+/** A person in search results, with where you stand with them so the row can offer Add / Requested (D-215). */
+export const SearchPerson = PersonCard.extend({ relationship: RelationshipStatus.default('none') });
+export type SearchPerson = z.infer<typeof SearchPerson>;
 export const SearchResponse = z.object({
   events: z.array(EventSummary),
-  people: z.array(PersonCard),
+  people: z.array(SearchPerson),
   venues: z.array(Venue),
   /** Crews you're in, and open crews you could ask to join (F-ENG-02). */
   crews: z.array(CrewSummary).default([]),

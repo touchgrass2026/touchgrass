@@ -507,6 +507,24 @@ describe('search (F-DSC-09)', () => {
     expect(found).toEqual(expect.arrayContaining([host.id, squadMate.id]));
     expect(found).not.toContain(hidden.id);
     expect(p.body.events).toEqual([]);
+    // Each person says where the searcher stands with them, so the app can offer Add / Requested (D-215).
+    type Found = { id: string; relationship: string };
+    const rel = (body: { people: Found[] }, id: string): string | undefined =>
+      body.people.find((x) => x.id === id)?.relationship;
+    expect(rel(p.body, squadMate.id)).toBe('squad');
+    expect(rel(p.body, host.id)).toBe('none');
+    await request(h.http)
+      .post('/v1/social/requests')
+      .set(...bearer(me.token))
+      .set(...idem())
+      .send({ userId: host.id })
+      .expect(200);
+    const requested = await request(h.http)
+      .get('/v1/discover/search')
+      .query({ q: 'Zubeida', type: 'people' })
+      .set(...bearer(me.token))
+      .expect(200);
+    expect(rel(requested.body, host.id)).toBe('request_sent');
 
     await request(h.http)
       .post('/v1/social/blocks')

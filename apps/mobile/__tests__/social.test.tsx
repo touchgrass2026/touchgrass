@@ -95,6 +95,37 @@ describe('Squad tab (F-SOC-02..04)', () => {
     });
   });
 
+  it('finds anyone by name and adds them, showing who is already in or requested (D-215)', async () => {
+    const newcomer = person('0192f3a4-5b6c-7d8e-9f01-00000000dddd', 'Sana R.', 1);
+    api.on('GET', '/v1/discover/search', {
+      status: 200,
+      body: {
+        events: [],
+        venues: [],
+        crews: [],
+        people: [
+          { ...newcomer, relationship: 'none' },
+          { ...friend, relationship: 'squad' },
+        ],
+      },
+    });
+    await renderWithProviders(<SquadScreen />, { fetchFn: api.fetch });
+    await fireEvent.changeText(await screen.findByTestId('find-people'), 'sa');
+    expect(await screen.findByRole('button', { name: 'Sana R., 1 mutual' })).toBeOnTheScreen();
+    // While searching, the results take the place of the tabs.
+    expect(screen.queryByRole('tab', { name: 'Requests (1)' })).toBeNull();
+    const searched = api.calls.find((c) => c.path === '/v1/discover/search');
+    expect(new URL(searched?.url ?? 'http://x').searchParams.get('type')).toBe('people');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add to squad' }));
+    await waitFor(() =>
+      expect(api.callsTo('POST', '/v1/social/requests')[0]?.body).toEqual({ userId: newcomer.id }),
+    );
+    expect(await screen.findByRole('button', { name: /Requested/ })).toBeOnTheScreen();
+    // Clearing the search brings the tabs back.
+    await fireEvent.changeText(screen.getByTestId('find-people'), '');
+    expect(await screen.findByRole('tab', { name: 'Requests (1)' })).toBeOnTheScreen();
+  });
+
   it('lists the squad and opens profiles', async () => {
     await renderWithProviders(<SquadScreen />, { fetchFn: api.fetch });
     await fireEvent.press(await screen.findByRole('button', { name: 'Rohan K., 2 mutuals' }));

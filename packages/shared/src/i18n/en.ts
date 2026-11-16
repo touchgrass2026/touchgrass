@@ -978,6 +978,9 @@ export const en = {
     },
   },
   squad: {
+    findPeople: 'Find people',
+    findPeoplePlaceholder: 'Search by name',
+    findNoOne: 'No one called "{{q}}" yet. Try another name, or invite them.',
     showMoreContacts: 'Show more ({{count}} left)',
     searchContacts: 'Search your contacts',
     title: 'Your squad',

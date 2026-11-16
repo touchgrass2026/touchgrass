@@ -992,6 +992,9 @@ export const te: Translation = {
     },
   },
   squad: {
+    findPeople: 'మనుషుల్ని వెతుకు',
+    findPeoplePlaceholder: 'పేరుతో వెతుకు',
+    findNoOne: '"{{q}}" పేరుతో ఇంకా ఎవరూ లేరు. ఇంకో పేరు ప్రయత్నించు, లేదా వాళ్ళని ఇన్వైట్ చెయ్.',
     showMoreContacts: 'ఇంకా చూపించు ({{count}} మిగిలాయి)',
     searchContacts: 'కాంటాక్ట్స్\u200cలో వెతుకు',
     title: 'నీ స్క్వాడ్',

@@ -17,6 +17,7 @@ import { FeedSkeleton } from '../../../components/FeedSkeleton';
 import { useMyEvents } from '../../../src/features/events/api';
 import { flatten } from '../../../src/features/social/api';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
+import { useRefreshOnFocus } from '../../../src/hooks/use-refresh-on-focus';
 import { errorMessage } from '../../../src/lib/errors';
 
 /** Matches the Screen's side padding so rails run edge to edge. */
@@ -33,6 +34,10 @@ export default function PlansScreen() {
   const upcoming = useMyEvents('upcoming');
   const hosting = useMyEvents('hosting');
   const past = useMyEvents('past');
+  // Fresh when you come back to the tab, and on pull-down (D-215).
+  const refresh = (): Promise<unknown> =>
+    Promise.all([upcoming.refetch(), hosting.refetch(), past.refetch()]);
+  useRefreshOnFocus([refresh]);
   const open = (e: EventSummary): void => {
     router.push({ pathname: '/events/[id]', params: { id: e.id } });
   };
@@ -94,7 +99,7 @@ export default function PlansScreen() {
     );
 
   return (
-    <Screen testID="plans-screen">
+    <Screen testID="plans-screen" onRefresh={refresh}>
       <Text variant="title" accessibilityRole="header">
         {t('events.title')}
       </Text>

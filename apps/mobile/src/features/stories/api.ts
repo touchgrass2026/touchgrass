@@ -19,6 +19,8 @@ export function useStoryTray(enabled = true) {
     queryKey: STORY_KEYS.tray,
     enabled,
     queryFn: ({ signal }) => client.request('/v1/stories', StoryTray, { signal }),
+    // New stories show up while Explore is open (D-215).
+    refetchInterval: 60_000,
   });
 }
 
