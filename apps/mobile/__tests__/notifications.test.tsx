@@ -84,6 +84,7 @@ function eventDetail(over: Partial<EventDetail> = {}): EventDetail {
     indoor: false,
     accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: 'going',
       isHost: false,
@@ -114,6 +115,7 @@ function eventDetail(over: Partial<EventDetail> = {}): EventDetail {
     lore: null,
     crew: null,
     held: false,
+    friendsGoing: { people: [], total: 0 },
     ...over,
   };
 }

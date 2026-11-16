@@ -36,6 +36,7 @@ const hidden = {
 
 function summary(over: Partial<EventSummary> = {}): EventSummary {
   return {
+    host: { topHost: false },
     id: EVENT_ID,
     slug: 'Wknd2345',
     type: 'plan',
@@ -78,6 +79,7 @@ function summary(over: Partial<EventSummary> = {}): EventSummary {
 
 function detail(over: Partial<EventDetail> = {}): EventDetail {
   return {
+    friendsGoing: { people: [], total: 0 },
     ...summary(),
     description: 'Bring a poem.',
     hosts: [],

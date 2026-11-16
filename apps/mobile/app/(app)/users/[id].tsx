@@ -80,6 +80,7 @@ export default function UserProfileScreen() {
         verified={p.verified}
         highlightInterestIds={p.sharedInterestIds}
         hostRating={p.hostRating}
+        topHost={p.topHost}
       />
       {p.sharedInterestIds.length > 0 ? (
         <Text tone="muted">

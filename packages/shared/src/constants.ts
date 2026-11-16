@@ -158,6 +158,10 @@ export const LIMITS = {
     captionMaxLength: 200,
     /** Host ratings show on profiles from this many ratings. */
     minRatingsToShow: 3,
+    /** "Top host" (D-210): at least this many host ratings in the window, averaging at least `topHostMinAverage`. */
+    topHostMinRatings: 5,
+    topHostMinAverage: 4.5,
+    topHostWindowDays: 90,
     lorePerPersonPerEvent: 30,
     loreDownloadTtlSeconds: 24 * 3600,
   },

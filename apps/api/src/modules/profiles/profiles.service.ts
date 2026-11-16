@@ -407,9 +407,10 @@ export class ProfilesService {
     if (access === 'none') throw AppError.notFound('Profile');
 
     const photos = (await this.photos(targetId, false)).flatMap((p) => (p.urls ? [p.urls] : []));
-    const [statsMap, ratings] = await Promise.all([
+    const [statsMap, ratings, topHosts] = await Promise.all([
       this.stats.statsFor([targetId]),
       this.hostRatings.summaries([targetId]),
+      this.hostRatings.topHosts([targetId]),
     ]);
     // Shown once there are enough ratings to be fair to the host (F-AFT-05).
     const rating = ratings.get(targetId);
@@ -425,6 +426,7 @@ export class ProfilesService {
       verified: target.verifiedAt !== null,
       relationship: relationshipStatus,
       hostRating,
+      topHost: topHosts.has(targetId),
     };
     if (access === 'limited') {
       return {

@@ -1,8 +1,9 @@
 import { Inject, Injectable, Module } from '@nestjs/common';
 import { averageRating, type HostRatingSummary, LIMITS } from '@touchgrass/shared';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { DB_REPLICA, type Database } from '../../infra/database/database.module.js';
 import { eventFeedback, hostRatings } from '../../infra/database/schema/index.js';
+import { isTopHost, topHostWindowStart } from './top-host.policy.js';
 
 /**
  * Host ratings (F-AFT-05) for profiles and discovery ranking. No module dependencies, so profiles and
@@ -29,6 +30,32 @@ export class HostRatingReader {
         average: r.n >= LIMITS.after.minRatingsToShow ? averageRating(r.sum, r.n) : null,
         count: r.n,
       });
+    return out;
+  }
+
+  /**
+   * Which of these people are "Top hosts" now (D-210): one grouped query for a whole page of plans, on the
+   * replica and the `(host_user_id)` index. A rating counts from when it was first given (changes are only
+   * allowed for 14 days after the plan, `feedbackWindowDays`).
+   */
+  async topHosts(hostIds: string[], now: Date = new Date()): Promise<Set<string>> {
+    const out = new Set<string>();
+    if (hostIds.length === 0) return out;
+    const rows = await this.replica
+      .select({
+        hostId: hostRatings.hostUserId,
+        sum: sql<number>`sum(${hostRatings.rating})::int`,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(hostRatings)
+      .where(
+        and(
+          inArray(hostRatings.hostUserId, [...new Set(hostIds)]),
+          gte(hostRatings.createdAt, topHostWindowStart(now)),
+        ),
+      )
+      .groupBy(hostRatings.hostUserId);
+    for (const r of rows) if (isTopHost({ count: r.n, sum: r.sum })) out.add(r.hostId);
     return out;
   }
 

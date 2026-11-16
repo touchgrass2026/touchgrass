@@ -151,6 +151,7 @@ function eventFixture(viewer: Partial<EventDetail['viewer']> = {}): EventDetail 
     indoor: false,
     accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: 'going',
       isHost: false,
@@ -182,6 +183,7 @@ function eventFixture(viewer: Partial<EventDetail['viewer']> = {}): EventDetail 
     lore: null,
     crew: null,
     held: false,
+    friendsGoing: { people: [], total: 0 },
   };
 }
 

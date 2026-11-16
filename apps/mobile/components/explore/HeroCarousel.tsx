@@ -14,10 +14,12 @@ import {
   View,
 } from 'react-native';
 import { localized } from '../../src/features/catalog/api';
-import { formatWhen, locationLabel } from '../../src/features/events/format';
+import { formatWhen, friendsGoingText, locationLabel } from '../../src/features/events/format';
 import { useScreenReader } from '../../src/hooks/use-screen-reader';
 import { useTheme } from '../../src/theme/theme';
 import { CategoryPill } from '../CategoryPill';
+import { FriendFaces } from '../FriendsGoing';
+import { TopHostBadge } from '../TopHostBadge';
 import { PlanArt } from '../PlanArt';
 import { AnimatedPressable, Pill, Text, usePressScale } from '../ui';
 
@@ -177,10 +179,14 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
   const going = t('explore.going', { count: item.goingCount });
   const category =
     item.category && !item.mystery ? localized(item.category.name, i18n.language) : null;
+  const friends = friendsGoingText(t, item.preview.friends);
+  const topHost = item.host.topHost ? t('events.topHost') : null;
   return (
     <AnimatedPressable
       accessibilityRole="button"
-      accessibilityLabel={[item.title, category, when, where, going].filter(Boolean).join(', ')}
+      accessibilityLabel={[item.title, category, topHost, when, where, friends ?? going]
+        .filter(Boolean)
+        .join(', ')}
       accessibilityHint={t('a11y.opensScreen', { screen: item.title })}
       onPress={onOpen}
       onPressIn={press.onPressIn}
@@ -208,7 +214,7 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
         colors={[media.clear, 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.85)']}
         style={styles.shade}
       >
-        {item.reasons.includes('featured') || (item.category && !item.mystery) ? (
+        {item.reasons.includes('featured') || (item.category && !item.mystery) || topHost ? (
           <View style={styles.pills}>
             {item.reasons.includes('featured') ? (
               <Pill label={t('explore.featured')} tone="dark" />
@@ -216,6 +222,7 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
             {item.mystery ? null : (
               <CategoryPill category={item.category} testID={`category-hero-${item.slug}`} />
             )}
+            {topHost ? <TopHostBadge decorative testID={`top-host-hero-${item.slug}`} /> : null}
           </View>
         ) : null}
         <Text variant="title" numberOfLines={2} style={styles.onPhoto}>
@@ -227,6 +234,14 @@ function HeroCard({ item, onOpen }: { item: FeedItem; onOpen: () => void }) {
         <Text variant="caption" numberOfLines={1} style={styles.onPhotoMuted}>
           {[where, going].join(' · ')}
         </Text>
+        {friends ? (
+          <View style={styles.friends} testID={`friends-going-hero-${item.slug}`}>
+            <FriendFaces people={item.preview.friends.people} size={24} />
+            <Text variant="caption" numberOfLines={1} style={[styles.onPhoto, styles.grow]}>
+              {friends}
+            </Text>
+          </View>
+        ) : null}
       </LinearGradient>
     </AnimatedPressable>
   );
@@ -239,6 +254,8 @@ const styles = StyleSheet.create({
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
   onPhoto: { color: media.text },
   onPhotoMuted: { color: media.textMuted },
+  friends: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  grow: { flexGrow: 1, flexShrink: 1 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 },
   dot: { width: 6, height: 6, borderRadius: 3 },
 });

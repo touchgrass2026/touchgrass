@@ -70,6 +70,23 @@ function AfterEventView({ card }: { card: PostEventCard }) {
   const [error, setError] = useState<string | null>(null);
   const feedbackOpen = Date.now() < Date.parse(card.feedbackOpenUntil);
 
+  const [saved, setSaved] = useState(false);
+
+  /**
+   * One tap is enough (D-210): a star saves the rating straight away (the API upserts), so someone who
+   * closes the screen after tapping has still rated. Tags and a comment stay optional below.
+   */
+  const quickSave = async (next: { rating: number; hostRating: number | null }): Promise<void> => {
+    setError(null);
+    setSaved(false);
+    try {
+      await submit.mutateAsync({ ...next, great, improve, comment });
+      setSaved(true);
+    } catch (err) {
+      setError(errorMessage(t, err));
+    }
+  };
+
   const send = async (): Promise<void> => {
     if (rating === null) return;
     setError(null);
@@ -115,18 +132,34 @@ function AfterEventView({ card }: { card: PostEventCard }) {
       ) : (
         <View style={styles.section}>
           <StarRating
-            label={t('after.rateEvent')}
+            label={t('after.rateVibe')}
             value={rating}
-            onChange={setRating}
+            onChange={(n) => {
+              setRating(n);
+              void quickSave({ rating: n, hostRating });
+            }}
             testID="rate-event"
           />
           {card.host ? (
             <StarRating
               label={t('after.rateHost', { name: card.host.displayName })}
               value={hostRating}
-              onChange={setHostRating}
+              onChange={(n) => {
+                setHostRating(n);
+                if (rating !== null) void quickSave({ rating, hostRating: n });
+              }}
               testID="rate-host"
             />
+          ) : null}
+          {saved ? (
+            <Text
+              variant="caption"
+              tone="primary"
+              accessibilityLiveRegion="polite"
+              testID="vibe-saved"
+            >
+              {t('after.vibeSaved')}
+            </Text>
           ) : null}
           <ChipGroup
             label={t('after.whatWasGreat')}

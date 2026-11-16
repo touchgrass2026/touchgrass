@@ -17,6 +17,7 @@ import { SocialModule } from '../social/social.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { VenuesModule } from '../venues/venues.module.js';
 import { ReliabilityReaderModule } from '../reliability/reliability-reader.js';
+import { HostRatingReaderModule } from '../feedback/host-rating-reader.js';
 import { CheckInService } from './check-in.service.js';
 import { EventAccessService } from './event-access.service.js';
 import { EventActivityHandlers } from './event-activity.handlers.js';
@@ -53,6 +54,7 @@ import { WaitlistService } from './waitlist.service.js';
     VenuesModule,
     PlusOneClaimModule,
     ReliabilityReaderModule,
+    HostRatingReaderModule,
   ],
   controllers: [
     EventsController,

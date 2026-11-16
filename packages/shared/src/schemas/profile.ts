@@ -135,6 +135,8 @@ export const PublicProfile = z.object({
   relationship: RelationshipStatus,
   /** As a host (F-AFT-05); null until they have enough ratings. */
   hostRating: HostRatingSummary.nullable(),
+  /** "Top host" badge (D-210). */
+  topHost: z.boolean().default(false),
 });
 export type PublicProfile = z.infer<typeof PublicProfile>;
 export type SetInterestsBody = z.infer<typeof SetInterestsBody>;

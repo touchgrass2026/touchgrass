@@ -69,6 +69,7 @@ function paidEvent(
     indoor: true,
     accessibility: { stepFree: true, accessibleRestroom: false, quietSpace: false },
     category: null,
+    host: { topHost: false },
     viewer: {
       rsvp: null,
       isHost: false,
@@ -100,6 +101,7 @@ function paidEvent(
     lore: null,
     crew: null,
     held: false,
+    friendsGoing: { people: [], total: 0 },
     ...overrides,
   };
 }

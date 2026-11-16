@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Interest } from './catalog';
 import { GeoPoint } from './common';
-import { EventSummary, Venue } from './events';
+import { EventSummary, FriendsGoing, NO_FRIENDS_GOING, Venue } from './events';
 import { CrewSummary } from './engagement';
 import { PersonCard } from './social';
 
@@ -108,7 +108,12 @@ export type WeatherHint = z.infer<typeof WeatherHint>;
 
 export const FeedItem = EventSummary.extend({
   /** "Who's pulling up" preview: squad first, then people you share mutuals with (F-DSC-05). */
-  preview: z.object({ people: z.array(PersonCard), total: z.number().int() }),
+  preview: z.object({
+    people: z.array(PersonCard),
+    total: z.number().int(),
+    /** Only squad members holding a seat (D-210); empty when none of your friends are going. */
+    friends: FriendsGoing.default(NO_FRIENDS_GOING),
+  }),
   /** A squad member hosting or going, for plans reached through friends of friends (F-DSC-06). */
   via: PersonCard.nullable(),
   reasons: z.array(FeedReason),

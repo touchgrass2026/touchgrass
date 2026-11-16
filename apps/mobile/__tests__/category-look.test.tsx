@@ -48,6 +48,7 @@ function event(overrides: Partial<EventSummary> = {}): EventSummary {
     indoor: true,
     accessibility: { stepFree: false, accessibleRestroom: false, quietSpace: false },
     category: biryani,
+    host: { topHost: false },
     viewer: {
       rsvp: null,
       isHost: false,
