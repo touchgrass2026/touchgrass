@@ -24,15 +24,36 @@ import { ArrowLeft, ArrowRight, type GlyphIcon } from '../icons';
 import { ErrorState, Icon, OfflineBanner, OfflineState, Pressable, Text } from '../ui';
 import { PlanCard, PlanCardPlaceholder, PlanCardPreview } from './PlanCard';
 
-/** How far in from the screen edge each card starts: the neighbours peek in this space. */
+/** How far in from the screen edge a collapsed card sits. */
 export const PAGER_SIDE = 24;
-/** Space between two cards. */
-export const PAGER_GAP = 8;
+/** How much of each neighbour peeks past the screen edge while the visible card is collapsed. */
+export const PAGER_PEEK = 16;
+/** Scrolling a card's sheet this far down grows it to full screen (D-221). */
+export const EXPAND_DISTANCE = 120;
+/** Gap above a collapsed card. */
+const CARD_TOP = 8;
 
-/** Card width and paging step for a screen width (cards are as wide as the screen minus the peeks). */
-export function pagerMetrics(screenWidth: number): { cardWidth: number; step: number } {
-  const cardWidth = Math.max(0, screenWidth - PAGER_SIDE * 2);
-  return { cardWidth, step: cardWidth + PAGER_GAP };
+/**
+ * Page geometry for a screen width. Every page is a full screen wide (plain paging, so the layout never
+ * changes as cards grow); a collapsed card is inset by `PAGER_SIDE`, and its neighbours are shifted towards
+ * it by `peekShift` so `PAGER_PEEK` of them shows at each edge, `PAGER_SIDE - PAGER_PEEK` from the card.
+ */
+export function pagerMetrics(screenWidth: number): {
+  pageWidth: number;
+  cardWidth: number;
+  peekShift: number;
+} {
+  const pageWidth = Math.max(0, screenWidth);
+  return {
+    pageWidth,
+    cardWidth: Math.max(0, pageWidth - PAGER_SIDE * 2),
+    peekShift: PAGER_SIDE + PAGER_PEEK,
+  };
+}
+
+/** How far a card has grown (0 = inset card, 1 = full screen) for a sheet scroll offset. */
+export function expandProgress(scrollY: number): number {
+  return Math.max(0, Math.min(1, scrollY / EXPAND_DISTANCE));
 }
 
 /** Which page a horizontal offset settles on. */
@@ -46,11 +67,13 @@ function ActivePage({
   id,
   onClose,
   scrollY,
+  animatedY,
   onScrollY,
 }: {
   id: string;
   onClose: () => void;
   scrollY: number;
+  animatedY: Animated.Value;
   onScrollY: (y: number) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -73,7 +96,13 @@ function ActivePage({
       </PlanCardPlaceholder>
     );
   return (
-    <PlanCard event={q.data} onClose={onClose} initialScrollY={scrollY} onScrollY={onScrollY} />
+    <PlanCard
+      event={q.data}
+      onClose={onClose}
+      initialScrollY={scrollY}
+      scrollY={animatedY}
+      onScrollY={onScrollY}
+    />
   );
 }
 
@@ -132,6 +161,12 @@ function StepButton({
  * adjustable position label do the same as swiping, and each move is announced ("Plan 2 of 7"). Under
  * Reduce Motion the neighbours don't shrink and moves don't animate. The route's `id` follows the visible
  * plan without remounting the screen.
+ *
+ * Scrolling down inside the visible card grows it to full screen (D-221): its side insets, top gap and
+ * corners go to 0 and the neighbours slide off the edges over the first EXPAND_DISTANCE points; scrolling
+ * back to the top turns it into the inset card again. Pages are always a full screen wide (plain paging), so
+ * swiping works the same in both states; the peeks are drawn by shifting the neighbours towards the card.
+ * Under Reduce Motion the card snaps between the two states at half the distance instead.
  */
 export function PlanPager({ context, initialId }: { context: BrowseContext; initialId: string }) {
   const { t } = useTranslation();
@@ -140,7 +175,7 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
   const track = useTrack();
   const click = useFeedClick();
   const { width } = useWindowDimensions();
-  const { cardWidth, step } = pagerMetrics(width);
+  const { pageWidth, peekShift } = pagerMetrics(width);
   const { ids } = context;
   const [index, setIndex] = useState(() => {
     const at = ids.indexOf(initialId);
@@ -148,14 +183,40 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
   });
   const [initialIndex] = useState(index);
   const [height, setHeight] = useState(0);
-  const scrollX = useRef(new Animated.Value(initialIndex * step)).current;
+  // JS-driven throughout: the expansion animates layout (insets, corners), and one style can't mix drivers.
+  const scrollX = useRef(new Animated.Value(initialIndex * pageWidth)).current;
   const list = useRef<FlatList<string>>(null);
   // Each card keeps where its sheet was scrolled to, so swiping back lands where you left it.
   const scrollYs = useRef<Record<string, number>>({});
+  // The visible card's sheet scroll: the card grows to full screen over the first EXPAND_DISTANCE points.
+  const activeY = useRef(new Animated.Value(0)).current;
+  // Under Reduce Motion the card snaps between the two states instead (still on scroll).
+  const snap = useRef(new Animated.Value(0)).current;
+  const [expanded, setExpanded] = useState(false);
+  const expandedRef = useRef(false);
+  const progress = theme.reduceMotion
+    ? snap
+    : activeY.interpolate({
+        inputRange: [0, EXPAND_DISTANCE],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      });
+  const collapse = Animated.subtract(1, progress);
   const total = ids.length;
   // The cards either side load ahead of time, whether or not the list has drawn them yet.
   usePrefetchEvents([ids[index - 1], ids[index + 1]].filter((x): x is string => x !== undefined));
   const position = t('planPager.position', { n: index + 1, total });
+
+  const followScroll = useCallback(
+    (y: number) => {
+      const now = expandProgress(y) >= 0.5;
+      if (now === expandedRef.current) return;
+      expandedRef.current = now;
+      snap.setValue(now ? 1 : 0);
+      setExpanded(now);
+    },
+    [snap],
+  );
 
   const settleOn = useCallback(
     (next: number) => {
@@ -163,6 +224,11 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
       setIndex(next);
       const id = ids[next];
       if (!id) return;
+      // The new card opens at its own scroll (the top the first time), and the deck grows or shrinks to it.
+      const y = scrollYs.current[id] ?? 0;
+      if (theme.reduceMotion) activeY.setValue(y);
+      else Animated.timing(activeY, { toValue: y, duration: 220, useNativeDriver: false }).start();
+      followScroll(y);
       router.setParams({ id });
       track('screen_viewed', { screen: 'event', via: 'swipe', position: next });
       const requestId = context.feed?.requestId;
@@ -173,12 +239,12 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
         t('planPager.position', { n: next + 1, total: ids.length }),
       );
     },
-    [click, context.feed, ids, index, router, t, track],
+    [activeY, click, context.feed, followScroll, ids, index, router, t, theme.reduceMotion, track],
   );
 
   const goTo = (next: number): void => {
     if (next < 0 || next >= total || next === index) return;
-    list.current?.scrollToOffset({ offset: next * step, animated: !theme.reduceMotion });
+    list.current?.scrollToOffset({ offset: next * pageWidth, animated: !theme.reduceMotion });
     settleOn(next);
   };
 
@@ -186,11 +252,11 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
   const indexRef = useRef(index);
   indexRef.current = index;
   useEffect(() => {
-    list.current?.scrollToOffset({ offset: indexRef.current * step, animated: false });
-  }, [step]);
+    list.current?.scrollToOffset({ offset: indexRef.current * pageWidth, animated: false });
+  }, [pageWidth]);
 
   const onSettle = (e: NativeSyntheticEvent<NativeScrollEvent>): void => {
-    settleOn(pageAt(e.nativeEvent.contentOffset.x, step, total));
+    settleOn(pageAt(e.nativeEvent.contentOffset.x, pageWidth, total));
   };
 
   const close = (): void => {
@@ -216,58 +282,78 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
         onLayout={(e) => {
           setHeight(e.nativeEvent.layout.height);
         }}
+        testID="plan-pager-frame"
+        accessibilityState={{ expanded }}
       >
         <Animated.FlatList
           ref={list}
           data={ids}
-          extraData={index}
+          extraData={`${String(index)}-${String(expanded)}`}
           horizontal
+          pagingEnabled
           keyExtractor={(id) => id}
           showsHorizontalScrollIndicator={false}
-          snapToInterval={step}
           decelerationRate="fast"
-          disableIntervalMomentum
           directionalLockEnabled
           initialScrollIndex={initialIndex}
-          getItemLayout={(_, i) => ({ length: step, offset: step * i, index: i })}
+          getItemLayout={(_, i) => ({ length: pageWidth, offset: pageWidth * i, index: i })}
           initialNumToRender={2}
           windowSize={3}
           maxToRenderPerBatch={2}
-          contentContainerStyle={{ paddingHorizontal: PAGER_SIDE - PAGER_GAP / 2 }}
+          // Neighbours are drawn shifted into the visible page (their peek); Android must not clip them.
+          removeClippedSubviews={false}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-            useNativeDriver: true,
+            useNativeDriver: false,
           })}
           scrollEventThrottle={16}
           onMomentumScrollEnd={onSettle}
           testID="plan-pager"
           renderItem={({ item: id, index: i }) => {
-            const range = [(i - 1) * step, i * step, (i + 1) * step];
-            const scale = theme.reduceMotion
-              ? 1
-              : scrollX.interpolate({
-                  inputRange: range,
-                  outputRange: [0.94, 1, 0.94],
-                  extrapolate: 'clamp',
-                });
-            const opacity = theme.reduceMotion
-              ? 1
-              : scrollX.interpolate({
-                  inputRange: range,
-                  outputRange: [0.7, 1, 0.7],
-                  extrapolate: 'clamp',
-                });
+            const range = [(i - 1) * pageWidth, i * pageWidth, (i + 1) * pageWidth];
+            // Pulled towards the visible card while it is collapsed: -peekShift one page to the right of
+            // the screen, +peekShift one to the left, 0 when centred or when the card is full screen.
+            const shift = Animated.multiply(
+              scrollX.interpolate({
+                inputRange: range,
+                outputRange: [-peekShift, 0, peekShift],
+                extrapolate: 'clamp',
+              }),
+              collapse,
+            );
+            const away = (amount: number) =>
+              Animated.subtract(
+                1,
+                Animated.multiply(
+                  scrollX.interpolate({
+                    inputRange: range,
+                    outputRange: [amount, 0, amount],
+                    extrapolate: 'clamp',
+                  }),
+                  collapse,
+                ),
+              );
+            const scale = theme.reduceMotion ? 1 : away(0.06);
+            const opacity = theme.reduceMotion ? 1 : away(0.3);
             const distance = Math.abs(i - index);
             return (
-              <View
-                style={[styles.page, { width: step, height: height || undefined }]}
+              <Animated.View
+                style={[
+                  styles.page,
+                  {
+                    width: pageWidth,
+                    height: height || undefined,
+                    paddingHorizontal: Animated.multiply(collapse, PAGER_SIDE),
+                    paddingTop: Animated.multiply(collapse, CARD_TOP),
+                    transform: [{ translateX: shift }],
+                  },
+                ]}
                 testID={`plan-page-${String(i)}`}
               >
                 <Animated.View
                   style={[
                     styles.cardFrame,
                     {
-                      width: cardWidth,
-                      borderRadius: theme.radii.lg,
+                      borderRadius: Animated.multiply(collapse, theme.radii.lg),
                       borderColor: theme.colors.border,
                       transform: [{ scale }],
                       opacity,
@@ -280,8 +366,10 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
                       id={id}
                       onClose={close}
                       scrollY={scrollYs.current[id] ?? 0}
+                      animatedY={activeY}
                       onScrollY={(y) => {
                         scrollYs.current[id] = y;
+                        followScroll(y);
                       }}
                     />
                   ) : distance === 1 ? (
@@ -290,7 +378,7 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
                     <PlanCardPlaceholder />
                   )}
                 </Animated.View>
-              </View>
+              </Animated.View>
             );
           }}
         />
@@ -337,7 +425,7 @@ export function PlanPager({ context, initialId }: { context: BrowseContext; init
 const styles = StyleSheet.create({
   root: { flex: 1 },
   fill: { flex: 1 },
-  page: { paddingHorizontal: PAGER_GAP / 2, paddingTop: 8 },
+  page: { overflow: 'visible' },
   cardFrame: { flex: 1, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   pageState: { padding: 16 },
   bar: {

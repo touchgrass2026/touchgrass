@@ -3,7 +3,12 @@ import type { EventDetail } from '@touchgrass/shared';
 import { AccessibilityInfo, Dimensions, Share, StyleSheet } from 'react-native';
 import EventScreen from '../app/(app)/events/[id]/index';
 import PlansScreen from '../app/(app)/(tabs)/plans';
-import { pageAt, pagerMetrics } from '../components/plan-pager/PlanPager';
+import {
+  EXPAND_DISTANCE,
+  expandProgress,
+  pageAt,
+  pagerMetrics,
+} from '../components/plan-pager/PlanPager';
 import { openPlan, siblingIds } from '../src/features/events/open-plan';
 import { useAuthStore } from '../src/stores/auth-store';
 import { browseContextFor, MAX_BROWSE_CONTEXTS, useBrowseStore } from '../src/stores/browse-store';
@@ -92,6 +97,9 @@ function plan(n: number, overrides: Partial<EventDetail> = {}): EventDetail {
 let api: FakeApi;
 beforeEach(async () => {
   resetStores();
+  jest.restoreAllMocks();
+  // Each test starts with Reduce Motion off; the ones about it switch it on.
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
   jest.clearAllMocks();
   await useAuthStore.getState().signIn(
     authResponseFixture({
@@ -180,7 +188,11 @@ describe('browse store and openPlan (D-219)', () => {
   it('dedupes sibling ids and computes pages', () => {
     expect(siblingIds('a', ['a', { id: 'b' }, 'a'])).toEqual(['a', 'b']);
     expect(siblingIds('z', ['a', 'b'])).toEqual([]);
-    expect(pagerMetrics(390)).toEqual({ cardWidth: 342, step: 350 });
+    // Full-width pages; a collapsed card is inset 24 each side and its neighbours peek 16.
+    expect(pagerMetrics(390)).toEqual({ pageWidth: 390, cardWidth: 342, peekShift: 40 });
+    expect(expandProgress(-30)).toBe(0);
+    expect(expandProgress(EXPAND_DISTANCE / 2)).toBe(0.5);
+    expect(expandProgress(EXPAND_DISTANCE * 3)).toBe(1);
     expect(pageAt(700, 350, 5)).toBe(2);
     expect(pageAt(520, 350, 5)).toBe(1);
     expect(pageAt(-20, 350, 5)).toBe(0);
@@ -217,7 +229,31 @@ describe('Plans tab opens plans with their row', () => {
 });
 
 describe('Plan deck (D-219)', () => {
-  const step = pagerMetrics(Dimensions.get('window').width).step;
+  const step = pagerMetrics(Dimensions.get('window').width).pageWidth;
+
+  type Style = {
+    transform?: Record<string, number>[];
+    opacity?: number;
+    paddingHorizontal?: number;
+    paddingTop?: number;
+    borderRadius?: number;
+  };
+  const styleOf = (testID: string): Style =>
+    StyleSheet.flatten(
+      screen.getByTestId(testID, { includeHiddenElements: true }).props.style,
+    ) as Style;
+  const scrollSheet = async (y: number): Promise<void> => {
+    await fireEvent.scroll(screen.getByTestId('plan-card-scroll'), {
+      nativeEvent: {
+        contentOffset: { x: 0, y },
+        contentSize: { width: 300, height: 3000 },
+        layoutMeasurement: { width: 300, height: 600 },
+      },
+    });
+  };
+  const expanded = (): boolean | undefined =>
+    (screen.getByTestId('plan-pager-frame').props.accessibilityState as { expanded?: boolean })
+      .expanded;
 
   it('starts at the tapped plan with only that card fully shown', async () => {
     openFromRow(PLAN(2), [PLAN(1), PLAN(2), PLAN(3)]);
@@ -371,6 +407,76 @@ describe('Plan deck (D-219)', () => {
     await fireEvent.press(screen.getByTestId('plan-pager-next'));
     expect(mockRouter.setParams).toHaveBeenLastCalledWith({ id: PLAN(2) });
     expect(await screen.findByText('Plan number 2')).toBeOnTheScreen();
+  });
+
+  it('scrolling down grows the card to full screen and back up shrinks it (D-221)', async () => {
+    openFromRow(PLAN(1), [PLAN(1), PLAN(2), PLAN(3)]);
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    await screen.findByText('Plan number 1');
+    // Collapsed: inset card with rounded corners; the next plan is pulled in to peek at the edge.
+    expect(expanded()).toBe(false);
+    expect(styleOf('plan-page-0')).toMatchObject({ paddingHorizontal: 24, paddingTop: 8 });
+    expect(styleOf('plan-card-frame-0').borderRadius).toBe(22);
+    await waitFor(() => expect(styleOf('plan-page-1').transform?.[0]?.translateX).toBe(-40));
+    // Halfway: halfway there.
+    await scrollSheet(EXPAND_DISTANCE / 2);
+    expect(styleOf('plan-page-0').paddingHorizontal).toBeCloseTo(12);
+    expect(styleOf('plan-page-1').transform?.[0]?.translateX).toBeCloseTo(-20);
+    expect(expanded()).toBe(true);
+    // All the way: full screen, square corners, neighbour off screen and no longer shrunk.
+    await scrollSheet(EXPAND_DISTANCE * 2);
+    expect(styleOf('plan-page-0')).toMatchObject({ paddingHorizontal: 0, paddingTop: 0 });
+    expect(styleOf('plan-card-frame-0').borderRadius).toBe(0);
+    expect(styleOf('plan-page-1').transform?.[0]?.translateX).toBeCloseTo(0);
+    expect(styleOf('plan-card-frame-1').transform?.[0]?.scale).toBeCloseTo(1);
+    expect(styleOf('plan-card-frame-1').opacity).toBeCloseTo(1);
+    // The top bar and the pinned action stay.
+    expect(screen.getByRole('button', { name: 'Close plan' })).toBeOnTheScreen();
+    expect(screen.getByTestId('pull-up')).toBeOnTheScreen();
+    // Back to the top: the inset card again.
+    await scrollSheet(0);
+    expect(expanded()).toBe(false);
+    expect(styleOf('plan-page-0').paddingHorizontal).toBe(24);
+    expect(styleOf('plan-page-1').transform?.[0]?.translateX).toBe(-40);
+  });
+
+  it('swiping while full screen opens the next plan at its own top, as a card', async () => {
+    openFromRow(PLAN(1), [PLAN(1), PLAN(2), PLAN(3)]);
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    await screen.findByText('Plan number 1');
+    await scrollSheet(EXPAND_DISTANCE * 2);
+    expect(expanded()).toBe(true);
+    await fireEvent(screen.getByTestId('plan-pager'), 'momentumScrollEnd', {
+      nativeEvent: { contentOffset: { x: step, y: 0 } },
+    });
+    expect(mockRouter.setParams).toHaveBeenLastCalledWith({ id: PLAN(2) });
+    expect(await screen.findByText('Plan number 2')).toBeOnTheScreen();
+    // Plan 2 was never scrolled: it starts at its top, so the deck turns back into cards.
+    expect(expanded()).toBe(false);
+    await waitFor(() => expect(styleOf('plan-page-1').paddingHorizontal).toBeCloseTo(24));
+    // Plan 1 kept its scroll: going back opens it full screen again.
+    await fireEvent.press(screen.getByTestId('plan-pager-prev'));
+    expect(mockRouter.setParams).toHaveBeenLastCalledWith({ id: PLAN(1) });
+    expect(expanded()).toBe(true);
+  });
+
+  it('under Reduce Motion the card snaps between states instead of growing', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    openFromRow(PLAN(1), [PLAN(1), PLAN(2)]);
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    await screen.findByText('Plan number 1');
+    await waitFor(() => expect(styleOf('plan-card-frame-1').transform?.[0]?.scale).toBe(1));
+    // A little scroll: still the full inset card (no in-between sizes).
+    await scrollSheet(EXPAND_DISTANCE / 4);
+    expect(styleOf('plan-page-0').paddingHorizontal).toBe(24);
+    expect(expanded()).toBe(false);
+    // Past half the distance: straight to full screen.
+    await scrollSheet(EXPAND_DISTANCE * 0.6);
+    expect(expanded()).toBe(true);
+    expect(styleOf('plan-page-0').paddingHorizontal).toBe(0);
+    expect(styleOf('plan-card-frame-0').borderRadius).toBe(0);
+    await scrollSheet(0);
+    expect(styleOf('plan-page-0').paddingHorizontal).toBe(24);
   });
 
   it('without a row (deep link, notification, share link) shows the single plan as before', async () => {

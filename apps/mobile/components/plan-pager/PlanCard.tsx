@@ -3,7 +3,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { formatWhen } from '../../src/features/events/format';
 import { useTheme, TOUCH_TARGET } from '../../src/theme/theme';
 import { EventTogetherTools } from '../at-event/EventTogetherTools';
@@ -97,12 +103,15 @@ export function PlanCard({
   onClose,
   initialScrollY = 0,
   onScrollY,
+  scrollY,
 }: {
   event: EventDetail;
   onClose: () => void;
   /** Where this card's sheet was scrolled to last time it was the visible one. */
   initialScrollY?: number;
   onScrollY?: (y: number) => void;
+  /** Follows the sheet's vertical scroll, so the deck can grow this card to full screen (D-221). */
+  scrollY?: Animated.Value;
 }) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -112,11 +121,21 @@ export function PlanCard({
       afterRsvp={<EventTogetherTools event={event} />}
       card={({ body, action, share }) => (
         <View style={[styles.card, { backgroundColor: theme.colors.surface }]} testID="plan-card">
-          <ScrollView
+          <Animated.ScrollView
             style={styles.fill}
             contentOffset={{ x: 0, y: initialScrollY }}
-            onScroll={(e) => onScrollY?.(e.nativeEvent.contentOffset.y)}
-            scrollEventThrottle={64}
+            onScroll={
+              scrollY
+                ? // JS driver: the card's insets and corners it drives are layout props.
+                  Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+                    useNativeDriver: false,
+                    listener: (e: NativeSyntheticEvent<NativeScrollEvent>) =>
+                      onScrollY?.(e.nativeEvent.contentOffset.y),
+                  })
+                : (e: NativeSyntheticEvent<NativeScrollEvent>) =>
+                    onScrollY?.(e.nativeEvent.contentOffset.y)
+            }
+            scrollEventThrottle={16}
             // Inside a sideways pager: Android needs nested scrolling, iOS locks to the first direction.
             nestedScrollEnabled
             directionalLockEnabled
@@ -142,7 +161,7 @@ export function PlanCard({
               {body}
               <EventComments eventId={event.id} />
             </View>
-          </ScrollView>
+          </Animated.ScrollView>
           <View style={styles.topBar} pointerEvents="box-none">
             <MediaButton
               icon={ChevronDown}
