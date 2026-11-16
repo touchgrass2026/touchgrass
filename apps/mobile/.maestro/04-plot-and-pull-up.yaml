@@ -22,7 +22,12 @@ name: Plot a plan and manage it
 - tapOn:
     id: plot-title
 - inputText: 'Maestro chai walk'
-# Category is a setting row that opens a searchable list (D-189, D-199).
+# Category is a setting row that opens a searchable list (D-189, D-199). With the keyboard up the screen
+# now shrinks above it (D-222), so the row can sit just below the visible area: scroll to it, as a person would.
+- scrollUntilVisible:
+    element:
+      id: plot-category
+    direction: DOWN
 - tapOn:
     id: plot-category
 - tapOn:
