@@ -43,6 +43,14 @@ export const useGuideTargets = create<GuideTargets>((set) => ({
   },
 }));
 
+/** A view's box in window coordinates (one place, so tests can stand in for the native measurement). */
+export function measureInWindowOf(
+  node: HostInstance | null,
+  done: (x: number, y: number, width: number, height: number) => void,
+): void {
+  node?.measureInWindow(done);
+}
+
 /**
  * Registers a view as a tour target. Spread the result on the view: its real on-screen box is measured
  * after each layout, so the ring and the tip line up with it on every device.
@@ -64,7 +72,7 @@ export function useGuideTarget(key: GuideStep): {
   const onLayout = useCallback(() => {
     // Measure on the next frame, once the layout has been applied on screen.
     requestAnimationFrame(() => {
-      ref.current?.measureInWindow((x, y, width, height) => {
+      measureInWindowOf(ref.current, (x, y, width, height) => {
         if (width > 0 && height > 0) setRect(key, { x, y, width, height });
       });
     });

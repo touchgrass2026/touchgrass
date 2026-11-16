@@ -1597,6 +1597,8 @@ export const te: Translation = {
     decline: 'వద్దు',
     closesInHours_one: 'ఈ చాట్ {{count}} గంటలో క్లోజ్ అవుతుంది',
     closesInHours_other: 'ఈ చాట్ {{count}} గంటల్లో క్లోజ్ అవుతుంది',
+    closesOn: 'ఈ ప్లాన్ చాట్ {{when}}కి కనిపించదు, ప్లాన్ అయిన 2 రోజుల తర్వాత.',
+    closesSoonShort: 'త్వరలో మూసేస్తాం',
     closesInUnderHour: 'ఈ చాట్ గంటలోపే క్లోజ్ అవుతుంది',
     endedTitle: 'ఈ ప్లాన్ చాట్ ముగిసింది',
     endedBody: 'ప్లాన్ అయిపోయిన లేదా క్యాన్సిల్ అయిన 2 రోజులకి ప్లాన్ చాట్స్ క్లోజ్ అవుతాయి.',

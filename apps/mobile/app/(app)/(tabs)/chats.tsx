@@ -1,5 +1,5 @@
 import { BellOff } from '../../../components/icons';
-import type { ConversationSummary } from '@touchgrass/shared';
+import { categoryHues, type ConversationSummary } from '@touchgrass/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,7 @@ import {
   Text,
   Pressable,
 } from '../../../components/ui';
-import { useInbox } from '../../../src/features/chat/api';
+import { closingInHours, useInbox } from '../../../src/features/chat/api';
 import { formatTime } from '../../../src/features/events/format';
 import { flatten } from '../../../src/features/social/api';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
@@ -44,6 +44,7 @@ export default function ChatsScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const theme = useTheme();
+  const now = Date.now();
   const offline = useIsOffline();
   const [filter, setFilter] = useState<'all' | 'requests'>('all');
   const q = useInbox(filter);
@@ -131,6 +132,16 @@ export default function ChatsScreen() {
                         {c.kind === 'crew' ? t('chat.kindCrew') : t('chat.kindPlan')}
                       </Text>
                     </View>
+                  ) : null}
+                  {closingInHours(c, now) !== null ? (
+                    // Last day of a plan chat (D-214).
+                    <Text
+                      variant="caption"
+                      style={[styles.kindText, { color: categoryHues.amber.solid }]}
+                      testID={`conv-closing-${c.id}`}
+                    >
+                      {t('chat.closesSoonShort')}
+                    </Text>
                   ) : null}
                   {c.unreadCount > 0 ? (
                     <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>

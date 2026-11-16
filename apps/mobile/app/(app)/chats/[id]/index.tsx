@@ -16,6 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, BellOff, Photo, Poll, Send } from '../../../../components/icons';
 import { fontFamilyFor } from '../../../../src/theme/fonts';
+import { ChatCloseNote } from '../../../../components/chat/ChatCloseNote';
 import { MessageBubble } from '../../../../components/chat/MessageBubble';
 import {
   Button,
@@ -30,7 +31,6 @@ import {
   Pressable,
 } from '../../../../components/ui';
 import {
-  closingInHours,
   isChatEnded,
   useClosePoll,
   useConversation,
@@ -172,7 +172,6 @@ export default function ThreadScreen() {
   const group = c.kind !== 'direct';
   const canWrite = !c.readOnly;
   const names = Object.values(typing ?? {}).filter((n) => n.length > 0);
-  const closingIn = closingInHours(c, Date.now());
 
   const rows: Row[] = [
     ...[...pending].reverse().map((p) => ({ kind: 'pending' as const, clientId: p.clientId })),
@@ -268,19 +267,9 @@ export default function ThreadScreen() {
           ? t('chat.opensAt', { time: formatWhen(c.opensAt, i18n.language) })
           : t('chat.closed')}
       </Text>
-    ) : closingIn !== null ? (
-      // So the chat never vanishes by surprise (D-208).
-      <Text
-        variant="caption"
-        tone="muted"
-        style={styles.notice}
-        accessibilityLiveRegion="polite"
-        testID="closing-soon"
-      >
-        {closingIn === 0
-          ? t('chat.closesInUnderHour')
-          : t('chat.closesInHours', { count: closingIn })}
-      </Text>
+    ) : c.kind === 'event' ? (
+      // Plan chats always say when they go away (D-208, D-214).
+      <ChatCloseNote conversation={c} />
     ) : null;
 
   return (

@@ -262,6 +262,39 @@ describe('chats inbox (F-CHT-04)', () => {
     expect(await screen.findByText('Hi! Saw you at frisbee')).toBeOnTheScreen();
   });
 
+  it('flags plan chats in their last day with "Closes soon" (D-214)', async () => {
+    const H = 3_600_000;
+    const PLAN = '0192f3a4-5b6c-7d8e-9f01-0000000cc0a1';
+    const LATER = '0192f3a4-5b6c-7d8e-9f01-0000000cc0a2';
+    api.on('GET', '/v1/chats', {
+      status: 200,
+      body: {
+        items: [
+          conversation({
+            id: PLAN,
+            kind: 'event',
+            peer: null,
+            eventId: EVENT_ID,
+            title: 'Sunset frisbee',
+            closesAt: new Date(Date.now() + 5 * H).toISOString(),
+          }),
+          conversation({
+            id: LATER,
+            kind: 'event',
+            peer: null,
+            eventId: EVENT_ID,
+            title: 'Board games',
+            closesAt: new Date(Date.now() + 40 * H).toISOString(),
+          }),
+        ],
+        nextCursor: null,
+      },
+    });
+    await renderWithProviders(<ChatsScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId(`conv-closing-${PLAN}`)).toHaveTextContent('Closes soon');
+    expect(screen.queryByTestId(`conv-closing-${LATER}`)).toBeNull();
+  });
+
   it('shows an empty state', async () => {
     api.on('GET', '/v1/chats', { status: 200, body: { items: [], nextCursor: null } });
     await renderWithProviders(<ChatsScreen />, { fetchFn: api.fetch });
@@ -492,6 +525,10 @@ describe('thread (F-CHT-01, F-CHT-04)', () => {
     const later = await renderWithProviders(<ThreadScreen />, { fetchFn: api.fetch });
     expect(await screen.findByTestId('composer')).toBeOnTheScreen();
     expect(screen.queryByTestId('closing-soon')).toBeNull();
+    // Further out, a quiet note still says when it goes away (D-214).
+    expect(screen.getByTestId('closing-note')).toHaveTextContent(
+      /^This plan chat disappears .+, 2 days after the plan\.$/,
+    );
     await later.unmount();
 
     api.on('GET', `/v1/chats/${CONV}`, { status: 200, body: planChat(1 * H + 60_000) });

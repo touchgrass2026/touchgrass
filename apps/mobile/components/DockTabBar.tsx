@@ -3,9 +3,7 @@ import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { CalendarDays, Compass, MessageCircle, Plus, Users } from './icons';
-import { useAuthStore } from '../src/stores/auth-store';
 import { useTheme } from '../src/theme/theme';
-import { DockGuide } from './DockGuide';
 import { type GuideStep, useGuideTarget } from './guide/targets';
 import { AnimatedPressable, Icon, type GlyphIcon, Pop, Text, usePressScale } from './ui';
 
@@ -31,7 +29,6 @@ export function DockTabBar({
   const { t } = useTranslation();
   const plotPress = usePressScale(0.9);
   // Each dock button registers its on-screen box for the first-launch tour (D-205).
-  const tutorialDone = useAuthStore((s) => s.session?.user.tutorialComplete === true);
   const plotTarget = useGuideTarget('plot');
   const visible = DOCK_TABS.map((name) => state.routes.find((r) => r.name === name)).filter(
     (r): r is (typeof state.routes)[number] => r !== undefined,
@@ -99,7 +96,6 @@ export function DockTabBar({
         <Icon icon={Plus} size={24} color={theme.colors.onPrimary} strokeWidth={2.6} />
       </AnimatedPressable>
       {visible.slice(half).map(tab)}
-      {tutorialDone ? <DockGuide /> : null}
     </View>
   );
 }

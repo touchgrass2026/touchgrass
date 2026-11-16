@@ -1575,6 +1575,8 @@ export const en = {
     decline: 'Decline',
     closesInHours_one: 'This chat closes in {{count}} hour',
     closesInHours_other: 'This chat closes in {{count}} hours',
+    closesOn: 'This plan chat disappears {{when}}, 2 days after the plan.',
+    closesSoonShort: 'Closes soon',
     closesInUnderHour: 'This chat closes in less than an hour',
     endedTitle: "This plan's chat has ended",
     endedBody: 'Plan chats close 2 days after the plan ends or is cancelled.',

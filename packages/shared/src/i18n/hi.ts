@@ -1574,6 +1574,8 @@ export const hi: Translation = {
     decline: 'मना करो',
     closesInHours_one: 'ये चैट {{count}} घंटे में बंद होगी',
     closesInHours_other: 'ये चैट {{count}} घंटों में बंद होगी',
+    closesOn: 'यह प्लान चैट {{when}} को हट जाएगी, प्लान के 2 दिन बाद.',
+    closesSoonShort: 'जल्द बंद होगी',
     closesInUnderHour: 'ये चैट एक घंटे के अंदर बंद होगी',
     endedTitle: 'इस प्लान की चैट खत्म हो गई',
     endedBody: 'प्लान खत्म या कैंसल होने के 2 दिन बाद प्लान चैट बंद हो जाती है.',
