@@ -4,9 +4,14 @@ import { useTranslation } from 'react-i18next';
 import * as Linking from 'expo-linking';
 import { StyleSheet, View } from 'react-native';
 import { SosButton } from '../../../components/SosButton';
-import { Button, Screen, Text } from '../../../components/ui';
+import { Button, Screen, SwitchRow, Text } from '../../../components/ui';
 import { useMe } from '../../../src/features/me/api';
-import { useLiveShare, useMyVerification } from '../../../src/features/safety/api';
+import {
+  useLiveShare,
+  useMyVerification,
+  useSafetySettings,
+  useUpdateSafetySettings,
+} from '../../../src/features/safety/api';
 import { formatTime } from '../../../src/features/events/format';
 import { useTheme } from '../../../src/theme/theme';
 
@@ -22,6 +27,8 @@ export default function SafetyCentreScreen() {
   const verification = useMyVerification();
   const live = useLiveShare();
   const share = live.data?.share ?? null;
+  const settings = useSafetySettings();
+  const updateSettings = useUpdateSafetySettings();
   const box = [
     styles.box,
     { backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radii.md },
@@ -74,6 +81,25 @@ export default function SafetyCentreScreen() {
           router.push('/safety/contacts');
         }}
         testID="safety-open-contacts"
+      />
+
+      <Text variant="heading" accessibilityRole="header">
+        {t('safety.gotHome.sectionTitle')}
+      </Text>
+      {/* "Got home safe?" after late plans (D-212), kept on the server so the reminder job respects it. */}
+      <SwitchRow
+        label={t('safety.gotHome.settingLabel')}
+        hint={t('safety.gotHome.settingHint')}
+        value={
+          (updateSettings.isPending ? updateSettings.variables.gotHomeCheck : undefined) ??
+          settings.data?.gotHomeCheck ??
+          true
+        }
+        disabled={!settings.data || updateSettings.isPending}
+        onChange={(gotHomeCheck) => {
+          updateSettings.mutate({ gotHomeCheck });
+        }}
+        testID="safety-got-home-setting"
       />
 
       <Text variant="heading" accessibilityRole="header">

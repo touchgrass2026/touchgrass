@@ -274,6 +274,14 @@ export const NOTIFICATION_TEMPLATES = {
     body: 'safety.shareEndedPushBody',
     link: 'safety',
   },
+  // After a late plan (D-212). Urgent: late plans end inside quiet hours, and the ask is useless by morning.
+  got_home_ask: {
+    category: 'safety',
+    title: 'safety.gotHome.pushTitle',
+    body: 'safety.gotHome.pushBody',
+    link: 'safety/got-home/{{eventId}}',
+    urgent: true,
+  },
   sanction_warn: {
     category: 'safety',
     title: 'moderation.warnPush',

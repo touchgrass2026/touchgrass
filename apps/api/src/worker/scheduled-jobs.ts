@@ -22,6 +22,7 @@ import { PayoutsService } from '../modules/payments/payouts.service.js';
 import { RefundsService } from '../modules/payments/refunds.service.js';
 import { WebhooksService } from '../modules/payments/webhooks.service.js';
 import { SanctionsService } from '../modules/moderation-tools/sanctions.service.js';
+import { GotHomeService } from '../modules/safety/got-home.service.js';
 import { SafetyService } from '../modules/safety/safety.service.js';
 import { NotificationsService } from '../modules/notifications/notifications.service.js';
 import { RemindersService } from '../modules/reminders/reminders.service.js';
@@ -64,6 +65,7 @@ export class ScheduledJobs {
     private readonly gamificationHandlers: GamificationHandlers,
     private readonly recaps: RecapsService,
     private readonly safety: SafetyService,
+    private readonly gotHome: GotHomeService,
     private readonly sanctions: SanctionsService,
     private readonly notifications: NotificationsService,
     private readonly reminders: RemindersService,
@@ -147,6 +149,9 @@ export class ScheduledJobs {
         pattern: '* * * * *',
         run: () => this.safety.endExpired(),
       },
+      // "Got home safe?" after late plans (D-212); a few minutes' lag is fine, the ask waits 30 minutes anyway.
+      { id: 'safety.got-home', pattern: '*/5 * * * *', run: () => this.gotHome.askDue() },
+      { id: 'safety.got-home-prune', pattern: '23 4 * * *', run: () => this.gotHome.prune() },
       // Hourly with an hour's margin: no location point is kept beyond 24 hours (F-SAF-04).
       { id: 'safety.purge-locations', pattern: '11 * * * *', run: () => this.safety.purge() },
       {

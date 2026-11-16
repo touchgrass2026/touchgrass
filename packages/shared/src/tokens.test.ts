@@ -5,6 +5,10 @@ import {
   colors,
   contrastRatio,
   media,
+  STORY_GRADIENT_NAMES,
+  STORY_SOLID_NAMES,
+  storyGradients,
+  storySolids,
   palette,
   relativeLuminance,
 } from './tokens';
@@ -86,5 +90,19 @@ describe('design tokens', () => {
         );
       }
     });
+  });
+  describe('story card backgrounds (D-212)', () => {
+    for (const name of STORY_GRADIENT_NAMES) {
+      it(`${name}: the card's text reads on both stops (4.5:1)`, () => {
+        const g = storyGradients[name];
+        for (const stop of g.colors) expect(contrastRatio(g.ink, stop)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+    for (const name of STORY_SOLID_NAMES) {
+      it(`${name}: the card's text reads on the solid (4.5:1)`, () => {
+        const s = storySolids[name];
+        expect(contrastRatio(s.ink, s.color)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
   });
 });

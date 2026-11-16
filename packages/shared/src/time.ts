@@ -40,6 +40,16 @@ export function isQuietHours(date: Date, timeZone: string = LOCALE_DEFAULTS.time
   return hour >= quietHoursStart || hour < quietHoursEnd;
 }
 
+/**
+ * A late plan (D-212): it ends at or after 21:00, or before 05:00, in its own zone. Members who checked in are
+ * asked whether they got home.
+ */
+export function isLatePlan(endsAt: Date, timeZone: string = LOCALE_DEFAULTS.timezone): boolean {
+  const { hour } = zonedParts(endsAt, timeZone);
+  const { lateFromHour, lateUntilHour } = LIMITS.safety.gotHome;
+  return hour >= lateFromHour || hour < lateUntilHour;
+}
+
 /** ISO-8601 week key such as "2026-W44", computed in the given timezone. Used for weekly streaks. */
 export function isoWeekKey(date: Date, timeZone: string = LOCALE_DEFAULTS.timezone): string {
   const { year, month, day, weekday } = zonedParts(date, timeZone);
