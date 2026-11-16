@@ -37,6 +37,7 @@ import {
 import { useMe } from '../../../src/features/me/api';
 import { useTheme } from '../../../src/theme/theme';
 import { useFeed, useFeedClick } from '../../../src/features/discovery/api';
+import { openPlan } from '../../../src/features/events/open-plan';
 import {
   activeFilterCount,
   DEFAULT_FILTERS,
@@ -105,10 +106,17 @@ export default function DiscoverScreen() {
   };
   const firstPage = feed.data?.pages[0];
   const items = flatten(feed.data);
-  const openEvent = (id: string, position: number | null): void => {
+  const feedPositionOf = (id: string): number | null => {
+    const at = items.findIndex((i) => i.id === id);
+    return at >= 0 ? at : null;
+  };
+  /** Opens a plan with the rest of its row, so the plan screen can swipe through them (D-219). */
+  const openEvent = (id: string, position: number | null, row: readonly { id: string }[]): void => {
     if (firstPage && position !== null)
       click.mutate({ requestId: firstPage.requestId, eventId: id, position });
-    router.push({ pathname: '/events/[id]', params: { id } });
+    openPlan(router, id, row, {
+      feed: firstPage ? { requestId: firstPage.requestId, positionOf: feedPositionOf } : null,
+    });
   };
   const nFilters = activeFilterCount(filters);
   const weather = firstPage?.weather;
@@ -140,7 +148,6 @@ export default function DiscoverScreen() {
     // Everything scrolls sideways (D-160): carousel, themed rows, then all plans as one row of cards.
     // Filters narrow what goes into the rows; the layout stays the same.
     const sections = buildSections(items);
-    const positionOf = (id: string): number => items.findIndex((i) => i.id === id);
     body = (
       <>
         {sections.hero.length > 0 ? (
@@ -148,7 +155,7 @@ export default function DiscoverScreen() {
             items={sections.hero}
             gutter={GUTTER}
             onOpen={(item) => {
-              openEvent(item.id, positionOf(item.id));
+              openEvent(item.id, feedPositionOf(item.id), sections.hero);
             }}
           />
         ) : null}
@@ -160,7 +167,7 @@ export default function DiscoverScreen() {
             items={rail.items}
             gutter={GUTTER}
             onOpen={(item) => {
-              openEvent(item.id, positionOf(item.id));
+              openEvent(item.id, feedPositionOf(item.id), rail.items);
             }}
           />
         ))}
@@ -168,7 +175,7 @@ export default function DiscoverScreen() {
           items={items}
           gutter={GUTTER}
           onOpen={(item, position) => {
-            openEvent(item.id, position);
+            openEvent(item.id, position, items);
           }}
           onEnd={() => {
             if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
@@ -244,8 +251,8 @@ export default function DiscoverScreen() {
         <DiscoverMap
           center={location ?? firstPage?.center ?? { lat: 17.385, lng: 78.4867 }}
           filters={filters}
-          onOpen={(pin) => {
-            openEvent(pin.id, null);
+          onOpen={(pin, pins) => {
+            openEvent(pin.id, null, pins);
           }}
           overlay={searchRow}
         />

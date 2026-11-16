@@ -25,6 +25,7 @@ import {
   rememberSearch,
 } from '../../src/features/discovery/recent-searches';
 import { errorMessage } from '../../src/lib/errors';
+import { openPlan } from '../../src/features/events/open-plan';
 
 const DEBOUNCE_MS = 300;
 
@@ -180,7 +181,7 @@ export default function SearchScreen() {
               testID="search-plans"
               onOpen={(e) => {
                 remember(query);
-                router.push({ pathname: '/events/[id]', params: { id: e.id } });
+                openPlan(router, e.id, data.events);
               }}
             />
           ) : null}

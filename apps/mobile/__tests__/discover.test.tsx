@@ -16,6 +16,7 @@ import {
   regionToBox,
 } from '../src/features/discovery/filters';
 import { useAuthStore } from '../src/stores/auth-store';
+import { useBrowseStore } from '../src/stores/browse-store';
 import {
   authResponseFixture,
   FakeApi,
@@ -180,10 +181,16 @@ describe('Discover tab (F-DSC-01..08)', () => {
     );
     expect(screen.getByTestId('weather-chip')).toHaveTextContent('28° · Clear');
     await fireEvent.press(card);
+    // Opened with its row (D-219): the plan screen can swipe through All plans from here.
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/events/[id]',
-      params: { id: item(1).id },
+      params: { id: item(1).id, browse: 'b1' },
     });
+    const row = useBrowseStore.getState().contexts.b1;
+    expect(row?.ids[row.index]).toBe(item(1).id);
+    expect(row?.ids.length).toBeGreaterThan(1);
+    expect(row?.feed?.requestId).toBe(REQUEST_ID);
+    expect(row?.feed?.positions[row.index]).toBe(0);
     await waitFor(() =>
       expect(api.callsTo('POST', '/v1/discover/clicks')[0]?.body).toEqual({
         requestId: REQUEST_ID,
@@ -254,7 +261,13 @@ describe('Discover tab (F-DSC-01..08)', () => {
     await fireEvent.press(screen.getByTestId('tile-squad-Slug0004'));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/events/[id]',
-      params: { id: item(4).id },
+      params: { id: item(4).id, browse: 'b1' },
+    });
+    // The row is that rail's plans (squad going: 2 and 4), not the whole feed.
+    expect(useBrowseStore.getState().contexts.b1).toMatchObject({
+      ids: [item(2).id, item(4).id],
+      index: 1,
+      feed: { requestId: REQUEST_ID, positions: [1, 3] },
     });
     await waitFor(() =>
       expect(api.callsTo('POST', '/v1/discover/clicks')[0]?.body).toMatchObject({ position: 3 }),
@@ -417,7 +430,7 @@ describe('Discover tab (F-DSC-01..08)', () => {
     await fireEvent.press(screen.getByTestId('pin-Slug0003'));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/events/[id]',
-      params: { id: item(3).id },
+      params: { id: item(3).id, browse: expect.any(String) as string },
     });
   });
 

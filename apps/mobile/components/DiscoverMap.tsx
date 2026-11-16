@@ -35,7 +35,8 @@ export function DiscoverMap({
 }: {
   center: { lat: number; lng: number };
   filters: DiscoverFilters;
-  onOpen: (pin: MapPin) => void;
+  /** The pin and the row of plan cards it is in, so the plan screen can swipe through them (D-219). */
+  onOpen: (pin: MapPin, pins: readonly MapPin[]) => void;
   overlay?: ReactNode;
 }) {
   const { t, i18n } = useTranslation();
@@ -117,7 +118,7 @@ export function DiscoverMap({
               setSelected(p.id);
             }}
             onCalloutPress={() => {
-              onOpen(p);
+              onOpen(p, q.data.pins);
             }}
             accessibilityLabel={pinLabel(p)}
             testID={`marker-${p.slug}`}
@@ -195,7 +196,7 @@ export function DiscoverMap({
                 accessibilityState={{ selected: selected === p.id }}
                 testID={`pin-${p.slug}`}
                 onPress={() => {
-                  onOpen(p);
+                  onOpen(p, q.data.pins);
                 }}
                 style={[
                   styles.card,

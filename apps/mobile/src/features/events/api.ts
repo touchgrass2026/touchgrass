@@ -22,6 +22,7 @@ import {
   type HostRole,
 } from '@touchgrass/shared';
 import * as Crypto from 'expo-crypto';
+import { useEffect } from 'react';
 import { z } from 'zod';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { useApi } from '../../providers/api-context';
@@ -74,6 +75,28 @@ export function useEvent(
       return data && pollUntil?.(data) ? false : pollEveryMs;
     },
   });
+}
+
+/**
+ * Loads plans ahead of time into the same cache `useEvent` reads (D-219: the plan deck fetches the cards
+ * either side of the visible one, so a swipe lands on a loaded plan).
+ */
+export function usePrefetchEvents(ids: readonly string[]): void {
+  const { client } = useApi();
+  const queryClient = useQueryClient();
+  const key = ids.join(',');
+  useEffect(() => {
+    for (const id of key ? key.split(',') : [])
+      // A failed prefetch is fine: the card shows its own error and retry once it is the visible one.
+      queryClient
+        .query({
+          queryKey: EVENT_KEYS.detail(id),
+          queryFn: ({ signal }) => client.request(`/v1/events/${id}`, EventDetail, { signal }),
+          // Swiping back and forth shouldn't refetch the card just left.
+          staleTime: 30_000,
+        })
+        .catch(() => undefined);
+  }, [client, key, queryClient]);
 }
 
 /** Opening a share link; an `i` invite token records who invited you before visibility is checked. */

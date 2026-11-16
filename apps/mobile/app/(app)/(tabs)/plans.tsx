@@ -15,6 +15,7 @@ import {
 } from '../../../components/ui';
 import { FeedSkeleton } from '../../../components/FeedSkeleton';
 import { useMyEvents } from '../../../src/features/events/api';
+import { openPlan } from '../../../src/features/events/open-plan';
 import { flatten } from '../../../src/features/social/api';
 import { useIsOffline } from '../../../src/hooks/use-is-offline';
 import { useRefreshOnFocus } from '../../../src/hooks/use-refresh-on-focus';
@@ -38,8 +39,9 @@ export default function PlansScreen() {
   const refresh = (): Promise<unknown> =>
     Promise.all([upcoming.refetch(), hosting.refetch(), past.refetch()]);
   useRefreshOnFocus([refresh]);
-  const open = (e: EventSummary): void => {
-    router.push({ pathname: '/events/[id]', params: { id: e.id } });
+  /** Opens a plan with the rest of its row, so the plan screen can swipe through them (D-219). */
+  const open = (e: EventSummary, row: readonly EventSummary[]): void => {
+    openPlan(router, e.id, row);
   };
 
   const queries = [upcoming, hosting, past];
@@ -77,7 +79,7 @@ export default function PlansScreen() {
               <EventCard
                 event={next[0]}
                 onOpen={() => {
-                  if (next[0]) open(next[0]);
+                  if (next[0]) open(next[0], next);
                 }}
               />
             </View>
@@ -91,7 +93,10 @@ export default function PlansScreen() {
               title={t(`events.${r.key}`)}
               items={r.items}
               gutter={GUTTER}
-              onOpen={open}
+              onOpen={(e) => {
+                // "Next up" and Upcoming are one row: swiping from either goes through all upcoming plans.
+                open(e, r.key === 'upcoming' ? next : r.items);
+              }}
             />
           ) : null,
         )}

@@ -54,13 +54,27 @@ function canShareFor(
   );
 }
 
+/** What the card layout (D-219) gets to place: the scrolling body, the main action to pin, and Share. */
+export interface EventCardParts {
+  body: ReactNode;
+  /** Pull up (or join the waitlist / pay) with Maybe, when the viewer can still do that; pinned at the bottom. */
+  action: ReactNode | null;
+  share: () => void;
+}
+
 export function EventDetailView({
   event,
   afterRsvp,
+  card,
 }: {
   event: EventDetail;
   /** Shown right under the Pull up block: the plan's chat and at-the-plan tools. */
   afterRsvp?: ReactNode;
+  /**
+   * Card layout (D-219): the plan's cover is drawn by the card, Share sits in its top bar and the main
+   * action is pinned under the sheet, so this hands over the parts instead of stacking them.
+   */
+  card?: (parts: EventCardParts) => ReactNode;
 }) {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -193,23 +207,59 @@ export function EventDetailView({
     );
   };
 
+  // The main action: Pull up (or the waitlist / pay) and Maybe. Pinned at the bottom of a card (D-219).
+  const mainAction =
+    open && v.canRsvp ? (
+      <View style={styles.row}>
+        <Button
+          label={
+            event.spotsLeft <= 0
+              ? t('events.joinWaitlist')
+              : paid
+                ? t('payments.pay', { amount: money(event.pricePaise, i18n.language) })
+                : t('events.pullUp')
+          }
+          loading={rsvp.isPending}
+          onPress={() => {
+            if (paid) go('/events/[id]/checkout');
+            else void act({ status: 'going' });
+          }}
+          testID="pull-up"
+          style={styles.grow}
+        />
+        {v.rsvp !== 'interested' ? (
+          <Button
+            label={t('events.interested')}
+            variant="secondary"
+            onPress={() => void maybe()}
+            testID="interested"
+          />
+        ) : null}
+      </View>
+    ) : null;
+
   const loc = event.location;
-  return (
+  const body = (
     <View style={styles.wrap} testID="event-detail">
       {/* 1. The plan itself, as a card. */}
       <FadeIn>
         <View
-          style={[
-            styles.hero,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-              borderRadius: theme.radii.lg,
-            },
-          ]}
+          style={
+            card
+              ? styles.heroBare
+              : [
+                  styles.hero,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                    borderRadius: theme.radii.lg,
+                  },
+                ]
+          }
           testID="event-hero"
         >
-          {event.cover ? (
+          {/* On a card the cover runs full-bleed above the sheet instead (D-219). */}
+          {card ? null : event.cover ? (
             <Image
               source={{ uri: event.cover.lg }}
               style={[styles.cover, { borderRadius: theme.radii.lg }]}
@@ -346,34 +396,7 @@ export function EventDetailView({
               testID="use-priority-pass"
             />
           ) : null}
-          {open && v.canRsvp ? (
-            <View style={styles.row}>
-              <Button
-                label={
-                  event.spotsLeft <= 0
-                    ? t('events.joinWaitlist')
-                    : paid
-                      ? t('payments.pay', { amount: money(event.pricePaise, i18n.language) })
-                      : t('events.pullUp')
-                }
-                loading={rsvp.isPending}
-                onPress={() => {
-                  if (paid) go('/events/[id]/checkout');
-                  else void act({ status: 'going' });
-                }}
-                testID="pull-up"
-                style={styles.grow}
-              />
-              {v.rsvp !== 'interested' ? (
-                <Button
-                  label={t('events.interested')}
-                  variant="secondary"
-                  onPress={() => void maybe()}
-                  testID="interested"
-                />
-              ) : null}
-            </View>
-          ) : null}
+          {card ? null : mainAction}
           {openPayment ? (
             <Button
               label={t('payments.payNow')}
@@ -516,13 +539,15 @@ export function EventDetailView({
           ) : null}
 
           <View style={styles.row}>
-            <Button
-              label={t('events.share')}
-              variant="secondary"
-              onPress={share}
-              style={styles.grow}
-              testID="share"
-            />
+            {card ? null : (
+              <Button
+                label={t('events.share')}
+                variant="secondary"
+                onPress={share}
+                style={styles.grow}
+                testID="share"
+              />
+            )}
             {event.viewer.isHost || event.visibility !== 'invite_only' ? (
               <Button
                 label={t('share.shareStory')}
@@ -833,6 +858,7 @@ export function EventDetailView({
       </FadeIn>
     </View>
   );
+  return card ? card({ body, action: mainAction, share }) : body;
 }
 
 const styles = StyleSheet.create({
@@ -841,6 +867,7 @@ const styles = StyleSheet.create({
   cover: { width: '100%', aspectRatio: 1.6 },
   coverArt: { overflow: 'hidden' },
   hero: { borderWidth: 1, padding: 12, gap: 8, overflow: 'hidden' },
+  heroBare: { gap: 8 },
   map: { height: 180 },
   banner: { gap: 8, padding: 12, borderWidth: 2 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

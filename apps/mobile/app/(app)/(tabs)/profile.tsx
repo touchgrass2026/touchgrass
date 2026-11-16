@@ -32,6 +32,7 @@ import {
 } from '../../../components/ui';
 import { useFlag } from '../../../src/features/app-config/use-flag';
 import { useMyEvents } from '../../../src/features/events/api';
+import { openPlan } from '../../../src/features/events/open-plan';
 import { useMe } from '../../../src/features/me/api';
 import { shareLinks, shareText } from '../../../src/features/share/share';
 import { flatten } from '../../../src/features/social/api';
@@ -195,7 +196,7 @@ export default function MyProfileScreen() {
           items={plans}
           gutter={GUTTER}
           onOpen={(e) => {
-            router.push({ pathname: '/events/[id]', params: { id: e.id } });
+            openPlan(router, e.id, plans);
           }}
         />
       ) : null}
