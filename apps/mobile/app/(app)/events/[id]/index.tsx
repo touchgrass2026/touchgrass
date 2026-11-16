@@ -1,14 +1,17 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { EventTogetherTools } from '../../../../components/at-event/EventTogetherTools';
 import { EventComments } from '../../../../components/EventComments';
 import { DirectionsButton } from '../../../../components/DirectionsButton';
 import { EventDetailView } from '../../../../components/EventDetailView';
+import { PlanPager } from '../../../../components/plan-pager/PlanPager';
 import { ErrorState, LoadingState, OfflineState, Screen, Text } from '../../../../components/ui';
 import { useEvent } from '../../../../src/features/events/api';
 import { useIsOffline } from '../../../../src/hooks/use-is-offline';
 import { errorMessage } from '../../../../src/lib/errors';
+import { browseContextFor } from '../../../../src/stores/browse-store';
 
 /** Notices another screen can hand over when it opens this plan (only these keys are shown). */
 const NOTICES = {
@@ -16,9 +19,20 @@ const NOTICES = {
   creditUsed: 'referrals.creditUsed',
 } as const;
 
+/**
+ * A plan. Opened from a row of plans (`browse` names the row, D-219) it is a swipeable deck of cards
+ * starting at the tapped plan; from a deep link, notification or share link it is just this plan.
+ */
 export default function EventScreen() {
-  const { id, notice, directions } = useLocalSearchParams<{
-    id: string;
+  const { id, browse } = useLocalSearchParams<{ id: string; browse?: string }>();
+  // Read once: the pager moves `id` along as the person swipes, and must not fall back to one plan then.
+  const [context] = useState(() => browseContextFor(browse, id));
+  if (context) return <PlanPager context={context} initialId={id} />;
+  return <SinglePlan id={id} />;
+}
+
+function SinglePlan({ id }: { id: string }) {
+  const { notice, directions } = useLocalSearchParams<{
     notice?: string;
     directions?: string;
   }>();

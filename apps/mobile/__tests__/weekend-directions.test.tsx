@@ -10,6 +10,7 @@ import {
 } from '../src/features/events/directions';
 import { pushPath } from '../src/features/notifications/push-links';
 import { useAuthStore } from '../src/stores/auth-store';
+import { useBrowseStore } from '../src/stores/browse-store';
 import { authResponseFixture, FakeApi, ids } from '../test/fake-api';
 import { mockRouteParams, mockRouter, renderWithProviders, resetStores } from '../test-utils';
 
@@ -228,7 +229,12 @@ describe('This weekend digest screen (D-211)', () => {
     await fireEvent.press(screen.getByTestId('event-Wknd2346'));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/events/[id]',
-      params: { id: PICK_2 },
+      params: { id: PICK_2, browse: 'b1' },
+    });
+    // The digest is one row: the plan screen can swipe back to the first pick (D-219).
+    expect(useBrowseStore.getState().contexts.b1).toMatchObject({
+      ids: [EVENT_ID, PICK_2],
+      index: 1,
     });
   });
 

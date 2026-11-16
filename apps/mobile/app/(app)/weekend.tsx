@@ -13,6 +13,7 @@ import {
 import { useWeekendPicks } from '../../src/features/discovery/api';
 import { useIsOffline } from '../../src/hooks/use-is-offline';
 import { errorMessage } from '../../src/lib/errors';
+import { openPlan } from '../../src/features/events/open-plan';
 
 /** "This weekend" (D-211): the picks the Thursday push named, re-checked for the viewer when opened. */
 export default function WeekendPicksScreen() {
@@ -55,7 +56,7 @@ export default function WeekendPicksScreen() {
               key={event.id}
               event={event}
               onOpen={() => {
-                router.push({ pathname: '/events/[id]', params: { id: event.id } });
+                openPlan(router, event.id, q.data.items);
               }}
             />
           ))}

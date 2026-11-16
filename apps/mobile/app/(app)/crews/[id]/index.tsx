@@ -15,6 +15,7 @@ import {
   useCrewMembership,
 } from '../../../../src/features/engagement/api';
 import { formatWhen } from '../../../../src/features/events/format';
+import { openPlan } from '../../../../src/features/events/open-plan';
 import { errorMessage } from '../../../../src/lib/errors';
 import { shareLinks, shareText } from '../../../../src/features/share/share';
 
@@ -224,7 +225,11 @@ function CrewView({ crew }: { crew: CrewDetail }) {
                   : t('crews.going', { count: s.goingCount })
               }
               onPress={() => {
-                router.push({ pathname: '/events/[id]', params: { id: s.eventId } });
+                openPlan(
+                  router,
+                  s.eventId,
+                  crew.upcoming.map((u) => u.eventId),
+                );
               }}
               testID={`session-${s.eventId}`}
             />
@@ -321,7 +326,11 @@ function CrewView({ crew }: { crew: CrewDetail }) {
                 .filter(Boolean)
                 .join(' · ')}
               onPress={() => {
-                router.push({ pathname: '/events/[id]', params: { id: s.eventId } });
+                openPlan(
+                  router,
+                  s.eventId,
+                  history.data.items.map((h) => h.eventId),
+                );
               }}
             />
           ))}

@@ -2513,6 +2513,15 @@ export const en = {
     hint: 'Opens directions in your maps app',
     ready: 'Starts soon. Directions are one tap away.',
   },
+  planPager: {
+    label: 'Plans in this row',
+    position: 'Plan {{n}} of {{total}}',
+    previous: 'Previous plan',
+    next: 'Next plan',
+    hint: 'Swipe left or right, or use the buttons below, for the next or previous plan',
+    close: 'Close plan',
+    loading: 'Loading plan',
+  },
   cities: {
     waitlistTitle: "You're on the list for {{city}}",
     waitlistBody:

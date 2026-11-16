@@ -7,6 +7,7 @@ import { createSessionClient } from './src/lib/session-client';
 import { AppProviders } from './src/providers/app-providers';
 import { useAuthFlowStore } from './src/stores/auth-flow-store';
 import { useAuthStore } from './src/stores/auth-store';
+import { useBrowseStore } from './src/stores/browse-store';
 import { useSettingsStore } from './src/stores/settings-store';
 
 export interface RenderOptions {
@@ -63,4 +64,5 @@ export function resetStores(): void {
   useAuthFlowStore.getState().reset();
   useAuthFlowStore.setState({ pendingLink: null });
   useSettingsStore.setState({ language: null, appearance: 'system', hydrated: true });
+  useBrowseStore.getState().reset();
 }
