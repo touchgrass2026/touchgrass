@@ -1460,6 +1460,15 @@ export const te: Translation = {
     closed: 'ఈ ప్లాన్‌కి కామెంట్స్ క్లోజ్ చేశారు.',
   },
   explore: {
+    morePlans: 'ఇంకా ప్లాన్లు',
+    plansNear: 'నీ దగ్గర ప్లాన్లు',
+    showMorePlans: 'ఇంకా ప్లాన్లు చూపించు',
+    tags: {
+      squad: 'స్క్వాడ్ వస్తోంది',
+      tonight: 'ఈ రాత్రి',
+      solo: 'ఒంటరిగా రావచ్చు',
+      free: 'ఫ్రీ',
+    },
     featured: 'ఫీచర్డ్',
     going: '{{count}} మంది వస్తున్నారు',
     going_other: '{{count}} మంది వస్తున్నారు',

@@ -1439,6 +1439,15 @@ export const en = {
     closed: 'Comments are closed for this plan.',
   },
   explore: {
+    morePlans: 'More plans',
+    plansNear: 'Plans near you',
+    showMorePlans: 'Show more plans',
+    tags: {
+      squad: 'Squad going',
+      tonight: 'Tonight',
+      solo: 'Solo-friendly',
+      free: 'Free',
+    },
     featured: 'Featured',
     going: '{{count}} going',
     going_other: '{{count}} going',

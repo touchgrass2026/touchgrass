@@ -220,13 +220,21 @@ describe('Discover tab (F-DSC-01..08)', () => {
     expect(label).toMatch(/4:30\s?pm/i);
   });
 
-  it('browses like an events app: featured carousel, themed rails, then all plans (D-155)', async () => {
+  it('browses like an events app: carousel, themed rows, then more plans, never one plan twice (D-155, D-220)', async () => {
     const items = [
       item(1, { reasons: ['interests'], soloFriendly: true }),
       item(2, { reasons: ['squad_going'], soloFriendly: true }),
       item(3, { reasons: ['featured'], soloFriendly: false }),
       item(4, { reasons: ['squad_going'], soloFriendly: false }),
       item(5, { reasons: ['nearby'], soloFriendly: false }),
+      // After the carousel takes five, these three squad plans make the squad row (also solo-friendly).
+      item(6, { reasons: ['squad_going'], soloFriendly: true }),
+      item(7, { reasons: ['squad_going'], soloFriendly: true }),
+      item(8, { reasons: ['squad_going'], soloFriendly: false }),
+      // Too few of a kind for a row of their own: listed under "More plans".
+      item(9, { reasons: [], soloFriendly: true, pricePaise: 50000, distanceMeters: 20000 }),
+      item(10, { reasons: [], soloFriendly: false, pricePaise: 50000, distanceMeters: 20000 }),
+      item(11, { reasons: [], soloFriendly: false, pricePaise: 50000, distanceMeters: 20000 }),
     ];
     api.on('GET', '/v1/discover/feed', {
       status: 200,
@@ -246,24 +254,27 @@ describe('Discover tab (F-DSC-01..08)', () => {
       .map((n) => String(n.props.testID).replace('hero-', ''));
     expect(heroIds).toEqual(['Slug0003', 'Slug0001', 'Slug0002', 'Slug0004', 'Slug0005']);
     expect(screen.getByRole('header', { name: 'Your squad is going' })).toBeOnTheScreen();
-    expect(screen.getByTestId('tile-squad-Slug0004')).toBeOnTheScreen();
-    expect(screen.getByRole('header', { name: 'Good to go solo' })).toBeOnTheScreen();
-    expect(screen.getByRole('header', { name: 'All plans' })).toBeOnTheScreen();
-    expect(screen.getByTestId('event-Slug0005')).toBeOnTheScreen();
-    // Opening from a rail logs the plan's real feed position.
-    await fireEvent.press(screen.getByTestId('tile-squad-Slug0004'));
+    expect(screen.getByTestId('tile-squad-Slug0006')).toBeOnTheScreen();
+    // Plans already in the carousel are not repeated in a row.
+    expect(screen.queryByTestId('tile-squad-Slug0004')).toBeNull();
+    // Only two solo plans are left after the squad row: no "Good to go solo" row, a tag instead.
+    expect(screen.queryByRole('header', { name: 'Good to go solo' })).toBeNull();
+    expect(screen.getByTestId('tags-squad-Slug0006')).toHaveTextContent('Solo-friendly · Free');
+    // Everything else, once, as a list.
+    expect(screen.getByRole('header', { name: 'More plans' })).toBeOnTheScreen();
+    expect(screen.getByTestId('event-Slug0009')).toBeOnTheScreen();
+    expect(screen.queryByTestId('event-Slug0006')).toBeNull();
+    // Opening from a row logs the plan's real feed position.
+    await fireEvent.press(screen.getByTestId('tile-squad-Slug0006'));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/events/[id]',
-      params: { id: item(4).id },
+      params: { id: item(6).id },
     });
     await waitFor(() =>
-      expect(api.callsTo('POST', '/v1/discover/clicks')[0]?.body).toMatchObject({ position: 3 }),
+      expect(api.callsTo('POST', '/v1/discover/clicks')[0]?.body).toMatchObject({ position: 5 }),
     );
-    // Plans never stack vertically: all plans are one sideways row of cards (D-160), and the category
-    // tiles are gone.
-    expect(screen.getByTestId('all-plans-rail')).toBeOnTheScreen();
     expect(screen.queryByTestId('category-rail')).toBeNull();
-    // A filter narrows what goes into the rows; the layout stays.
+    // A filter narrows what goes in; the layout stays.
     await fireEvent.press(screen.getByTestId('more-filters'));
     await fireEvent(await screen.findByTestId('toggle-soloFriendly'), 'valueChange', true);
     await fireEvent.press(screen.getByTestId('filters-apply'));
@@ -276,8 +287,33 @@ describe('Discover tab (F-DSC-01..08)', () => {
         ),
       ).toBe(true),
     );
-    // The refetch briefly shows the loading state, then the same layout comes back.
     expect(await screen.findByTestId('hero-carousel', {}, { timeout: 20_000 })).toBeOnTheScreen();
+  }, 40_000);
+
+  it('with only a few plans, Explore is one list with no repeats (D-220)', async () => {
+    const items = [
+      item(1, { reasons: ['squad_going'], soloFriendly: true }),
+      item(2, { reasons: ['squad_going'], soloFriendly: true }),
+    ];
+    api.on('GET', '/v1/discover/feed', {
+      status: 200,
+      body: {
+        items,
+        nextCursor: null,
+        requestId: REQUEST_ID,
+        center: { lat: 17.44, lng: 78.35 },
+        weather: null,
+      },
+    });
+    await renderWithProviders(<DiscoverScreen />, { fetchFn: api.fetch });
+    expect(
+      await screen.findByRole('header', { name: 'Plans near you' }, { timeout: 20_000 }),
+    ).toBeOnTheScreen();
+    expect(screen.getAllByTestId('event-Slug0001')).toHaveLength(1);
+    expect(screen.getAllByTestId('event-Slug0002')).toHaveLength(1);
+    expect(screen.queryByTestId('hero-carousel')).toBeNull();
+    expect(screen.queryByRole('header', { name: 'Your squad is going' })).toBeNull();
+    expect(screen.queryByRole('header', { name: 'Good to go solo' })).toBeNull();
   }, 40_000);
 
   it('quick chips and the filter panel change the query; clear resets it', async () => {

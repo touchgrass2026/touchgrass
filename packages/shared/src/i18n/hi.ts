@@ -1437,6 +1437,15 @@ export const hi: Translation = {
     closed: 'इस प्लान पर कमेंट बंद हैं।',
   },
   explore: {
+    morePlans: 'और प्लान',
+    plansNear: 'आपके पास के प्लान',
+    showMorePlans: 'और प्लान दिखाओ',
+    tags: {
+      squad: 'स्क्वाड आ रहा है',
+      tonight: 'आज रात',
+      solo: 'अकेले आ सकते हो',
+      free: 'फ़्री',
+    },
     featured: 'फ़ीचर्ड',
     going: '{{count}} जा रहे हैं',
     going_other: '{{count}} जा रहे हैं',

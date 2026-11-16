@@ -14,7 +14,7 @@ import { BrandLogo } from '../../../components/BrandLogo';
 import { FiltersSheet } from '../../../components/explore/FiltersSheet';
 import { DiscoverMap } from '../../../components/DiscoverMap';
 import { FeedSkeleton } from '../../../components/FeedSkeleton';
-import { AllPlansRail } from '../../../components/explore/AllPlansRail';
+import { EventCard } from '../../../components/EventCard';
 import { HeroCarousel } from '../../../components/explore/HeroCarousel';
 import { PlanRail } from '../../../components/explore/PlanRail';
 import { useGuideTarget } from '../../../components/guide/targets';
@@ -137,8 +137,8 @@ export default function DiscoverScreen() {
       />
     );
   else {
-    // Everything scrolls sideways (D-160): carousel, themed rows, then all plans as one row of cards.
-    // Filters narrow what goes into the rows; the layout stays the same.
+    // Carousel and themed rows scroll sideways (D-160), then the rest as a list; no plan twice (D-220).
+    // Filters narrow what goes in; with few plans it is one plain list.
     const sections = buildSections(items);
     const positionOf = (id: string): number => items.findIndex((i) => i.id === id);
     body = (
@@ -164,17 +164,33 @@ export default function DiscoverScreen() {
             }}
           />
         ))}
-        <AllPlansRail
-          items={items}
-          gutter={GUTTER}
-          onOpen={(item, position) => {
-            openEvent(item.id, position);
-          }}
-          onEnd={() => {
-            if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
-          }}
-          loadingMore={feed.isFetchingNextPage}
-        />
+        {/* Everything not in a row above, once (D-220): "More plans", or the whole list when quiet. */}
+        {sections.rest.length > 0 ? (
+          <View style={styles.list} testID="more-plans">
+            <Text variant="heading" accessibilityRole="header" testID="more-plans-title">
+              {sections.quiet ? t('explore.plansNear') : t('explore.morePlans')}
+            </Text>
+            {sections.rest.map((item) => (
+              <EventCard
+                key={item.id}
+                event={item}
+                feed={item}
+                onOpen={() => {
+                  openEvent(item.id, positionOf(item.id));
+                }}
+              />
+            ))}
+          </View>
+        ) : null}
+        {feed.hasNextPage ? (
+          <Button
+            label={t('explore.showMorePlans')}
+            variant="secondary"
+            loading={feed.isFetchingNextPage}
+            onPress={() => void feed.fetchNextPage()}
+            testID="load-more-plans"
+          />
+        ) : null}
       </>
     );
   }
@@ -359,6 +375,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
   },
+  list: { gap: 14 },
   search: {
     flexGrow: 1,
     flexShrink: 1,

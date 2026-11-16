@@ -19,12 +19,12 @@ name: Discover, filter, map and search
     id: 'dock-discover'
 - assertVisible:
     id: discover-screen
-# Explore leads with the featured carousel, then rows of plans.
+# Explore leads with the featured carousel, then rows of plans and the rest as a list (each plan once, D-220).
 - assertVisible:
     id: 'hero-seedev.*'
 - scrollUntilVisible:
     element:
-      id: 'tile-.*-seedev.*'
+      id: '(tile-.*-seedev.*|event-seedev.*)'
     direction: DOWN
 # Back up to the filter row: Filters (first) opens a bottom sheet (D-198); the time chips scroll sideways.
 - scrollUntilVisible:

@@ -1,4 +1,5 @@
-import type { EventSummary } from '@touchgrass/shared';
+import { planTags, type RailKey } from '../../src/features/discovery/sections';
+import type { EventSummary, FeedItem } from '@touchgrass/shared';
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -76,6 +77,13 @@ function PlanTile({
   const press = usePressScale(0.96);
   const when = formatWhen(item.startsAt, i18n.language, item.timezone);
   const going = t('explore.going', { count: item.goingCount });
+  // What else makes it special, besides this row's theme (D-220): rows no longer repeat plans.
+  const tags =
+    'reasons' in item
+      ? planTags(item as FeedItem, railKey as RailKey)
+          .map((k) => t(`explore.tags.${k}`))
+          .join(' · ')
+      : '';
   return (
     <AnimatedPressable
       accessibilityRole="button"
@@ -84,6 +92,7 @@ function PlanTile({
         item.category && !item.mystery ? localized(item.category.name, i18n.language) : null,
         when,
         going,
+        tags || null,
       ]
         .filter(Boolean)
         .join(', ')}
@@ -125,6 +134,16 @@ function PlanTile({
         {when}
       </Text>
       <IconText icon={People}>{going}</IconText>
+      {tags ? (
+        <Text
+          variant="caption"
+          tone="primary"
+          numberOfLines={1}
+          testID={`tags-${railKey}-${item.slug}`}
+        >
+          {tags}
+        </Text>
+      ) : null}
     </AnimatedPressable>
   );
 }
