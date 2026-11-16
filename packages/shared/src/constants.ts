@@ -266,6 +266,20 @@ export const LIMITS = {
     reminderLongMs: 24 * HOUR_MS,
     reminderShortMs: 2 * HOUR_MS,
   },
+  /** The Thursday "This weekend" push (D-211), timed in each city's own zone. */
+  weekendDigest: {
+    picks: 3,
+    /** Plans this far from the member's area (or city centre) are considered. */
+    radiusKm: 30,
+    /** ISO weekday (Thursday) and the local window, in minutes after midnight, in which it goes out. */
+    sendWeekday: 4,
+    sendFromMinute: 18 * 60 + 30,
+    sendUntilMinute: 20 * 60 + 30,
+    /** "The weekend" starts on Friday at this local hour and runs to Monday 00:00. */
+    fridayFromHour: 17,
+    /** Members are read and claimed this many at a time. */
+    memberPage: 200,
+  },
   calendar: { pastDays: 30, futureDays: 180 },
   analytics: { maxClientEvents: 20 },
   // DPDP: deactivated immediately, purged after the grace period; the daily purge job keeps total time well under 30 days.

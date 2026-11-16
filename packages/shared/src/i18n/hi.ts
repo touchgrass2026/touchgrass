@@ -108,6 +108,7 @@ export const hi: Translation = {
       free_now: 'अभी फ़्री',
       safety: 'सुरक्षा',
       marketing: 'TouchGrass की ख़बरें',
+      weekend_digest: 'वीकेंड की पसंद',
     },
     profileVisibility: 'मेरी प्रोफ़ाइल कौन देख सकता है',
     visibility: {
@@ -2359,6 +2360,16 @@ export const hi: Translation = {
         title: '{{title}} आने वाला है',
         body: '{{when}} शुरू होगा। ग्रुप चैट अब खुली है।',
       },
+      reminderSoonPlace: {
+        title: '{{title}} जल्द शुरू होगा',
+        body: '{{place}} में {{time}} पर शुरू होगा. रास्ते के लिए टैप करो.',
+      },
+      weekendDigest: {
+        title: 'इस वीकेंड: तुम्हारे लिए {{picks}}',
+        body: '{{titles}}. देखने के लिए टैप करो.',
+        one: '1 पसंद',
+        other: '{{count}} पसंद',
+      },
       reminderSoon: {
         title: '{{title}} जल्द शुरू होगा',
         body: '{{when}}. चेक-इन 30 मिनट पहले खुलता है.',
@@ -2373,6 +2384,18 @@ export const hi: Translation = {
       },
       challenge: { body: 'अपने चैलेंज देखने के लिए टैप करो.' },
     },
+  },
+  weekendPicks: {
+    title: 'इस वीकेंड',
+    subtitle: 'तुम्हारे लिए चुने प्लान, शुक्रवार शाम से रविवार तक.',
+    empty: 'इस वीकेंड के लिए और कुछ नहीं बचा. एक्सप्लोर में और प्लान हैं.',
+    explore: 'और प्लान देखो',
+  },
+  directions: {
+    button: 'रास्ता देखो',
+    to: '{{place}} का रास्ता',
+    hint: 'तुम्हारे मैप्स ऐप में रास्ता खोलता है',
+    ready: 'जल्द शुरू होगा. रास्ता बस एक टैप दूर है.',
   },
   cities: {
     waitlistTitle: 'आप {{city}} की सूची में हैं',

@@ -199,3 +199,25 @@ export const SearchResponse = z.object({
   crews: z.array(CrewSummary).default([]),
 });
 export type SearchResponse = z.infer<typeof SearchResponse>;
+
+// ---------- weekend picks (D-211) ----------
+
+/** `ids`: the picks a "This weekend" push named, so the screen shows exactly those (re-checked for access). */
+export const WeekendPicksQuery = z.object({
+  ids: z
+    .string()
+    .max(200)
+    .transform((s) => s.split(',').filter((x) => x.length > 0))
+    .pipe(z.array(z.uuid()).max(5))
+    .optional(),
+});
+export type WeekendPicksQuery = z.infer<typeof WeekendPicksQuery>;
+
+export const WeekendPicks = z.object({
+  items: z.array(EventSummary),
+  /** The weekend window: Friday evening to Monday 00:00 in the member's city zone. */
+  from: z.iso.datetime(),
+  to: z.iso.datetime(),
+  timezone: z.string(),
+});
+export type WeekendPicks = z.infer<typeof WeekendPicks>;

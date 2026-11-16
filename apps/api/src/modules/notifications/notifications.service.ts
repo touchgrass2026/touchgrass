@@ -421,7 +421,11 @@ function toParams(json: Record<string, unknown>): NotificationParams {
     else if (v && typeof v === 'object') {
       const o = v as Record<string, unknown>;
       if (typeof o.at === 'string')
-        out[k] = typeof o.tz === 'string' ? { at: o.at, tz: o.tz } : { at: o.at };
+        out[k] = {
+          at: o.at,
+          ...(typeof o.tz === 'string' ? { tz: o.tz } : {}),
+          ...(o.clock === true ? { clock: true as const } : {}),
+        };
       else if (typeof o.t === 'string') out[k] = { t: o.t };
       else if (typeof o.en === 'string' && typeof o.te === 'string' && typeof o.hi === 'string')
         out[k] = { en: o.en, te: o.te, hi: o.hi };

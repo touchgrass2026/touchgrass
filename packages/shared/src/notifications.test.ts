@@ -28,9 +28,13 @@ describe('notification templates (F-NOT-01)', () => {
     }
   });
 
-  it('links are in-app paths without a scheme', () => {
+  it('links are in-app paths without a scheme, with at most a simple query (D-211)', () => {
     for (const t of Object.values(NOTIFICATION_TEMPLATES))
-      expect(t.link).toMatch(/^[a-z][a-z/{}A-Za-z-]*$/);
+      expect(t.link).toMatch(
+        /^[a-z][a-z/{}A-Za-z-]*(\?[a-z]+=[{}A-Za-z0-9]+(&[a-z]+=[{}A-Za-z0-9]+)*)?$/,
+      );
+    expect(NOTIFICATION_TEMPLATES.reminder_soon_place.link).toBe('events/{{eventId}}?directions=1');
+    expect(NOTIFICATION_TEMPLATES.weekend_digest.link).toBe('weekend?ids={{ids}}');
     expect(isNotificationKind('reminder_soon')).toBe(true);
     expect(isNotificationKind('nope')).toBe(false);
   });
@@ -63,6 +67,18 @@ describe('notification templates (F-NOT-01)', () => {
     );
     expect(localized.title).toContain('కేఫ్ క్రాల్');
     expect(renderNotification('streak_risk', { count: 4 }, 'en').body).toContain('4-week');
+    // `clock` moments show only the time of day, in the plan's zone (D-211).
+    const soon = renderNotification(
+      'reminder_soon_place',
+      {
+        title: 'Open mic',
+        eventId: 'e1',
+        time: { at: '2026-11-08T13:30:00.000Z', tz: 'Asia/Kolkata', clock: true },
+        place: 'Lamakaan',
+      },
+      'en',
+    );
+    expect(soon.body).toBe('Starts at 7:00 pm at Lamakaan. Tap for directions.');
   });
 
   it('uses admin wording when given and the plan’s zone for moments', () => {

@@ -25,6 +25,7 @@ import { SanctionsService } from '../modules/moderation-tools/sanctions.service.
 import { SafetyService } from '../modules/safety/safety.service.js';
 import { NotificationsService } from '../modules/notifications/notifications.service.js';
 import { RemindersService } from '../modules/reminders/reminders.service.js';
+import { WeekendDigestService } from '../modules/reminders/weekend-digest.service.js';
 import { AnalyticsCountersService } from '../modules/analytics/analytics-counters.service.js';
 import { VerificationService } from '../modules/verification/verification.service.js';
 
@@ -66,6 +67,7 @@ export class ScheduledJobs {
     private readonly sanctions: SanctionsService,
     private readonly notifications: NotificationsService,
     private readonly reminders: RemindersService,
+    private readonly weekendDigest: WeekendDigestService,
     private readonly analyticsCounters: AnalyticsCountersService,
     private readonly stories: StoriesService,
     private readonly verification: VerificationService,
@@ -167,6 +169,12 @@ export class ScheduledJobs {
         id: 'reminders.mystery-reveals',
         pattern: '*/5 * * * *',
         run: () => this.reminders.announceReveals(),
+      },
+      // Every 15 minutes; each city is due on Thursday 18:30–20:30 in its own zone (D-211).
+      {
+        id: 'reminders.weekend-digest',
+        pattern: '1,16,31,46 * * * *',
+        run: () => this.weekendDigest.sendDue(),
       },
       { id: 'reminders.prune-log', pattern: '59 3 * * *', run: () => this.reminders.prune() },
       {

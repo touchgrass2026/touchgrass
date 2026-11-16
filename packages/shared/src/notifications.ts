@@ -200,6 +200,14 @@ export const NOTIFICATION_TEMPLATES = {
     link: 'events/{{eventId}}',
     urgent: true,
   },
+  /** "Starts at 7pm at <place>": only once the spot is revealed to seat holders (D-211). */
+  reminder_soon_place: {
+    category: 'reminders',
+    title: 'notifications.kinds.reminderSoonPlace.title',
+    body: 'notifications.kinds.reminderSoonPlace.body',
+    link: 'events/{{eventId}}?directions=1',
+    urgent: true,
+  },
   mystery_revealed: {
     category: 'reminders',
     title: 'notifications.kinds.mysteryRevealed.title',
@@ -239,6 +247,13 @@ export const NOTIFICATION_TEMPLATES = {
     title: 'recap.readyPushTitle',
     body: 'recap.readyPushBody',
     link: 'recaps/{{recapId}}',
+  },
+  /** Thursday evening: the member's top weekend plans (D-211); `ids` keeps the screen on these picks. */
+  weekend_digest: {
+    category: 'weekend_digest',
+    title: 'notifications.kinds.weekendDigest.title',
+    body: 'notifications.kinds.weekendDigest.body',
+    link: 'weekend?ids={{ids}}',
   },
   // ---------- safety ----------
   verification_approved: {
@@ -306,8 +321,8 @@ export function isNotificationKind(value: string): value is NotificationKind {
 export type NotificationParam =
   | string
   | number
-  /** An instant, shown in `tz` (the plan's city zone) or IST. */
-  | { at: string; tz?: string }
+  /** An instant, shown in `tz` (the plan's city zone) or IST; `clock` shows only the time of day. */
+  | { at: string; tz?: string; clock?: true }
   | { t: string }
   | Record<SupportedLanguage, string>;
 export type NotificationParams = Record<string, NotificationParam>;
@@ -340,10 +355,26 @@ export function formatMoment(
   }).format(new Date(iso));
 }
 
+/** Just the time of day ("7:00 pm"), in `timeZone`. */
+export function formatClockTime(
+  iso: string,
+  language: SupportedLanguage,
+  timeZone: string = LOCALE_DEFAULTS.timezone,
+): string {
+  return new Intl.DateTimeFormat(localeTag(language), {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(iso));
+}
+
 function paramText(value: NotificationParam, language: SupportedLanguage): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
-  if ('at' in value) return formatMoment(value.at, language, value.tz);
+  if ('at' in value)
+    return value.clock
+      ? formatClockTime(value.at, language, value.tz)
+      : formatMoment(value.at, language, value.tz);
   if ('t' in value) return translate(value.t, language);
   return value[language];
 }

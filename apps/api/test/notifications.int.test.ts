@@ -5,6 +5,7 @@ import type {
   PublicCrewView,
   PublicProfileView,
   QuietHours,
+  WeekendPicks,
 } from '@touchgrass/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,11 +16,13 @@ import { NotificationsService } from '../src/modules/notifications/notifications
 import { RemindersHandlers } from '../src/modules/reminders/reminders.handlers.js';
 import { RemindersService } from '../src/modules/reminders/reminders.service.js';
 import { SquadSignalsService } from '../src/modules/reminders/squad-signals.service.js';
+import { WeekendDigestService } from '../src/modules/reminders/weekend-digest.service.js';
 import { DomainEventBus } from '../src/worker/domain-event-bus.js';
-import { idem, plot, rsvp, shiftEvent, verifiedMember } from './event-helpers.js';
+import { idem, PLACE, plot, rsvp, shiftEvent, verifiedMember } from './event-helpers.js';
 import {
   befriend,
   bearer,
+  cityAndHood,
   createHarness,
   fromIp,
   type Harness,
@@ -324,7 +327,11 @@ describe('reminders and activity notifications (F-NOT-02, F-EVT-16)', () => {
 
     await shiftEvent(h, event.id, 90 * MIN);
     await r.remindPlans();
-    expect((await inbox(b)).items.filter((i) => i.kind === 'reminder_soon')).toHaveLength(1);
+    // The spot was revealed 2 h before, so the two-hour reminder names it (D-211); once only.
+    await r.remindPlans();
+    const soon = (await inbox(b)).items.filter((i) => i.kind.startsWith('reminder_soon'));
+    expect(soon).toHaveLength(1);
+    expect(soon[0]?.kind).toBe('reminder_soon_place');
     expect(await r.announceReveals()).toBeGreaterThanOrEqual(2);
     expect(await r.announceReveals()).toBe(0);
     const revealed = (await inbox(b)).items.find((i) => i.kind === 'mystery_revealed');
@@ -340,6 +347,42 @@ describe('reminders and activity notifications (F-NOT-02, F-EVT-16)', () => {
       url: `touchgrass://after/${event.id}`,
     });
     expect(await r.prune(new Date(Date.now() + 31 * 86_400_000))).toBeGreaterThanOrEqual(4);
+  });
+
+  it('the two-hour reminder names the place and opens directions, never before a mystery reveal (D-211)', async () => {
+    const host = await verifiedMember(h);
+    const going = await member(h);
+    const maybe = await member(h);
+    const open = await plot(h, host, { title: 'Open mic' });
+    const mystery = await plot(h, host, {
+      title: 'Mystery dinner',
+      mystery: true,
+      mysteryRevealMinutesBefore: 60,
+    });
+    for (const e of [open, mystery]) await rsvp(h, going, e.id).expect(200);
+    await rsvp(h, maybe, open.id, { status: 'interested' }).expect(200);
+    await shiftEvent(h, open.id, 90 * MIN);
+    await shiftEvent(h, mystery.id, 90 * MIN);
+    await h.app.get(RemindersService).remindPlans();
+
+    const items = (await inbox(going)).items;
+    const placed = items.find((i) => i.kind === 'reminder_soon_place');
+    expect(placed).toMatchObject({
+      title: 'Open mic starts soon',
+      url: `touchgrass://events/${open.id}?directions=1`,
+    });
+    expect(placed?.body).toMatch(new RegExp(`^Starts at .+ at ${PLACE}\\. Tap for directions\\.$`));
+    const hidden = items.find((i) => i.kind === 'reminder_soon');
+    expect(hidden).toMatchObject({ url: `touchgrass://events/${mystery.id}` });
+    expect(JSON.stringify(hidden)).not.toContain(PLACE);
+    expect(JSON.stringify(hidden)).not.toContain('Secret Garden');
+    const { rows } = await h.pool.query<{ params: Record<string, unknown> }>(
+      "SELECT params FROM notifications WHERE user_id = $1 AND kind = 'reminder_soon'",
+      [going.id],
+    );
+    expect(rows[0]?.params).not.toHaveProperty('place');
+    // Only people holding a seat hear it.
+    expect((await inbox(maybe)).items.some((i) => i.kind.startsWith('reminder_soon'))).toBe(false);
   });
 
   it('the inbox is cleared of items older than 90 days', async () => {
@@ -665,5 +708,105 @@ describe('squad notifications (Phase 13)', () => {
     // Already out themselves: no nudge. Same day again: no repeat.
     expect((await inbox(outViewer)).some((i) => i.kind === 'squad_outside')).toBe(false);
     expect(await signals.afterCheckIn(b.id)).toBe(0);
+  });
+});
+
+// ---------- D-211 ----------
+
+/** The next Thursday 18:45 IST at least a day ahead, and that weekend's Saturday noon IST. */
+function digestMoments(): { thursday: Date; saturday: Date } {
+  const d = new Date(Date.now() + 86_400_000 + 330 * MIN);
+  const ahead = (4 - d.getUTCDay() + 7) % 7;
+  const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + ahead);
+  return {
+    thursday: new Date(day + (18 * 60 + 45 - 330) * MIN),
+    saturday: new Date(day + 2 * 86_400_000 + (12 * 60 - 330) * MIN),
+  };
+}
+
+describe('weekend digest (D-211)', () => {
+  it('Thursday evening: top picks once a week; opted-out members hear nothing; quiet hours hold the push', async () => {
+    const digest = h.app.get(WeekendDigestService);
+    const { cityId } = await cityAndHood(h);
+    const { thursday, saturday } = digestMoments();
+    const host = await verifiedMember(h);
+    const interests = await interestIds(h, 3);
+    const pick = await plot(h, host, {
+      title: 'Weekend pottery jam',
+      interestIds: interests.slice(1),
+      startsAt: saturday.toISOString(),
+      endsAt: new Date(saturday.getTime() + 2 * H).toISOString(),
+    });
+
+    const fan = await member(h);
+    await quietOff(fan);
+    const fanToken = await withDevice(fan);
+    const joined = await member(h);
+    await rsvp(h, joined, pick.id).expect(200);
+    const off = await member(h);
+    await api(off)
+      .put('/v1/me/settings/notifications', {
+        items: [{ category: 'weekend_digest', push: false, inApp: false }],
+      })
+      .expect(200);
+    const night = await member(h);
+    const nightToken = await withDevice(night);
+    await api(night)
+      .put('/v1/me/settings/quiet-hours', { enabled: true, start: '18:00', end: '23:00' })
+      .expect(200);
+    const before = push.sent.length;
+
+    await digest.sendCity(cityId, 'Asia/Kolkata', thursday);
+
+    const fanItems = (await inbox(fan)).items.filter((i) => i.kind === 'weekend_digest');
+    expect(fanItems).toHaveLength(1);
+    expect(fanItems[0]?.title).toMatch(/^This weekend: [123] picks? for you$/);
+    expect(fanItems[0]?.body).toContain('Weekend pottery jam');
+    expect(fanItems[0]?.url).toMatch(/^touchgrass:\/\/weekend\?ids=/);
+    expect(fanItems[0]?.url).toContain(pick.id);
+    expect(pushesTo(fanToken, before)).toHaveLength(1);
+    // Already pulled up: that plan is never one of their picks.
+    const joinedItem = (await inbox(joined)).items.find((i) => i.kind === 'weekend_digest');
+    expect(joinedItem?.url ?? '').not.toContain(pick.id);
+    expect((await inbox(off)).items.some((i) => i.kind === 'weekend_digest')).toBe(false);
+    // Quiet hours: the inbox item is there, the push waits.
+    expect((await inbox(night)).items.some((i) => i.kind === 'weekend_digest')).toBe(true);
+    expect(pushesTo(nightToken, before)).toHaveLength(0);
+    const held = await h.pool.query(
+      "SELECT 1 FROM pending_pushes WHERE user_id = $1 AND kind = 'weekend_digest'",
+      [night.id],
+    );
+    expect(held.rowCount).toBe(1);
+
+    // Once per member per week, however often the job runs in the window.
+    await digest.sendCity(cityId, 'Asia/Kolkata', new Date(thursday.getTime() + 15 * MIN));
+    expect((await inbox(fan)).items.filter((i) => i.kind === 'weekend_digest')).toHaveLength(1);
+    expect(pushesTo(fanToken, before)).toHaveLength(1);
+
+    // The screen shows exactly the named picks, re-checked for the viewer.
+    const ids = new URL(fanItems[0]?.url ?? '').searchParams.get('ids') ?? '';
+    const screen = (await api(fan).get(`/v1/discover/weekend?ids=${ids}`).expect(200))
+      .body as WeekendPicks;
+    expect(screen.items.map((i) => i.id)).toEqual(ids.split(','));
+    expect(screen.timezone).toBe('Asia/Kolkata');
+  });
+
+  it('members with no picks are skipped, and the job only runs where it is Thursday evening', async () => {
+    const digest = h.app.get(WeekendDigestService);
+    const { thursday } = digestMoments();
+    const away = await member(h);
+    const { rows } = await h.pool.query<{ id: string }>(
+      "SELECT id FROM cities WHERE slug = 'visakhapatnam'",
+    );
+    const vizag = rows[0]?.id as string;
+    await h.pool.query('UPDATE users SET city_id = $2 WHERE id = $1', [away.id, vizag]);
+    await h.pool.query(
+      'UPDATE profiles SET city_id = $2, neighbourhood_id = NULL WHERE user_id = $1',
+      [away.id, vizag],
+    );
+    expect(await digest.sendCity(vizag, 'Asia/Kolkata', thursday)).toBe(0);
+    expect((await inbox(away)).items.some((i) => i.kind === 'weekend_digest')).toBe(false);
+    // Wednesday evening is not due anywhere.
+    expect(await digest.sendDue(new Date(thursday.getTime() - 86_400_000))).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { Feed, type GeoPoint, MapResponse, SearchResponse } from '@touchgrass/shared';
+import { Feed, type GeoPoint, MapResponse, SearchResponse, WeekendPicks } from '@touchgrass/shared';
 import { z } from 'zod';
 import { useApi } from '../../providers/api-context';
 import { type DiscoverFilters, feedParams, filterParams } from './filters';
@@ -11,7 +11,23 @@ export const DISCOVER_KEYS = {
   map: (bbox: string, zoom: number, f: DiscoverFilters) =>
     ['discover', 'map', bbox, zoom, f] as const,
   search: (q: string, type: string) => ['discover', 'search', q, type] as const,
+  weekend: (ids: string) => ['discover', 'weekend', ids] as const,
 };
+
+/** "This weekend" picks (D-211): the ones a push named (`ids`, comma-separated), else fresh picks. */
+export function useWeekendPicks(ids: string | undefined) {
+  const { client } = useApi();
+  const list = (ids ?? '').trim();
+  return useQuery({
+    queryKey: DISCOVER_KEYS.weekend(list),
+    queryFn: ({ signal }) =>
+      client.request(
+        list ? `/v1/discover/weekend?ids=${encodeURIComponent(list)}` : '/v1/discover/weekend',
+        WeekendPicks,
+        { signal },
+      ),
+  });
+}
 
 /** Ranked feed; pages share one server snapshot, so the order stays stable while scrolling (F-DSC-01). */
 export function useFeed(filters: DiscoverFilters, location: GeoPoint | null) {

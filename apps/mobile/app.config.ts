@@ -47,6 +47,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: `app.touchgrass${SUFFIX}`,
     supportsTablet: false,
     associatedDomains: [`applinks:${LINK_HOST}`],
+    // Directions (D-211): ask whether Google Maps is installed before falling back to Apple Maps.
+    infoPlist: { LSApplicationQueriesSchemes: ['comgooglemaps'] },
     config: {
       usesNonExemptEncryption: false,
       googleMapsApiKey: env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY,

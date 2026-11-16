@@ -12,7 +12,12 @@ export function pushPath(data: unknown): string | null {
   const url = data.url;
   if (typeof url !== 'string' || !url.startsWith(SCHEME)) return null;
   const path = url.slice(SCHEME.length);
-  return /^[A-Za-z0-9/_-]+$/.test(path) ? `/${path}` : null;
+  // A plain path, optionally with a simple query (`events/<id>?directions=1`, `weekend?ids=a,b`; D-211).
+  return /^[A-Za-z0-9/_-]+(\?[A-Za-z0-9_-]+=[A-Za-z0-9_,-]*(&[A-Za-z0-9_-]+=[A-Za-z0-9_,-]*)*)?$/.test(
+    path,
+  )
+    ? `/${path}`
+    : null;
 }
 
 /** The inbox item a push belongs to, if it carries one. */

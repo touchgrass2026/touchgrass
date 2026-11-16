@@ -5,8 +5,10 @@ import { DB, type Database } from '../../infra/database/database.module.js';
 import { reminderLog } from '../../infra/database/schema/index.js';
 import { EventSearchService } from '../events/event-search.service.js';
 import { type EventCore, EventStore } from '../events/event-store.service.js';
+import { EventViewService } from '../events/event-view.service.js';
 import { CitiesService } from '../cities/cities.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { soonReminder } from './reminder-copy.js';
 
 const N = LIMITS.notifications;
 const LOG_RETENTION_MS = 30 * 24 * 3_600_000;
@@ -23,6 +25,7 @@ export class RemindersService {
     @Inject(DB) private readonly db: Database,
     private readonly search: EventSearchService,
     private readonly store: EventStore,
+    private readonly view: EventViewService,
     private readonly notifications: NotificationsService,
     private readonly cities: CitiesService,
   ) {}
@@ -51,17 +54,27 @@ export class RemindersService {
     now: Date,
   ): Promise<number> {
     const live = cores.filter((c) => c.status === 'published' && !c.held);
-    const seats = await this.search.seatHoldersMany(live.map((c) => c.id));
+    const [seats, places] = await Promise.all([
+      this.search.seatHoldersMany(live.map((c) => c.id)),
+      // Only the "starts soon" copy names the place, and only where seat holders can already see it.
+      kind === 'reminder_soon'
+        ? this.view.seatHolderPlaceNames(live, now)
+        : Promise.resolve(new Map<string, string>()),
+    ]);
     let sent = 0;
     for (const c of live) {
+      // Claimed under the base kind, so the place-naming variant never doubles a reminder.
       const to = await this.claim(seats.get(c.id) ?? [], c.id, kind, now);
       if (to.length === 0) continue;
-      await this.notifications.notify(
-        to,
-        kind,
-        { title: c.title, eventId: c.id, when: await this.when(c) },
-        { collapseKey: `plan-${c.id}`, now },
-      );
+      const when = await this.when(c);
+      const copy =
+        kind === 'reminder_soon'
+          ? soonReminder(c, when, places.get(c.id) ?? null)
+          : { kind, params: { title: c.title, eventId: c.id, when } };
+      await this.notifications.notify(to, copy.kind, copy.params, {
+        collapseKey: `plan-${c.id}`,
+        now,
+      });
       sent += to.length;
     }
     return sent;
