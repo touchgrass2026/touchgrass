@@ -33,8 +33,14 @@ describe('Explore sections (D-220)', () => {
     ];
     const s = buildSections(items, now);
     expect(s).toEqual({ quiet: true, hero: [], rails: [], rest: items });
-    const seven = Array.from({ length: QUIET_BELOW - 1 }, (_, n) => plan(n + 1));
-    expect(buildSections(seven, now).quiet).toBe(true);
+    // Six plans or fewer: one list. More than six: the carousel and rows come back.
+    const six = Array.from({ length: 6 }, (_, n) => plan(n + 1));
+    expect(QUIET_BELOW).toBe(7);
+    expect(buildSections(six, now).quiet).toBe(true);
+    const seven = [...six, plan(7)];
+    const full = buildSections(seven, now);
+    expect(full.quiet).toBe(false);
+    expect(full.hero).toHaveLength(5);
   });
 
   it('never shows a plan twice, and shows every plan once', () => {

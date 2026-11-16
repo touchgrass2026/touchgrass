@@ -28,8 +28,8 @@ const HERO_MAX = 5;
 const RAIL_MAX = 12;
 /** The carousel needs a few plans to feel like one. */
 const HERO_MIN_ITEMS = 5;
-/** Below this many plans Explore is one plain list (D-220). */
-export const QUIET_BELOW = 8;
+/** With more than six plans Explore shows the carousel and rows; six or fewer is one plain list (D-220). */
+export const QUIET_BELOW = 7;
 /** A themed row needs at least this many plans of its own. */
 const RAIL_MIN = 3;
 /** At most this many themed rows. */
@@ -85,7 +85,7 @@ export function planTags(
  * Explore's layout (D-155, D-160, D-220), from the ranked feed the viewer already has (no extra request,
  * same privacy). No plan appears twice: the carousel takes the top plans, then each themed row takes the
  * plans it fits that nothing above took, a row only shows with three plans of its own (its plans go on
- * down the list otherwise), and whatever is left is listed under "More plans". With fewer than eight plans
+ * down the list otherwise), and whatever is left is listed under "More plans". With six plans or fewer
  * there are no rows at all, just one list. Dates are judged in each plan's own city time zone.
  */
 export function buildSections(items: FeedItem[], now: Date = new Date()): FeedSections {

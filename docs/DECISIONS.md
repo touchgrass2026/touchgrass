@@ -1034,5 +1034,5 @@ A tester found the profile "childish, not professional". Following Hinge/Bumble:
 ## D-220 Explore never shows a plan twice
 
 - Rows used to filter the same plans independently, so a plan that was squad, solo and free sat in three rows and again in All plans (and with three plans or fewer, repeats were allowed on purpose). Now `buildSections` places each plan once: the carousel (only with 5+ plans) takes the top five, then the themes in priority order (squad, tonight, weekend, near, for you, solo, small groups, free, friends of friends, mystery, popular) each take the plans they fit that nothing above took; a row needs three plans of its own (otherwise its plans fall through), at most five rows; everything left is listed once, vertically, under "More plans", with "Show more plans" for the next page.
-- Fewer than eight plans: no carousel and no rows, one list "Plans near you".
+- Six plans or fewer: no carousel and no rows, one list "Plans near you". More than six: the carousel and rows (threshold changed from eight to seven at the product owner's request).
 - What else makes a plan special shows as a short tag line on row tiles ("Solo-friendly · Free"), excluding the row's own theme; full cards already show their tags.
