@@ -35,6 +35,7 @@ export default function AppLayout() {
         <Stack.Screen name="tutorial" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="profile-edit" options={{ title: t('profile.edit') }} />
         <Stack.Screen name="invites" options={{ title: t('profile.invites') }} />
+        <Stack.Screen name="weekend" options={{ title: t('weekendPicks.title') }} />
         <Stack.Screen name="users/[id]" options={{ title: '' }} />
         <Stack.Screen
           name="settings/notifications"

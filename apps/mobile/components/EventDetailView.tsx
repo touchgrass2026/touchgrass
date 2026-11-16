@@ -24,6 +24,7 @@ import { useTheme } from '../src/theme/theme';
 import { readAppEnvironment } from '../src/config';
 import { calendarFields, saveToCalendar } from '../src/features/calendar/device';
 import { CalendarButton } from './CalendarButton';
+import { DirectionsButton } from './DirectionsButton';
 import { SosButton } from './SosButton';
 import { useTrustedContacts } from '../src/features/safety/api';
 import { PersonRow } from './PersonRow';
@@ -240,6 +241,7 @@ export function EventDetailView({
                 : t('events.mysteryRevealsAt', { time: formatWhen(loc.revealsAt, i18n.language) })}
             </Text>
           ) : null}
+          {open ? <DirectionsButton location={loc} /> : null}
           <Text>{capacityLabel(t, event)}</Text>
         </View>
       </FadeIn>

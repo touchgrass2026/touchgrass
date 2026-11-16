@@ -17,6 +17,8 @@ import { DiscoveryHandlers } from './discovery.handlers.js';
 import { DiscoveryService } from './discovery.service.js';
 import { SearchService } from './search.service.js';
 import { WeatherService } from './weather.service.js';
+import { WeekendPicksController } from './weekend-picks.controller.js';
+import { WeekendPicksService } from './weekend-picks.service.js';
 
 /** Discovery (Phase 4, F-DSC-01..09): feed, filters, map, near you, previews, recommendations, weather, search. */
 @Module({
@@ -32,15 +34,16 @@ import { WeatherService } from './weather.service.js';
     UsersModule,
     VenuesModule,
   ],
-  controllers: [DiscoveryController, AdminWeightsController],
+  controllers: [DiscoveryController, AdminWeightsController, WeekendPicksController],
   providers: [
     DiscoveryService,
     SearchService,
     WeatherService,
     RankingWeightsService,
     DiscoveryHandlers,
+    WeekendPicksService,
   ],
-  exports: [DiscoveryService, WeatherService, DiscoveryHandlers],
+  exports: [DiscoveryService, WeatherService, DiscoveryHandlers, WeekendPicksService],
 })
 export class DiscoveryModule implements OnModuleInit {
   constructor(

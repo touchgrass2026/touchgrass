@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { hashPhoneE164, type SupportedLanguage, type UserStatus } from '@touchgrass/shared';
-import { and, asc, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { uuidv7 } from 'uuidv7';
 import { DB, type Database } from '../../infra/database/database.module.js';
@@ -220,6 +220,24 @@ export class UsersService {
       .where(eq(users.id, userId))
       .limit(1);
     return row?.hash ?? null;
+  }
+
+  /** Active members of a city, a page at a time by id (keyset), for city-wide jobs such as the weekend digest. */
+  async activeInCity(cityId: string, afterId: string | null, limit: number): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.cityId, cityId),
+          eq(users.status, 'active'),
+          isNull(users.deletedAt),
+          afterId ? gt(users.id, afterId) : undefined,
+        ),
+      )
+      .orderBy(asc(users.id))
+      .limit(limit);
+    return rows.map((r) => r.id);
   }
 
   async activeIds(ids: string[]): Promise<Set<string>> {

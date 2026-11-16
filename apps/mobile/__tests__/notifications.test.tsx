@@ -239,7 +239,8 @@ describe('notification inbox (F-NOT-01)', () => {
     // People still onboarding (e.g. waiting for their city to open) land on onboarding screens.
     const onboarding = join(__dirname, '..', 'app', '(onboarding)');
     const exists = (path: string): boolean => {
-      const route = path.replace(/\{\{\w+\}\}/g, '[id]');
+      // A link may carry a simple query (D-211); the route is the part before it.
+      const route = (path.split('?')[0] ?? path).replace(/\{\{\w+\}\}/g, '[id]');
       return [`${route}.tsx`, `${route}/index.tsx`, `(tabs)/${route}.tsx`].some(
         (f) => existsSync(join(app, f)) || existsSync(join(onboarding, f)),
       );

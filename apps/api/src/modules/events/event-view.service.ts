@@ -266,6 +266,27 @@ export class EventViewService {
     };
   }
 
+  /**
+   * The place name people holding a seat may see right now, for reminder copy (D-211). Mystery spots stay out
+   * until their reveal time (`isLocationRevealed` for a seat holder); the name is the venue's, else the first
+   * part of the address. Plans without a revealed spot are absent from the map.
+   */
+  async seatHolderPlaceNames(
+    cores: EventCore[],
+    now: Date = new Date(),
+  ): Promise<Map<string, string>> {
+    const revealed = cores
+      .filter((c) => isLocationRevealed({ hostRole: null, rsvp: 'going' }, c, now))
+      .map((c) => c.id);
+    const exact = await this.store.exactLocations(revealed);
+    const out = new Map<string, string>();
+    for (const [id, loc] of exact) {
+      const name = (loc.placeName ?? loc.address.split(',')[0] ?? '').trim();
+      if (name) out.set(id, name);
+    }
+    return out;
+  }
+
   /** Hosts of a private plan see how many people are waiting for an answer (D-179). */
   private async pendingJoinRequests(eventId: string): Promise<number> {
     const [row] = await this.db

@@ -109,6 +109,7 @@ export const te: Translation = {
       free_now: 'ఇప్పుడు ఖాళీ',
       safety: 'సేఫ్టీ',
       marketing: 'TouchGrass కబుర్లు',
+      weekend_digest: 'వీకెండ్ ఎంపికలు',
     },
     profileVisibility: 'నా ప్రొఫైల్ ఎవరు చూడొచ్చు',
     visibility: {
@@ -2375,6 +2376,16 @@ export const te: Translation = {
         title: '{{title}} దగ్గరపడింది',
         body: '{{when}} మొదలవుతుంది. గ్రూప్ చాట్ ఓపెన్ అయింది.',
       },
+      reminderSoonPlace: {
+        title: '{{title}} కాసేపట్లో మొదలవుతుంది',
+        body: '{{place}}లో {{time}}కి మొదలవుతుంది. దారి కోసం ట్యాప్ చెయ్.',
+      },
+      weekendDigest: {
+        title: 'ఈ వీకెండ్: నీ కోసం {{picks}}',
+        body: '{{titles}}. చూడటానికి ట్యాప్ చెయ్.',
+        one: '1 ఎంపిక',
+        other: '{{count}} ఎంపికలు',
+      },
       reminderSoon: {
         title: '{{title}} కాసేపట్లో మొదలవుతుంది',
         body: '{{when}}. చెక్-ఇన్ 30 నిమిషాల ముందు ఓపెన్ అవుతుంది.',
@@ -2389,6 +2400,18 @@ export const te: Translation = {
       },
       challenge: { body: 'నీ ఛాలెంజ్‌లు చూడటానికి ట్యాప్ చెయ్.' },
     },
+  },
+  weekendPicks: {
+    title: 'ఈ వీకెండ్',
+    subtitle: 'నీ కోసం ఎంపికలు, శుక్రవారం సాయంత్రం నుంచి ఆదివారం వరకు.',
+    empty: 'ఈ వీకెండ్‌కి ఇంకా ఎంపికలు లేవు. ఎక్స్‌ప్లోర్‌లో ఇంకా ప్లాన్‌లు ఉన్నాయి.',
+    explore: 'ఇంకా ప్లాన్‌లు చూడు',
+  },
+  directions: {
+    button: 'దారి చూపించు',
+    to: '{{place}}కి దారి',
+    hint: 'నీ మ్యాప్స్ యాప్‌లో దారి తెరుస్తుంది',
+    ready: 'కాసేపట్లో మొదలవుతుంది. దారి ఒక్క ట్యాప్ దూరంలో ఉంది.',
   },
   cities: {
     waitlistTitle: '{{city}} లిస్ట్‌లో నువ్వు ఉన్నావు',

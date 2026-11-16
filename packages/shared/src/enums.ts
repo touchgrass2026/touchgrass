@@ -83,6 +83,8 @@ export const NotificationCategory = z.enum([
   'free_now',
   'safety',
   'marketing',
+  /** The Thursday "This weekend" picks push (D-211). */
+  'weekend_digest',
 ]);
 export const MediaPurpose = z.enum([
   'profile_photo',

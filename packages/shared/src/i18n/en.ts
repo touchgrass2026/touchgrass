@@ -110,6 +110,7 @@ export const en = {
       free_now: 'Free now',
       safety: 'Safety',
       marketing: 'News from TouchGrass',
+      weekend_digest: 'Weekend picks',
     },
     profileVisibility: 'Who can see my profile',
     visibility: {
@@ -2347,6 +2348,16 @@ export const en = {
         title: '{{title}} is coming up',
         body: 'Starts {{when}}. The group chat is now open.',
       },
+      reminderSoonPlace: {
+        title: '{{title}} starts soon',
+        body: 'Starts at {{time}} at {{place}}. Tap for directions.',
+      },
+      weekendDigest: {
+        title: 'This weekend: {{picks}} for you',
+        body: '{{titles}}. Tap to see them.',
+        one: '1 pick',
+        other: '{{count}} picks',
+      },
       reminderSoon: {
         title: '{{title}} starts soon',
         body: '{{when}}. Check-in opens 30 minutes before.',
@@ -2361,6 +2372,18 @@ export const en = {
       },
       challenge: { body: 'Tap to see your challenges.' },
     },
+  },
+  weekendPicks: {
+    title: 'This weekend',
+    subtitle: 'Picks for you, Friday evening to Sunday.',
+    empty: 'No picks left for this weekend. Explore has more plans.',
+    explore: 'Explore more plans',
+  },
+  directions: {
+    button: 'Directions',
+    to: 'Directions to {{place}}',
+    hint: 'Opens directions in your maps app',
+    ready: 'Starts soon. Directions are one tap away.',
   },
   cities: {
     waitlistTitle: "You're on the list for {{city}}",
