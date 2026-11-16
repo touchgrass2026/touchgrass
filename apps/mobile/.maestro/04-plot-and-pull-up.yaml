@@ -23,11 +23,9 @@ name: Plot a plan and manage it
     id: plot-title
 - inputText: 'Maestro chai walk'
 # Category is a setting row that opens a searchable list (D-189, D-199). With the keyboard up the screen
-# now shrinks above it (D-222), so the row can sit just below the visible area: scroll to it, as a person would.
-- scrollUntilVisible:
-    element:
-      id: plot-category
-    direction: DOWN
+# now shrinks above it (D-222), so close the keyboard first (it is open here, so this is not a Back press),
+# as a person would; scrolling instead closes it mid-drag and can overshoot the row.
+- hideKeyboard
 - tapOn:
     id: plot-category
 - tapOn:
