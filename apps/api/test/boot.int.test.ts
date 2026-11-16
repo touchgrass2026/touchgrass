@@ -70,6 +70,8 @@ describe('process wiring', () => {
         'reminders.prune-log',
         'reminders.weekend-digest',
         'analytics.prune-active',
+        'lore.remind-closing',
+        'lore.purge-closed',
       ].sort(),
     );
   });

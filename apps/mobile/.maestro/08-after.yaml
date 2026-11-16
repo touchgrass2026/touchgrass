@@ -1,5 +1,5 @@
 # After the plan (F-AFT-01..04): seed member #2 (+91 90000 10002) checked in to "Sunrise walk + chai", which ended
-# yesterday and has seeded Lore photos. Signing in opens "How was it?": they rate it, tag it, send feedback, open
+# yesterday and has seeded Lore photos (open for 7 days, D-218). Signing in opens "How was it?": they rate it, tag it, send feedback, open
 # the Lore, look at a photo, and wrap up with Done (which stops the prompt coming back).
 appId: app.touchgrass
 name: Post-event feedback and Lore
@@ -43,6 +43,9 @@ name: Post-event feedback and Lore
     id: after-lore
 - assertVisible:
     id: lore-grid
+# The album closes 7 days after the plan (D-218); e2e builds skip the first-open Lore tour.
+- assertVisible:
+    id: lore-closes
 - tapOn:
     id: 'lore-item-.*'
     index: 0

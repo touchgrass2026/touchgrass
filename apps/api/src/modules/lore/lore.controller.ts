@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -17,6 +18,7 @@ import {
   LoreAlbum,
   LoreDownload,
   LoreQuery,
+  LoreSettingsBody,
   LoreVisibilityBody,
 } from '@touchgrass/shared';
 import { z } from 'zod';
@@ -66,6 +68,18 @@ export class LoreController {
     @Body(new ZodPipe(LoreVisibilityBody)) body: Dto.LoreVisibilityBody,
   ): Promise<void> {
     await this.lore.setVisibility(user.userId, id, body.visibility);
+  }
+
+  /** Host settings (D-218): who sees the album and whether guests add to it. */
+  @Patch('events/:id/lore')
+  @HttpCode(204)
+  @ApiZodBody(LoreSettingsBody)
+  async settings(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(LoreSettingsBody)) body: Dto.LoreSettingsBody,
+  ): Promise<void> {
+    await this.lore.updateSettings(user.userId, id, body);
   }
 
   @Get('events/:id/lore/download')

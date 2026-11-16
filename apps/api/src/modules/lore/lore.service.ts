@@ -8,6 +8,7 @@ import {
   type LoreDownload,
   type LoreItem,
   type LoreQuery,
+  type LoreSettingsBody,
   type LoreVisibility,
   type ModerationPreview,
   TimeIdCursor,
@@ -31,7 +32,8 @@ import { SanctionsReader } from '../moderation/sanctions-reader.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { PeopleService } from '../profiles/people.service.js';
 import { SocialGraphService } from '../social/graph/social-graph.service.js';
-import { coverSource, loreAccess } from './lore.policy.js';
+import { coverSource, loreAccess, loreClosesAt, type LoreSettings } from './lore.policy.js';
+import type { LoreSummary } from '../events/event-hooks.js';
 
 export const LORE_ADDED_EVENT = 'lore.added';
 export const LORE_CHANGED_EVENT = 'lore.changed';
@@ -39,10 +41,17 @@ const COLLAGE_TILE = 540;
 
 type ItemRow = typeof loreItems.$inferSelect;
 
+/** "This Lore has closed" (D-218): the album is past its window and its photos are being deleted. */
+export function loreClosedError(closesAt: Date): AppError {
+  return new AppError('LORE_CLOSED', 'This Lore has closed', { closedAt: closesAt.toISOString() });
+}
+
 /**
- * Lore (F-AFT-04): a shared photo album per plan. People who checked in (and hosts) add photos, which go
- * through the normal media pipeline (EXIF stripped, moderated) and appear once ready. Hosts choose whether
- * attendees' squads can see it too. Blocked people's photos are never shown or downloadable.
+ * Lore (F-AFT-04, D-218): a shared photo album per plan. Everyone in the plan (a seat, or a host) adds photos
+ * while the hosts allow guests to; hosts always can. Photos go through the normal media pipeline (EXIF
+ * stripped, moderated) and appear once ready. Hosts choose whether attendees' squads can see it too. Blocked
+ * people's photos are never shown or downloadable. The album opens when the plan starts and closes 7 days
+ * after it ends; the worker then deletes its photos (`LoreRetentionService`).
  */
 @Injectable()
 export class LoreService {
@@ -61,36 +70,42 @@ export class LoreService {
     private readonly profiles: ProfilesService,
   ) {}
 
-  private async visibility(
-    eventId: string,
-  ): Promise<{ visibility: LoreVisibility; coverMediaId: string | null }> {
+  /** The album's settings; albums are created lazily, so no row means the defaults. */
+  private async settings(eventId: string): Promise<LoreSettings & { coverMediaId: string | null }> {
     const [a] = await this.db.select().from(loreAlbums).where(eq(loreAlbums.eventId, eventId));
-    return { visibility: a?.visibility ?? 'attendees', coverMediaId: a?.coverMediaId ?? null };
+    return {
+      visibility: a?.visibility ?? 'attendees',
+      guestsCanAdd: a?.guestsCanAdd ?? true,
+      coverMediaId: a?.coverMediaId ?? null,
+    };
   }
 
   private async rights(userId: string, core: EventCore, facts: EventViewerFacts, now: Date) {
-    const { visibility } = await this.visibility(core.id);
+    const settings = await this.settings(core.id);
     const attended = facts.rsvp === 'checked_in';
+    const seated = attended || facts.rsvp === 'going';
     let squadOfAttendee = false;
-    if (!attended && facts.hostRole === null && visibility === 'friends_of_attendees') {
+    if (!seated && facts.hostRole === null && settings.visibility === 'friends_of_attendees') {
       const attendees = await this.search.checkedInAndHosts(core.id);
       const squad = new Set(await this.graph.friendIds(userId));
       squadOfAttendee = attendees.some((id) => squad.has(id));
     }
     return {
-      visibility,
+      ...settings,
       ...loreAccess(
-        { attended, isHost: facts.hostRole !== null, squadOfAttendee },
+        { seated, attended, isHost: facts.hostRole !== null, squadOfAttendee },
         core,
-        visibility,
+        settings,
         now,
       ),
     };
   }
 
+  /** The album as this viewer may use it: "closed" for people who could see it before, else not found. */
   private async open(userId: string, eventId: string, now: Date) {
     const { core, facts } = await this.access.visibleOrThrow(userId, eventId);
     const r = await this.rights(userId, core, facts, now);
+    if (r.closed) throw loreClosedError(loreClosesAt(core.endsAt));
     if (!r.view) throw AppError.notFound('Lore');
     return { core, facts, ...r };
   }
@@ -139,7 +154,7 @@ export class LoreService {
     q: LoreQuery,
     now: Date = new Date(),
   ): Promise<LoreAlbum> {
-    const { core, visibility, add, manage } = await this.open(viewerId, eventId, now);
+    const { core, visibility, guestsCanAdd, add, manage } = await this.open(viewerId, eventId, now);
     const after = q.cursor ? decodeCursor(q.cursor, TimeIdCursor) : null;
     const rows = await this.visibleItems(viewerId, eventId, { after, limit: q.limit });
     const page = rows.slice(0, q.limit);
@@ -176,6 +191,8 @@ export class LoreService {
       count: total,
       canAdd: add,
       canManage: manage,
+      guestsCanAdd,
+      closesAt: loreClosesAt(core.endsAt).toISOString(),
       items,
       nextCursor:
         rows.length > q.limit && last
@@ -200,21 +217,31 @@ export class LoreService {
   }
 
   private async coverUrls(eventId: string) {
-    const { coverMediaId } = await this.visibility(eventId);
+    const { coverMediaId } = await this.settings(eventId);
     if (!coverMediaId) return null;
     const asset = await this.media.byId(coverMediaId);
     return asset?.status === 'ready' ? this.media.urlsFor(asset.variantKeys) : null;
   }
 
-  /** Event detail hook: album size and whether the viewer can add, or null when they cannot see it. */
+  /**
+   * Event detail hook: album size, whether the viewer can add and when it closes, or null when they cannot
+   * see it (including once it has closed).
+   */
   async summaryFor(
     userId: string,
     core: EventCore,
     facts: EventViewerFacts,
     now: Date = new Date(),
-  ): Promise<{ count: number; canAdd: boolean } | null> {
+  ): Promise<(LoreSummary & { guestsCanAdd: boolean }) | null> {
     const r = await this.rights(userId, core, facts, now);
-    return r.view ? { count: await this.countVisible(core.id), canAdd: r.add } : null;
+    return r.view
+      ? {
+          count: await this.countVisible(core.id),
+          canAdd: r.add,
+          closesAt: loreClosesAt(core.endsAt).toISOString(),
+          guestsCanAdd: r.guestsCanAdd,
+        }
+      : null;
   }
 
   async add(
@@ -223,11 +250,15 @@ export class LoreService {
     body: AddLoreBody,
     now: Date = new Date(),
   ): Promise<{ id: string }> {
-    const { core, add } = await this.open(userId, eventId, now);
+    const { core, add, facts, guestsCanAdd } = await this.open(userId, eventId, now);
     if (!add)
-      throw new AppError('NOT_ELIGIBLE', 'Only people who were there add Lore', {
-        reason: 'NOT_ATTENDED',
-      });
+      throw !guestsCanAdd && (facts.rsvp === 'going' || facts.rsvp === 'checked_in')
+        ? new AppError('NOT_ELIGIBLE', 'Only the hosts add photos to this Lore', {
+            reason: 'LORE_HOSTS_ONLY',
+          })
+        : new AppError('NOT_ELIGIBLE', 'Only people in the plan add Lore', {
+            reason: 'NOT_ATTENDED',
+          });
     const asset = await this.media.ownedOrThrow(userId, body.mediaId);
     if (asset.purpose !== 'lore')
       throw new AppError('VALIDATION_FAILED', 'Upload a Lore photo first', [
@@ -311,11 +342,32 @@ export class LoreService {
   }
 
   async setVisibility(hostId: string, eventId: string, visibility: LoreVisibility): Promise<void> {
+    await this.updateSettings(hostId, eventId, { visibility });
+  }
+
+  /**
+   * Hosts (and co-hosts) set who sees the album and whether guests add to it (D-218), any time until it
+   * closes, before the plan starts too.
+   */
+  async updateSettings(
+    hostId: string,
+    eventId: string,
+    body: LoreSettingsBody,
+    now: Date = new Date(),
+  ): Promise<void> {
     await this.access.requireHost(hostId, eventId, { roles: ['host', 'co_host'] });
+    const core = await this.store.core(eventId);
+    if (!core) throw AppError.notFound('Plan');
+    const closesAt = loreClosesAt(core.endsAt);
+    if (now >= closesAt) throw loreClosedError(closesAt);
+    const set = {
+      ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
+      ...(body.guestsCanAdd !== undefined ? { guestsCanAdd: body.guestsCanAdd } : {}),
+    };
     await this.db
       .insert(loreAlbums)
-      .values({ eventId, visibility })
-      .onConflictDoUpdate({ target: loreAlbums.eventId, set: { visibility } });
+      .values({ eventId, ...set })
+      .onConflictDoUpdate({ target: loreAlbums.eventId, set });
   }
 
   /** Full-size, short-lived links to what this viewer may see (never blocked people's photos). */

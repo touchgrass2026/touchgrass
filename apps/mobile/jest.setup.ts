@@ -253,3 +253,15 @@ jest.mock('expo-calendar/legacy', () => ({
   updateEventAsync: jest.fn(() => Promise.resolve('device-event-1')),
   deleteEventAsync: jest.fn(() => Promise.resolve()),
 }));
+
+// The photo library (D-218): granted add-only access by default; tests make it refuse or go missing.
+jest.mock('expo-media-library/legacy', () => ({
+  requestPermissionsAsync: jest.fn(() =>
+    Promise.resolve({ granted: true, canAskAgain: true, status: 'granted', expires: 'never' }),
+  ),
+  saveToLibraryAsync: jest.fn(() => Promise.resolve()),
+}));
+// Builds from before D-218 have no native module; tests switch this to null to stand in for them.
+jest.mock('./src/features/after/media-library', () => ({
+  mediaLibrary: jest.fn(() => jest.requireMock<object>('expo-media-library/legacy')),
+}));

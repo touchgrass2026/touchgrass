@@ -321,7 +321,14 @@ export const EventDetail = EventSummary.extend({
   /** Perks at partner venues (F-PAY-04). */
   perks: z.array(EventPerk),
   /** Lore album (F-AFT-04) when the viewer may see it. */
-  lore: z.object({ count: z.number().int(), canAdd: z.boolean() }).nullable(),
+  lore: z
+    .object({
+      count: z.number().int(),
+      canAdd: z.boolean(),
+      /** Closes 7 days after the plan ends (D-218). */
+      closesAt: z.iso.datetime().optional(),
+    })
+    .nullable(),
   /** Set for crew sessions (F-ENG-02). */
   crew: z.object({ id: z.uuid(), name: z.string() }).nullable(),
   /** Held for review by the text filter: only its hosts can see it until then (F-SAF-06). */

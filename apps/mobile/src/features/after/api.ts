@@ -148,13 +148,11 @@ export function useRemoveLore(eventId: string) {
   );
 }
 
-export function useLoreVisibility(eventId: string) {
+/** Host settings (D-218): who sees the album, and whether guests add to it. */
+export function useLoreSettings(eventId: string) {
   const { client } = useApi();
-  return useLoreMutation(eventId, (visibility: LoreVisibility) =>
-    client.request(`/v1/events/${eventId}/lore/visibility`, Empty, {
-      method: 'PUT',
-      body: { visibility },
-    }),
+  return useLoreMutation(eventId, (body: { visibility?: LoreVisibility; guestsCanAdd?: boolean }) =>
+    client.request(`/v1/events/${eventId}/lore`, Empty, { method: 'PATCH', body }),
   );
 }
 

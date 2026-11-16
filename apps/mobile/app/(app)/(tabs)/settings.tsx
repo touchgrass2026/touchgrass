@@ -8,6 +8,7 @@ import { useLogout } from '../../../src/features/auth/api';
 import { openLegal } from '../../../src/features/legal/links';
 import { useTutorial } from '../../../src/features/me/api';
 import { resetDockGuide } from '../../../components/DockGuide';
+import { resetLoreGuide } from '../../../components/LoreGuide';
 import { useSettingsStore } from '../../../src/stores/settings-store';
 
 export default function SettingsScreen() {
@@ -82,6 +83,8 @@ export default function SettingsScreen() {
             () => {
               // The dock guide comes back too, after the tutorial (D-198).
               void resetDockGuide().catch(() => undefined);
+              // And the Lore tour, the next time an album opens (D-218).
+              void resetLoreGuide().catch(() => undefined);
               router.push('/tutorial');
             },
             () => undefined,

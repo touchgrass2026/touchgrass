@@ -4,6 +4,12 @@ import type { EventCore } from './event-store.service.js';
 import type { EventViewerFacts } from './event-access.service.js';
 
 export type ViewerPayment = NonNullable<ViewerState['payment']>;
+/** The plan page's Lore line (F-AFT-04, D-218). */
+export interface LoreSummary {
+  count: number;
+  canAdd: boolean;
+  closesAt: string;
+}
 
 /**
  * Extension points other modules plug into, so events never imports them (they import events):
@@ -16,11 +22,7 @@ export interface EventHookSet {
   hasPayments?: (eventId: string) => Promise<boolean>;
   viewerPayment?: (userId: string, eventId: string) => Promise<ViewerPayment | null>;
   perks?: (userId: string, core: EventCore, facts: EventViewerFacts) => Promise<EventPerk[]>;
-  lore?: (
-    userId: string,
-    core: EventCore,
-    facts: EventViewerFacts,
-  ) => Promise<{ count: number; canAdd: boolean } | null>;
+  lore?: (userId: string, core: EventCore, facts: EventViewerFacts) => Promise<LoreSummary | null>;
   /** The crew a crew session belongs to (F-ENG-02). */
   crew?: (eventId: string) => Promise<{ id: string; name: string } | null>;
 }
@@ -55,11 +57,7 @@ export class EventHooks {
     return this.hooks.perks ? this.hooks.perks(userId, core, facts) : Promise.resolve([]);
   }
 
-  lore(
-    userId: string,
-    core: EventCore,
-    facts: EventViewerFacts,
-  ): Promise<{ count: number; canAdd: boolean } | null> {
+  lore(userId: string, core: EventCore, facts: EventViewerFacts): Promise<LoreSummary | null> {
     return this.hooks.lore ? this.hooks.lore(userId, core, facts) : Promise.resolve(null);
   }
 

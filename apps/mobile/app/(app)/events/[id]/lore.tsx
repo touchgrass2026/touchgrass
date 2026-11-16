@@ -3,14 +3,17 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, StyleSheet, View } from 'react-native';
+import { Linking, Modal, StyleSheet, View } from 'react-native';
 import { ChipGroup } from '../../../../components/ChipGroup';
+import { LoreGuide } from '../../../../components/LoreGuide';
 import {
   Button,
+  Card,
   EmptyState,
   ErrorState,
   LoadingState,
   Screen,
+  SwitchRow,
   Text,
   TextField,
   Pressable,
@@ -19,16 +22,23 @@ import {
   useAddLore,
   useLore,
   useLoreDownload,
-  useLoreVisibility,
+  useLoreSettings,
   useRemoveLore,
 } from '../../../../src/features/after/api';
-import { savePhoto } from '../../../../src/features/after/save';
+import { loreCountdown } from '../../../../src/features/after/lore-window';
+import {
+  canSaveToGallery,
+  type LorePhotoLink,
+  saveToGallery,
+  sharePhoto,
+} from '../../../../src/features/after/save';
 import {
   compressImage,
   pickImage,
   uploadImage,
   waitUntilReady,
 } from '../../../../src/features/media/upload';
+import { ApiError } from '../../../../src/lib/api-client';
 import { errorMessage } from '../../../../src/lib/errors';
 import { useApi } from '../../../../src/providers/api-context';
 import { useTheme } from '../../../../src/theme/theme';
@@ -37,8 +47,11 @@ import { useTheme } from '../../../../src/theme/theme';
 const LORE_READY_POLLS = 36;
 
 /**
- * Lore (F-AFT-04): the plan's shared album. People who checked in add photos; hosts choose whether their
- * squads can see it too. Photos open full size with save, report and remove.
+ * Lore (F-AFT-04, D-218): the plan's shared album. Everyone in the plan adds photos while the hosts allow
+ * guests to; hosts choose that and whether attendees' squads see it too. It closes 7 days after the plan,
+ * so the screen counts down. "Save to phone" puts photos in the gallery; "Share" opens the share sheet for
+ * one photo. Builds without the photo library module only offer Share. Photos open full size with save,
+ * share, report and remove.
  */
 export default function LoreScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -53,15 +66,31 @@ export default function LoreScreen() {
   const q = useLore(id);
   const add = useAddLore(id);
   const remove = useRemoveLore(id);
-  const visibility = useLoreVisibility(id);
+  const settings = useLoreSettings(id);
   const download = useLoreDownload(id);
+  // Decided once per screen: builds without the photo library module only share (D-218).
+  const [canSave] = useState(canSaveToGallery);
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState<'uploading' | 'checking' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<LoreItem | null>(null);
+  const [denied, setDenied] = useState(false);
 
   if (q.isPending) return <LoadingState />;
+  if (q.isError && q.error instanceof ApiError && q.error.code === 'LORE_CLOSED')
+    return (
+      <Screen testID="lore-closed">
+        <EmptyState
+          title={t('lore.closedTitle')}
+          body={t('lore.closedBody', { days: LIMITS.lore.availableDays })}
+          actionLabel={t('common.back')}
+          onAction={() => {
+            router.back();
+          }}
+        />
+      </Screen>
+    );
   if (q.isError)
     return (
       <ErrorState
@@ -72,6 +101,7 @@ export default function LoreScreen() {
   const first = q.data.pages[0];
   if (!first) return <LoadingState />;
   const items = q.data.pages.flatMap((p) => p.items);
+  const countdown = first.closesAt ? loreCountdown(new Date(first.closesAt), new Date()) : null;
 
   const addPhoto = async (): Promise<void> => {
     setError(null);
@@ -95,23 +125,33 @@ export default function LoreScreen() {
     }
   };
 
-  const saveAll = async (): Promise<void> => {
+  const save = async (photos: LorePhotoLink[]): Promise<void> => {
     setError(null);
     setNotice(null);
+    setDenied(false);
     try {
-      const links = await download.mutateAsync();
-      let saved = 0;
-      for (const item of links.items) if (await savePhoto(item.url, item.id)) saved += 1;
-      setNotice(t('lore.downloaded', { count: saved }));
+      const result = await saveToGallery(photos);
+      if (result.status === 'denied') setDenied(true);
+      else if (result.status === 'saved') setNotice(t('lore.saved', { count: result.count }));
     } catch (err) {
       setError(errorMessage(t, err));
     }
   };
 
-  const saveOne = async (item: LoreItem): Promise<void> => {
+  const saveAll = async (): Promise<void> => {
     setError(null);
     try {
-      if (await savePhoto(item.image.lg, item.id)) setNotice(t('lore.downloaded', { count: 1 }));
+      const links = await download.mutateAsync();
+      await save(links.items);
+    } catch (err) {
+      setError(errorMessage(t, err));
+    }
+  };
+
+  const shareOne = async (item: LoreItem): Promise<void> => {
+    setError(null);
+    try {
+      await sharePhoto({ id: item.id, url: item.image.lg });
     } catch (err) {
       setError(errorMessage(t, err));
     }
@@ -129,9 +169,40 @@ export default function LoreScreen() {
 
   return (
     <Screen testID="lore-screen">
+      <LoreGuide canSave={canSave} />
       <Text variant="title" accessibilityRole="header">
         {first.eventTitle}
       </Text>
+
+      {countdown ? (
+        <Card testID="lore-closes">
+          <Text accessibilityLiveRegion="polite">
+            {countdown.soon ? t('lore.closesSoon') : t('lore.closesIn', { count: countdown.days })}
+          </Text>
+        </Card>
+      ) : null}
+
+      <Text tone="muted" testID="lore-who-adds">
+        {first.guestsCanAdd
+          ? t('lore.whoCanAddEveryone', { max: LIMITS.after.lorePerPersonPerEvent })
+          : t('lore.whoCanAddHosts')}
+      </Text>
+
+      {first.canManage ? (
+        <SwitchRow
+          label={t('lore.guestsCanAdd')}
+          hint={t('lore.guestsCanAddHint')}
+          value={first.guestsCanAdd}
+          disabled={settings.isPending}
+          onChange={(guestsCanAdd) => {
+            setError(null);
+            settings.mutateAsync({ guestsCanAdd }).catch((err: unknown) => {
+              setError(errorMessage(t, err));
+            });
+          }}
+          testID="lore-guests-can-add"
+        />
+      ) : null}
 
       {first.canManage ? (
         <ChipGroup
@@ -146,7 +217,7 @@ export default function LoreScreen() {
             const v = next[0] as LoreVisibility | undefined;
             if (!v || v === first.visibility) return;
             setError(null);
-            visibility.mutateAsync(v).catch((err: unknown) => {
+            settings.mutateAsync({ visibility: v }).catch((err: unknown) => {
               setError(errorMessage(t, err));
             });
           }}
@@ -181,6 +252,19 @@ export default function LoreScreen() {
         <Text tone="danger" accessibilityRole="alert" testID="lore-error">
           {error}
         </Text>
+      ) : null}
+      {denied ? (
+        <View style={styles.section} testID="lore-save-denied">
+          <Text tone="danger" accessibilityRole="alert">
+            {t('lore.saveDenied')}
+          </Text>
+          <Button
+            label={t('lore.openSettings')}
+            variant="secondary"
+            onPress={() => void Linking.openSettings()}
+            testID="lore-open-settings"
+          />
+        </View>
       ) : null}
 
       {items.length === 0 ? (
@@ -230,13 +314,15 @@ export default function LoreScreen() {
               testID="lore-more"
             />
           ) : null}
-          <Button
-            label={t('lore.download')}
-            variant="secondary"
-            loading={download.isPending}
-            onPress={() => void saveAll()}
-            testID="lore-download"
-          />
+          {canSave ? (
+            <Button
+              label={t('lore.saveAll')}
+              variant="secondary"
+              loading={download.isPending}
+              onPress={() => void saveAll()}
+              testID="lore-download"
+            />
+          ) : null}
         </>
       )}
 
@@ -282,11 +368,25 @@ export default function LoreScreen() {
               <Text variant="caption" tone="muted">
                 {t('lore.photoBy', { name: open.uploader.displayName })}
               </Text>
+              {canSave ? (
+                <Button
+                  label={t('lore.saveOne')}
+                  variant="secondary"
+                  onPress={() => {
+                    // Closed first, so the confirmation (or the Settings link) shows on the album.
+                    const photo = { id: open.id, url: open.image.lg };
+                    setOpen(null);
+                    void save([photo]);
+                  }}
+                  testID="lore-save-one"
+                />
+              ) : null}
               <Button
-                label={t('lore.download')}
-                variant="secondary"
-                onPress={() => void saveOne(open)}
-                testID="lore-save-one"
+                label={t('lore.share')}
+                accessibilityHint={t('lore.shareHint')}
+                variant={canSave ? 'ghost' : 'secondary'}
+                onPress={() => void shareOne(open)}
+                testID="lore-share-one"
               />
               {open.mine || first.canManage ? (
                 <Button

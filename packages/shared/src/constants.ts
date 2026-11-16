@@ -165,6 +165,14 @@ export const LIMITS = {
     lorePerPersonPerEvent: 30,
     loreDownloadTtlSeconds: 24 * 3600,
   },
+  lore: {
+    /** An album opens when its plan starts and closes this many days after the plan ends (D-218). */
+    availableDays: 7,
+    /** "Lore closes tomorrow" goes out this long before the album closes. */
+    closingReminderHours: 24,
+    /** Most closed-album photos one purge run deletes (the next run picks up the rest). */
+    purgeBatch: 500,
+  },
   stories: {
     /** A story is visible for this long after posting. */
     lifetimeHours: 24,

@@ -36,6 +36,7 @@ import { CategoryPill } from './CategoryPill';
 import { PlanArt } from './PlanArt';
 import { MYSTERY_AREA, PlanMarker } from './PlanMarker';
 import { useFlag } from '../src/features/app-config/use-flag';
+import { loreCountdown } from '../src/features/after/lore-window';
 
 /**
  * Everything about one plan (F-EVT-05..17). The location shown is exactly what the API returned for this
@@ -77,6 +78,10 @@ export function EventDetailView({
   const [notice, setNotice] = useState<string | null>(null);
   const [guestLink, setGuestLink] = useState<string | null>(null);
   const v = event.viewer;
+  // Lore closes 7 days after the plan (D-218): say how long is left under the shortcut.
+  const loreLeft = event.lore?.closesAt
+    ? loreCountdown(new Date(event.lore.closesAt), new Date())
+    : null;
   const open = event.status === 'published';
   const holdsSeat = v.rsvp === 'going' || v.rsvp === 'checked_in';
   const isPrimaryHost = v.hostRole === 'host';
@@ -731,6 +736,11 @@ export function EventDetailView({
               }}
               testID="open-lore"
             />
+          ) : null}
+          {loreLeft ? (
+            <Text variant="caption" tone="muted" testID="open-lore-closes">
+              {loreLeft.soon ? t('lore.closesSoon') : t('lore.closesIn', { count: loreLeft.days })}
+            </Text>
           ) : null}
           {event.status === 'completed' && v.rsvp === 'checked_in' && !v.isHost ? (
             <Button

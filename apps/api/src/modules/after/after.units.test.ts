@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DISCOVERY_WEIGHTS, scoreEvent } from '../discovery/ranking.js';
 import { feedbackBlock, feedbackOpenUntil, tally } from '../feedback/feedback.policy.js';
-import { coverSource, loreAccess } from '../lore/lore.policy.js';
+import {
+  closingReminderWindow,
+  coverSource,
+  loreAccess,
+  loreClosed,
+  loreClosesAt,
+} from '../lore/lore.policy.js';
 import { reconnectState } from './after.service.js';
 
 const END = new Date('2026-11-01T14:30:00.000Z');
@@ -40,44 +46,93 @@ describe('reconnect state (F-AFT-03)', () => {
   });
 });
 
-describe('Lore access (F-AFT-04)', () => {
-  const started = { status: 'completed', startsAt: new Date(END.getTime() - 2 * 3_600_000) };
-  const outsider = { attended: false, isHost: false, squadOfAttendee: false };
-  it('attendees and hosts; squads only when allowed; nothing before the start or when cancelled', () => {
-    expect(loreAccess({ ...outsider, attended: true }, started, 'attendees', END)).toEqual({
+describe('Lore access (F-AFT-04, D-218)', () => {
+  const started = {
+    status: 'completed',
+    startsAt: new Date(END.getTime() - 2 * 3_600_000),
+    endsAt: END,
+  };
+  const outsider = { seated: false, attended: false, isHost: false, squadOfAttendee: false };
+  const open = { visibility: 'attendees' as const, guestsCanAdd: true };
+  const hostsOnly = { ...open, guestsCanAdd: false };
+  it('everyone holding a seat and hosts see and add; squads only see when allowed', () => {
+    expect(loreAccess({ ...outsider, attended: true, seated: true }, started, open, END)).toEqual({
       view: true,
       add: true,
       manage: false,
+      closed: false,
     });
-    expect(loreAccess({ ...outsider, isHost: true }, started, 'attendees', END)).toEqual({
+    // Going but never checked in: still in the plan, so they add too.
+    expect(loreAccess({ ...outsider, seated: true }, started, open, END)).toEqual({
+      view: true,
+      add: true,
+      manage: false,
+      closed: false,
+    });
+    expect(loreAccess({ ...outsider, isHost: true }, started, open, END)).toEqual({
       view: true,
       add: true,
       manage: true,
+      closed: false,
     });
-    expect(loreAccess({ ...outsider, squadOfAttendee: true }, started, 'attendees', END).view).toBe(
-      false,
-    );
-    expect(
-      loreAccess({ ...outsider, squadOfAttendee: true }, started, 'friends_of_attendees', END),
-    ).toEqual({ view: true, add: false, manage: false });
-    expect(loreAccess(outsider, started, 'friends_of_attendees', END).view).toBe(false);
+    expect(loreAccess({ ...outsider, squadOfAttendee: true }, started, open, END).view).toBe(false);
     expect(
       loreAccess(
-        { ...outsider, attended: true },
-        { ...started, status: 'cancelled' },
-        'attendees',
+        { ...outsider, squadOfAttendee: true },
+        started,
+        { ...open, visibility: 'friends_of_attendees' },
         END,
-      ).view,
-    ).toBe(false);
+      ),
+    ).toEqual({ view: true, add: false, manage: false, closed: false });
     expect(
-      loreAccess(
-        { ...outsider, isHost: true },
-        { status: 'published', startsAt: new Date(END.getTime() + 1) },
-        'attendees',
-        END,
-      ).view,
-    ).toBe(false);
+      loreAccess(outsider, started, { ...open, visibility: 'friends_of_attendees' }, END),
+    ).toEqual({ view: false, add: false, manage: false, closed: false });
     expect(coverSource(['a', 'b'])).toBe('a,b');
+  });
+
+  it('hosts can keep adding to themselves; guests still see the album', () => {
+    expect(loreAccess({ ...outsider, seated: true }, started, hostsOnly, END)).toEqual({
+      view: true,
+      add: false,
+      manage: false,
+      closed: false,
+    });
+    expect(loreAccess({ ...outsider, isHost: true }, started, hostsOnly, END).add).toBe(true);
+  });
+
+  it('opens at the start, closes 7 days after the end, never for cancelled plans', () => {
+    const seated = { ...outsider, seated: true };
+    expect(
+      loreAccess(seated, { ...started, startsAt: new Date(END.getTime() + 1) }, open, END).view,
+    ).toBe(false);
+    expect(loreAccess(seated, { ...started, status: 'cancelled' }, open, END)).toEqual({
+      view: false,
+      add: false,
+      manage: false,
+      closed: false,
+    });
+    const lastMoment = new Date(END.getTime() + 7 * DAY - 1);
+    expect(loreAccess(seated, started, open, lastMoment).view).toBe(true);
+    expect(loreClosesAt(END).getTime()).toBe(END.getTime() + 7 * DAY);
+    const closedAt = new Date(END.getTime() + 7 * DAY);
+    expect(loreClosed(END, closedAt)).toBe(true);
+    expect(loreClosed(END, lastMoment)).toBe(false);
+    // People who would have seen it are told it closed; everyone else still gets "not found".
+    expect(loreAccess(seated, started, open, closedAt)).toEqual({
+      view: false,
+      add: false,
+      manage: false,
+      closed: true,
+    });
+    expect(loreAccess({ ...outsider, isHost: true }, started, open, closedAt).manage).toBe(false);
+    expect(loreAccess(outsider, started, open, closedAt).closed).toBe(false);
+  });
+
+  it('reminds about plans whose album closes within the next day', () => {
+    const now = new Date('2026-11-10T10:00:00.000Z');
+    const w = closingReminderWindow(now);
+    expect(w.endedAfter.toISOString()).toBe('2026-11-03T10:00:00.000Z');
+    expect(w.endedBefore.toISOString()).toBe('2026-11-04T10:00:00.000Z');
   });
 });
 

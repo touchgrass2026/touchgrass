@@ -221,6 +221,13 @@ export const NOTIFICATION_TEMPLATES = {
     body: 'notifications.kinds.feedbackAsk.body',
     link: 'after/{{eventId}}',
   },
+  /** A day before a plan's Lore closes and its photos are deleted (D-218). */
+  lore_closing: {
+    category: 'reminders',
+    title: 'notifications.kinds.loreClosing.title',
+    body: 'notifications.kinds.loreClosing.body',
+    link: 'events/{{eventId}}/lore',
+  },
   // ---------- engagement ----------
   badge_earned: {
     category: 'badges',

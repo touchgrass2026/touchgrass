@@ -29,6 +29,7 @@ import { RemindersService } from '../modules/reminders/reminders.service.js';
 import { WeekendDigestService } from '../modules/reminders/weekend-digest.service.js';
 import { AnalyticsCountersService } from '../modules/analytics/analytics-counters.service.js';
 import { VerificationService } from '../modules/verification/verification.service.js';
+import { LoreRetentionService } from '../modules/lore/lore-retention.service.js';
 
 export interface ScheduledJob {
   id: string;
@@ -73,6 +74,7 @@ export class ScheduledJobs {
     private readonly analyticsCounters: AnalyticsCountersService,
     private readonly stories: StoriesService,
     private readonly verification: VerificationService,
+    private readonly loreRetention: LoreRetentionService,
   ) {}
 
   definitions(): ScheduledJob[] {
@@ -182,6 +184,17 @@ export class ScheduledJobs {
         run: () => this.weekendDigest.sendDue(),
       },
       { id: 'reminders.prune-log', pattern: '59 3 * * *', run: () => this.reminders.prune() },
+      // Lore closes 7 days after a plan (D-218): a day's notice, then its photos are deleted in batches.
+      {
+        id: 'lore.remind-closing',
+        pattern: '27 * * * *',
+        run: () => this.loreRetention.remindClosing(),
+      },
+      {
+        id: 'lore.purge-closed',
+        pattern: '33 * * * *',
+        run: () => this.loreRetention.purgeClosed(),
+      },
       {
         id: 'analytics.prune-active',
         pattern: '17 4 * * *',

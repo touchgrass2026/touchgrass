@@ -186,6 +186,8 @@ export class AfterService {
       people,
       loreCount: lore?.count ?? 0,
       canAddLore: lore?.canAdd ?? false,
+      loreGuestsCanAdd: lore?.guestsCanAdd ?? true,
+      ...(lore ? { loreClosesAt: lore.closesAt } : {}),
       badges,
     };
   }

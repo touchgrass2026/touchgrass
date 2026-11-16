@@ -89,6 +89,7 @@ export function privacyPolicy(c: CompanyDetails): LegalDocument {
         heading: 'How long we keep it',
         paragraphs: [
           'Stories disappear after 24 hours and their files are deleted shortly after.',
+          `Lore albums close ${String(LIMITS.lore.availableDays)} days after their plan ends, and their photos are deleted then.`,
           'Live location points are deleted within 24 hours.',
           'Verification selfies are deleted after review.',
           `When you delete your account it is hidden at once and permanently erased after ${String(grace)} days, unless you sign in again before then to cancel.`,

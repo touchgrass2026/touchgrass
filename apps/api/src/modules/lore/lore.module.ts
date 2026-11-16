@@ -6,28 +6,33 @@ import { EventsModule } from '../events/events.module.js';
 import { MediaModule } from '../media/media.module.js';
 import { ModerationModule } from '../moderation/moderation.module.js';
 import { ModerationTargetRegistry } from '../moderation/moderation-targets.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
+import { RemindersModule } from '../reminders/reminders.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
 import { SocialGraphModule } from '../social/graph/social-graph.module.js';
 import { ReportTargetRegistry } from '../social/reports/report-targets.registry.js';
 import { SocialModule } from '../social/social.module.js';
 import { LoreController } from './lore.controller.js';
 import { LoreHandlers } from './lore.handlers.js';
+import { LoreRetentionService } from './lore-retention.service.js';
 import { LoreService } from './lore.service.js';
 
-/** Lore albums (Phase 7, F-AFT-04). */
+/** Lore albums (Phase 7, F-AFT-04; 7-day window D-218). */
 @Module({
   imports: [
     AccountModule,
     EventsModule,
     MediaModule,
     ModerationModule,
+    NotificationsModule,
     ProfilesModule,
+    RemindersModule,
     SocialGraphModule,
     SocialModule,
   ],
   controllers: [LoreController],
-  providers: [LoreService, LoreHandlers],
-  exports: [LoreService, LoreHandlers],
+  providers: [LoreService, LoreHandlers, LoreRetentionService],
+  exports: [LoreService, LoreHandlers, LoreRetentionService],
 })
 export class LoreModule implements OnModuleInit {
   constructor(
@@ -40,7 +45,10 @@ export class LoreModule implements OnModuleInit {
 
   onModuleInit(): void {
     this.hooks.register({
-      lore: (userId, core, facts) => this.lore.summaryFor(userId, core, facts),
+      lore: async (userId, core, facts) => {
+        const s = await this.lore.summaryFor(userId, core, facts);
+        return s ? { count: s.count, canAdd: s.canAdd, closesAt: s.closesAt } : null;
+      },
     });
     this.targets.register({
       type: 'lore_media',

@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EventStore } from '../src/modules/events/event-store.service.js';
 import { EventsService } from '../src/modules/events/events.service.js';
 import { LoreHandlers } from '../src/modules/lore/lore.handlers.js';
+import { LoreRetentionService } from '../src/modules/lore/lore-retention.service.js';
 import { LoreService } from '../src/modules/lore/lore.service.js';
 import { MediaProcessor } from '../src/modules/media/media.processor.js';
 import { ReliabilityHandlers } from '../src/modules/reliability/reliability.handlers.js';
@@ -427,9 +428,11 @@ describe('Lore albums (F-AFT-04)', () => {
       caption: 'Golden hour',
       mine: false,
     });
+    const endsAt = new Date(((await detail(h, a, id).expect(200)).body as EventDetail).endsAt);
     expect(((await detail(h, a, id).expect(200)).body as EventDetail).lore).toEqual({
       count: 2,
       canAdd: true,
+      closesAt: new Date(endsAt.getTime() + LIMITS.lore.availableDays * 24 * H).toISOString(),
     });
 
     // Squads of attendees once the host opens it up; they can look but not add.
@@ -515,6 +518,191 @@ describe('Lore albums (F-AFT-04)', () => {
       [a.id, id],
     );
     expect(rows[0]?.n).toBe(1);
+  });
+});
+
+describe('Lore for everyone in the plan, for 7 days (D-218)', () => {
+  const album = (m: Member, id: string) =>
+    request(h.http)
+      .get(`/v1/events/${id}/lore`)
+      .set(...bearer(m.token));
+  const add = (m: Member, id: string, mediaId: string) =>
+    request(h.http)
+      .post(`/v1/events/${id}/lore`)
+      .set(...bearer(m.token))
+      .send({ mediaId, caption: '' });
+  const settings = (m: Member, id: string, body: Record<string, unknown>) =>
+    request(h.http)
+      .patch(`/v1/events/${id}/lore`)
+      .set(...bearer(m.token))
+      .send(body);
+
+  it('everyone holding a seat adds while the host allows it; only hosts once it is off', async () => {
+    const host = await verifiedMember(h);
+    const [checkedIn, going, outsider] = [await member(h), await member(h), await member(h)];
+    const id = await attendedPlan(host, [checkedIn], { noShows: [going] });
+
+    // Going but never checked in: still part of the plan.
+    const first = (await album(going, id).expect(200)).body as LoreAlbum;
+    expect(first).toMatchObject({ canAdd: true, canManage: false, guestsCanAdd: true });
+    const endsAt = new Date(((await detail(h, going, id).expect(200)).body as EventDetail).endsAt);
+    expect(first.closesAt).toBe(new Date(endsAt.getTime() + 7 * 24 * H).toISOString());
+    await add(going, id, await lorePhoto(going)).expect(201);
+    await add(outsider, id, await lorePhoto(outsider)).expect(404);
+
+    // Only hosts change the setting; an empty change is refused.
+    await settings(checkedIn, id, { guestsCanAdd: false }).expect(403);
+    await settings(host, id, {}).expect(400);
+    await settings(host, id, { guestsCanAdd: false }).expect(204);
+
+    const refused = await add(checkedIn, id, await lorePhoto(checkedIn)).expect(403);
+    expect(refused.body.error).toMatchObject({
+      code: 'NOT_ELIGIBLE',
+      details: { reason: 'LORE_HOSTS_ONLY' },
+    });
+    const guestView = (await album(checkedIn, id).expect(200)).body as LoreAlbum;
+    expect(guestView).toMatchObject({ canAdd: false, guestsCanAdd: false, count: 1 });
+    expect(((await album(host, id).expect(200)).body as LoreAlbum).canManage).toBe(true);
+    await add(host, id, await lorePhoto(host)).expect(201);
+
+    // The post-event card says the same.
+    const card = (
+      await request(h.http)
+        .get(`/v1/events/${id}/after`)
+        .set(...bearer(checkedIn.token))
+        .expect(200)
+    ).body as PostEventCard;
+    expect(card).toMatchObject({ canAddLore: false, loreGuestsCanAdd: false, loreCount: 2 });
+    expect(card.loreClosesAt).toBe(first.closesAt);
+
+    // Back on: guests add again; visibility goes through the same endpoint.
+    await settings(host, id, { guestsCanAdd: true, visibility: 'friends_of_attendees' }).expect(
+      204,
+    );
+    expect((await album(checkedIn, id).expect(200)).body).toMatchObject({
+      canAdd: true,
+      visibility: 'friends_of_attendees',
+    });
+  });
+
+  it('closes 7 days after the plan: a day’s notice once, then closed, then photos and files deleted', async () => {
+    const host = await verifiedMember(h);
+    const [a, b, outsider] = [await member(h), await member(h), await member(h)];
+    // Ended six and a half days ago: closes in about half a day.
+    const id = await attendedPlan(host, [a, b], { endedHoursAgo: 7 * 24 - 12 });
+    const pa = await lorePhoto(a);
+    const itemA = (await add(a, id, pa).expect(201)).body.id as string;
+    const pb = await lorePhoto(b);
+    await add(b, id, pb).expect(201);
+    await drain(['lore.added'], id);
+    await request(h.http)
+      .post('/v1/reports')
+      .set(...bearer(b.token))
+      .set(...idem())
+      .send({ targetType: 'lore_media', targetId: itemA, category: 'nudity' })
+      .expect(201);
+
+    // "Lore closes tomorrow": everyone in the plan, once.
+    const retention = h.app.get(LoreRetentionService);
+    expect(await retention.remindClosing()).toBeGreaterThanOrEqual(3);
+    expect(await retention.remindClosing()).toBe(0);
+    const inbox = async (m: Member) =>
+      (
+        await h.pool.query<{ path: string; title: string }>(
+          `SELECT path, params->>'title' AS title FROM notifications
+           WHERE user_id = $1 AND kind = 'lore_closing' AND params->>'eventId' = $2`,
+          [m.id, id],
+        )
+      ).rows;
+    for (const m of [host, a, b]) expect(await inbox(m)).toHaveLength(1);
+    expect((await inbox(a))[0]?.path).toBe(`events/${id}/lore`);
+    expect(await inbox(outsider)).toHaveLength(0);
+
+    // Nothing is deleted while the album is open (this also clears any other closed albums first).
+    while ((await retention.purgeClosed()) > 0);
+    const itemsLeft = async () =>
+      (
+        await h.pool.query<{ n: number }>(
+          'SELECT count(*)::int AS n FROM lore_items WHERE event_id = $1',
+          [id],
+        )
+      ).rows[0]?.n;
+    expect(await itemsLeft()).toBe(2);
+
+    // A week and a day after the plan: closed for the people in it, still "not found" for others.
+    await shiftEvent(h, id, -(8 * 24 + 2) * H, 2 * H);
+    for (const res of [
+      await album(a, id),
+      await add(a, id, await lorePhoto(a)),
+      await request(h.http)
+        .get(`/v1/events/${id}/lore/download`)
+        .set(...bearer(b.token)),
+      await settings(host, id, { guestsCanAdd: false }),
+    ]) {
+      expect(res.status).toBe(410);
+      expect(res.body.error.code).toBe('LORE_CLOSED');
+    }
+    await album(outsider, id).expect(404);
+    expect(((await detail(h, a, id).expect(200)).body as EventDetail).lore).toBeNull();
+    // Nobody new can report a photo of a closed album.
+    await request(h.http)
+      .post('/v1/reports')
+      .set(...bearer(a.token))
+      .set(...idem())
+      .send({ targetType: 'lore_media', targetId: itemA, category: 'spam' })
+      .expect(404);
+
+    // Purge in batches: one photo, then the rest and the cover; files go through the media module.
+    const keys = (
+      await h.pool.query<{ original_key: string }>(
+        'SELECT original_key FROM media_assets WHERE id = ANY($1)',
+        [[pa, pb]],
+      )
+    ).rows.map((r) => r.original_key);
+    expect(await retention.purgeClosed(new Date(), 1)).toBe(1);
+    expect(await itemsLeft()).toBe(1);
+    await retention.purgeClosed();
+    expect(await itemsLeft()).toBe(0);
+    const { rows: albumRows } = await h.pool.query<{ purged: boolean; cover: string | null }>(
+      'SELECT purged_at IS NOT NULL AS purged, cover_media_id AS cover FROM lore_albums WHERE event_id = $1',
+      [id],
+    );
+    expect(albumRows[0]).toEqual({ purged: true, cover: null });
+    const { rows: assets } = await h.pool.query<{ status: string }>(
+      'SELECT status FROM media_assets WHERE id = ANY($1)',
+      [[pa, pb]],
+    );
+    expect(assets.map((r) => r.status)).toEqual(['deleted', 'deleted']);
+    for (const key of keys) expect(await h.storage.head(key)).toBeNull();
+
+    // The report about a deleted photo shows as gone and still resolves.
+    const { rows: reports } = await h.pool.query<{ id: string }>(
+      `SELECT id FROM moderation_items WHERE target_type = 'lore_media' AND target_id = $1 AND status = 'open'`,
+      [itemA],
+    );
+    const itemId = reports[0]?.id ?? '';
+    const review = await request(h.http)
+      .get(`/v1/admin/moderation/items/${itemId}`)
+      .set(...bearer(admin.token))
+      .expect(200);
+    expect(review.body.preview.gone).toBe(true);
+    await request(h.http)
+      .post(`/v1/admin/moderation/items/${itemId}/resolve`)
+      .set(...bearer(admin.token))
+      .set(...idem())
+      .send({ outcome: 'remove' })
+      .expect(200);
+
+    // Their export no longer lists the deleted photo.
+    const exported = JSON.stringify(
+      (
+        await request(h.http)
+          .get('/v1/me/export')
+          .set(...bearer(a.token))
+          .expect(200)
+      ).body,
+    );
+    expect(exported).not.toContain(itemA);
   });
 });
 

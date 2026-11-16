@@ -7,12 +7,16 @@ import type {
   PersonCard,
   PostEventCard,
 } from '@touchgrass/shared';
-import { AppState, type AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Linking, type AppStateStatus } from 'react-native';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
+import { LORE_GUIDE_KEY } from '../components/LoreGuide';
 import AfterEventScreen from '../app/(app)/after/[id]';
 import FeedbackSummaryScreen from '../app/(app)/events/[id]/feedback';
 import EventScreen from '../app/(app)/events/[id]/index';
 import LoreScreen from '../app/(app)/events/[id]/lore';
+import { type MediaLibraryModule, mediaLibrary } from '../src/features/after/media-library';
 import { AfterEventPrompter, resetOfferedPostEvents } from '../src/features/after/prompter';
 import { ApiError } from '../src/lib/api-client';
 import { errorMessage } from '../src/lib/errors';
@@ -57,6 +61,7 @@ function card(over: Partial<PostEventCard> = {}): PostEventCard {
     ],
     loreCount: 0,
     canAddLore: true,
+    loreGuestsCanAdd: true,
     badges: [],
     ...over,
   };
@@ -84,6 +89,9 @@ function album(over: Partial<LoreAlbum> = {}): LoreAlbum {
     count: 0,
     canAdd: true,
     canManage: false,
+    guestsCanAdd: true,
+    // Three days left (a little under, so it reads "3 days").
+    closesAt: new Date(Date.now() + 3 * 86_400_000 - 3_600_000).toISOString(),
     items: [],
     nextCursor: null,
     ...over,
@@ -336,12 +344,17 @@ describe('People you met (F-AFT-03)', () => {
         status: 200,
         body: card({
           loreCount: 4,
+          loreClosesAt: '2026-11-06T14:30:00.000Z',
           badges: [{ key: 'first_plan', name: 'First plan', emoji: '🌱' }],
         }),
       })
       .on('POST', `/v1/events/${EVENT_ID}/after/dismiss`, { status: 204 });
     await renderWithProviders(<AfterEventScreen />, { fetchFn: api.fetch });
     expect(await screen.findByTestId('after-badges')).toHaveTextContent(/First plan/);
+    // Who can add, and that it closes a week after the plan.
+    expect(screen.getByTestId('after-lore-hint')).toHaveTextContent(
+      'Everyone at the plan can add up to 30 photos. Lore closes on 6 Nov, 7 days after the plan. Save the photos you want before then.',
+    );
     await fireEvent.press(screen.getByRole('button', { name: /^Kiran/ }));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/users/[id]',
@@ -419,6 +432,10 @@ describe('Post-event prompt', () => {
 
 describe('Lore (F-AFT-04)', () => {
   const realFetch = global.fetch;
+  beforeEach(async () => {
+    // The first-open tour has its own tests below.
+    await AsyncStorage.setItem(LORE_GUIDE_KEY, '1');
+  });
   afterEach(() => {
     global.fetch = realFetch;
   });
@@ -519,7 +536,7 @@ describe('Lore (F-AFT-04)', () => {
     );
   });
 
-  it('opens a photo to save or report it; pages load more', async () => {
+  const twoPages = () =>
     api
       .on('GET', `/v1/events/${EVENT_ID}/lore`, (c) => ({
         status: 200,
@@ -542,22 +559,40 @@ describe('Lore (F-AFT-04)', () => {
           expiresAt: '2026-11-02T00:00:00.000Z',
         },
       });
+
+  it('saves to the gallery, shares one photo, reports; pages load more', async () => {
+    twoPages();
     await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
     expect(await screen.findByTestId(`lore-item-${LORE_1}`)).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Add photos' })).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: 'More photos' }));
     expect(await screen.findByTestId(`lore-item-${LORE_2}`)).toBeOnTheScreen();
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Save photos' }));
-    expect(await screen.findByTestId('lore-notice')).toHaveTextContent('Saved 2 photos');
-    expect(Sharing.shareAsync).toHaveBeenCalledWith('file:///cache/lore-' + LORE_2 + '.webp', {
-      mimeType: 'image/webp',
-    });
+    // Save all: add-only access, then each photo into the gallery (not the share sheet).
+    await fireEvent.press(screen.getByRole('button', { name: 'Save all to phone' }));
+    expect(await screen.findByTestId('lore-notice')).toHaveTextContent(
+      'Saved 2 photos to your gallery',
+    );
+    expect(MediaLibrary.requestPermissionsAsync).toHaveBeenCalledWith(true);
+    expect(MediaLibrary.saveToLibraryAsync).toHaveBeenCalledWith(
+      `file:///cache/lore-${LORE_2}.webp`,
+    );
+    expect(MediaLibrary.saveToLibraryAsync).toHaveBeenCalledTimes(2);
+    expect(Sharing.shareAsync).not.toHaveBeenCalled();
 
+    // One photo: Save to phone and Share are separate actions.
     await fireEvent.press(screen.getByTestId(`lore-item-${LORE_1}`));
     expect(screen.getByTestId('lore-photo')).toHaveTextContent(/Golden hour/);
     expect(screen.queryByTestId('lore-remove')).toBeNull();
-    await fireEvent.press(screen.getByTestId('lore-save-one'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save to phone' }));
+    expect(await screen.findByTestId('lore-notice')).toHaveTextContent(
+      'Saved 1 photo to your gallery',
+    );
+    expect(MediaLibrary.saveToLibraryAsync).toHaveBeenLastCalledWith(
+      `file:///cache/lore-${LORE_1}.webp`,
+    );
+    await fireEvent.press(screen.getByTestId(`lore-item-${LORE_1}`));
+    await fireEvent.press(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(Sharing.shareAsync).toHaveBeenLastCalledWith(`file:///cache/lore-${LORE_1}.webp`, {
         mimeType: 'image/webp',
@@ -570,23 +605,144 @@ describe('Lore (F-AFT-04)', () => {
     });
   });
 
-  it('without a share sheet nothing is saved', async () => {
-    jest.mocked(Sharing.isAvailableAsync).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
-    api
-      .on('GET', `/v1/events/${EVENT_ID}/lore`, {
-        status: 200,
-        body: album({ count: 1, items: [loreItem(LORE_1)] }),
-      })
-      .on('GET', `/v1/events/${EVENT_ID}/lore/download`, {
-        status: 200,
-        body: {
-          items: [{ id: LORE_1, url: 'https://s3.test/1.webp' }],
-          expiresAt: '2026-11-02T00:00:00.000Z',
+  it('photo access denied: nothing is saved and Settings is one tap away', async () => {
+    jest.mocked(MediaLibrary.requestPermissionsAsync).mockResolvedValueOnce({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+      expires: 'never',
+    } as never);
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+    try {
+      twoPages();
+      await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
+      await fireEvent.press(await screen.findByRole('button', { name: 'Save all to phone' }));
+      expect(await screen.findByTestId('lore-save-denied')).toHaveTextContent(
+        /^Allow photo access in Settings to save Lore to your phone\./,
+      );
+      expect(MediaLibrary.saveToLibraryAsync).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('lore-notice')).toBeNull();
+      await fireEvent.press(screen.getByRole('button', { name: 'Open Settings' }));
+      expect(openSettings).toHaveBeenCalled();
+    } finally {
+      openSettings.mockRestore();
+    }
+  });
+
+  it('builds without the photo library only offer Share, labelled honestly', async () => {
+    jest.mocked(mediaLibrary).mockReturnValue(null);
+    try {
+      twoPages();
+      await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
+      await fireEvent.press(await screen.findByTestId(`lore-item-${LORE_1}`));
+      expect(screen.queryByRole('button', { name: 'Save all to phone' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Save to phone' })).toBeNull();
+      await fireEvent.press(screen.getByRole('button', { name: 'Share' }));
+      await waitFor(() =>
+        expect(Sharing.shareAsync).toHaveBeenCalledWith(`file:///cache/lore-${LORE_1}.webp`, {
+          mimeType: 'image/webp',
+        }),
+      );
+      expect(MediaLibrary.saveToLibraryAsync).not.toHaveBeenCalled();
+    } finally {
+      jest
+        .mocked(mediaLibrary)
+        .mockImplementation(() =>
+          jest.requireMock<MediaLibraryModule>('expo-media-library/legacy'),
+        );
+    }
+  });
+
+  it('without a share sheet sharing does nothing', async () => {
+    jest.mocked(Sharing.isAvailableAsync).mockResolvedValueOnce(false);
+    twoPages();
+    await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByTestId(`lore-item-${LORE_1}`));
+    await fireEvent.press(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(Sharing.isAvailableAsync).toHaveBeenCalled());
+    expect(Sharing.shareAsync).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('lore-error')).toBeNull();
+  });
+
+  it('counts down to the close and says who can add', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}/lore`, {
+      status: 200,
+      body: album({ count: 1, items: [loreItem(LORE_1)] }),
+    });
+    await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('lore-closes')).toHaveTextContent(
+      'Lore closes in 3 days. Save your photos.',
+    );
+    expect(screen.getByTestId('lore-who-adds')).toHaveTextContent(
+      'Everyone at the plan can add up to 30 photos.',
+    );
+    expect(screen.queryByTestId('lore-guests-can-add')).toBeNull();
+  });
+
+  it('in the last day it says so; hosts-only albums say who adds', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}/lore`, {
+      status: 200,
+      body: album({
+        canAdd: false,
+        guestsCanAdd: false,
+        closesAt: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+      }),
+    });
+    await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('lore-closes')).toHaveTextContent(
+      'Lore closes in less than a day. Save your photos now.',
+    );
+    expect(screen.getByTestId('lore-who-adds')).toHaveTextContent(
+      'Only the hosts add photos to this Lore.',
+    );
+    expect(screen.queryByRole('button', { name: 'Add photos' })).toBeNull();
+  });
+
+  it('a closed album says so instead of an error', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}/lore`, {
+      status: 410,
+      body: {
+        error: {
+          code: 'LORE_CLOSED',
+          message: 'x',
+          details: { closedAt: '2026-11-06T14:30:00.000Z' },
         },
+      },
+    });
+    await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByText('This Lore has closed')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Lore albums close 7 days after the plan, and their photos are deleted.'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(mockRouter.back).toHaveBeenCalled();
+  });
+
+  it('hosts let guests add, or keep it to themselves', async () => {
+    let guestsCanAdd = true;
+    api
+      .on('GET', `/v1/events/${EVENT_ID}/lore`, () => ({
+        status: 200,
+        body: album({ canManage: true, guestsCanAdd }),
+      }))
+      .on('PATCH', `/v1/events/${EVENT_ID}/lore`, (c) => {
+        guestsCanAdd = (c.body as { guestsCanAdd: boolean }).guestsCanAdd;
+        return { status: 204 };
       });
     await renderWithProviders(<LoreScreen />, { fetchFn: api.fetch });
-    await fireEvent.press(await screen.findByRole('button', { name: 'Save photos' }));
-    expect(await screen.findByTestId('lore-notice')).toHaveTextContent('Saved 0 photos');
+    const toggle = await screen.findByRole('switch', { name: 'Guests can add to Lore' });
+    expect(toggle).toBeChecked();
+    await fireEvent(toggle, 'valueChange', false);
+    await waitFor(() =>
+      expect(screen.getByTestId('lore-who-adds')).toHaveTextContent(
+        'Only the hosts add photos to this Lore.',
+      ),
+    );
+    expect(api.callsTo('PATCH', `/v1/events/${EVENT_ID}/lore`)[0]?.body).toEqual({
+      guestsCanAdd: false,
+    });
+    expect(screen.getByRole('switch', { name: 'Guests can add to Lore' })).not.toBeChecked();
   });
 
   it('hosts choose visibility and can remove any photo', async () => {
@@ -597,7 +753,7 @@ describe('Lore (F-AFT-04)', () => {
         status: 200,
         body: album({ canManage: true, visibility, items, count: items.length }),
       }))
-      .on('PUT', `/v1/events/${EVENT_ID}/lore/visibility`, (c) => {
+      .on('PATCH', `/v1/events/${EVENT_ID}/lore`, (c) => {
         visibility = (c.body as { visibility: LoreAlbum['visibility'] }).visibility;
         return { status: 204 };
       })
@@ -612,7 +768,7 @@ describe('Lore (F-AFT-04)', () => {
     await waitFor(() =>
       expect(screen.getByRole('radio', { name: 'Their squads too' })).toBeChecked(),
     );
-    expect(api.callsTo('PUT', `/v1/events/${EVENT_ID}/lore/visibility`)[0]?.body).toEqual({
+    expect(api.callsTo('PATCH', `/v1/events/${EVENT_ID}/lore`)[0]?.body).toEqual({
       visibility: 'friends_of_attendees',
     });
     await fireEvent.press(screen.getByTestId(`lore-item-${LORE_1}`));

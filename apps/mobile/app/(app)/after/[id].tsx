@@ -251,6 +251,17 @@ function AfterEventView({ card }: { card: PostEventCard }) {
           }}
           testID="after-lore"
         />
+        <Text tone="muted" testID="after-lore-hint">
+          {card.loreGuestsCanAdd
+            ? t('after.loreEveryone', { max: LIMITS.after.lorePerPersonPerEvent })
+            : t('after.loreHostsOnly')}
+          {card.loreClosesAt
+            ? ` ${t('after.loreCloses', {
+                at: new Date(card.loreClosesAt),
+                days: LIMITS.lore.availableDays,
+              })}`
+            : ''}
+        </Text>
       </View>
 
       {card.badges.length > 0 ? (

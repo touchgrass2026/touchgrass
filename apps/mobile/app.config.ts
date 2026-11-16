@@ -17,6 +17,8 @@ const SUFFIX = VARIANT === 'production' ? '' : `.${VARIANT}`;
 /** expo-camera and expo-image-picker both write the iOS camera prompt; keep one text covering both uses. */
 const CAMERA_PURPOSE =
   'TouchGrass uses the camera for your verification selfie and so hosts can scan check-in codes at the door.';
+/** expo-image-picker and expo-media-library both write the iOS photo library prompt; keep one text. */
+const PHOTOS_PURPOSE = 'TouchGrass lets you choose photos for your profile and your Lore.';
 const NAME = VARIANT === 'production' ? 'TouchGrass' : `TouchGrass (${VARIANT})`;
 /**
  * Firebase phone sign-in (D-166) is built in only when the build has the Firebase config files: EAS file
@@ -60,12 +62,18 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#E5FB46' },
     // Tokens live in the Keystore, but cached screens and preferences must not ride along in cloud backups.
     allowBackup: false,
-    // Pulled in by Expo modules but unused: no audio, no contact writes, media picked with the system picker.
+    // Pulled in by Expo modules but unused: no audio, no contact writes, media picked with the system picker,
+    // and the gallery is only written to (D-218), never read. WRITE_EXTERNAL_STORAGE stays: Android 12 and
+    // older need it to save Lore photos to the gallery (Android 13+ ignores it and asks nothing).
     blockedPermissions: [
       'android.permission.RECORD_AUDIO',
       'android.permission.WRITE_CONTACTS',
       'android.permission.READ_EXTERNAL_STORAGE',
-      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_VIDEO',
+      'android.permission.READ_MEDIA_AUDIO',
+      'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+      'android.permission.ACCESS_MEDIA_LOCATION',
       'android.permission.SYSTEM_ALERT_WINDOW',
     ],
     config: { googleMaps: { apiKey: env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY } },
@@ -118,9 +126,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-image-picker',
       {
-        photosPermission: 'TouchGrass lets you choose photos for your profile and your Lore.',
+        photosPermission: PHOTOS_PURPOSE,
         cameraPermission: CAMERA_PURPOSE,
         microphonePermission: false,
+      },
+    ],
+    // "Save to phone" in Lore (D-218): add-only access to the photo library, nothing is read from it.
+    [
+      'expo-media-library',
+      {
+        photosPermission: PHOTOS_PURPOSE,
+        savePhotosPermission: 'TouchGrass saves the Lore photos you choose to your photo library.',
+        isAccessMediaLocationEnabled: false,
+        granularPermissions: [],
       },
     ],
     ['expo-notifications', { color: '#E5FB46' }],

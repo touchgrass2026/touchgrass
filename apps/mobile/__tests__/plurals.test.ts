@@ -5,7 +5,7 @@ describe('counts read naturally (one mutual, two mutuals)', () => {
   it.each([
     ['squad.mutuals', '1 mutual', '2 mutuals'],
     ['share.crewMembers', '1 member', '3 members'],
-    ['lore.downloaded', 'Saved 1 photo', 'Saved 2 photos'],
+    ['lore.saved', 'Saved 1 photo to your gallery', 'Saved 2 photos to your gallery'],
     ['safety.sharedWith', 'Sent to 1 contact', 'Sent to 2 contacts'],
   ])('%s', (key, one, many) => {
     expect(en.t(key, { count: 1 })).toBe(one);

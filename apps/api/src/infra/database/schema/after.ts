@@ -1,4 +1,13 @@
-import { integer, numeric, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /**
  * Phase 7 tables. Owners: event feedback + host ratings → `feedback`; reconnect pulls + post-event prompts →
@@ -64,6 +73,10 @@ export const loreAlbums = pgTable('lore_albums', {
     .default('attendees'),
   coverMediaId: uuid('cover_media_id'),
   coverSource: text('cover_source').notNull().default(''),
+  /** Guests (seat holders) may add photos (D-218); hosts always can. */
+  guestsCanAdd: boolean('guests_can_add').notNull().default(true),
+  /** Set once the album closed and the worker deleted its photos (D-218). */
+  purgedAt: ts('purged_at'),
   ...timestamps,
 });
 

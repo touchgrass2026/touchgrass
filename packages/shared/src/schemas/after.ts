@@ -105,6 +105,10 @@ export const PostEventCard = z.object({
   people: z.array(ReconnectCandidate),
   loreCount: z.number().int(),
   canAddLore: z.boolean(),
+  /** Hosts let everyone at the plan add photos (D-218); off means only hosts add. */
+  loreGuestsCanAdd: z.boolean().default(true),
+  /** When the album closes and its photos are deleted: 7 days after the plan ends (D-218). */
+  loreClosesAt: z.iso.datetime().optional(),
   badges: z.array(EarnedBadge),
 });
 export type PostEventCard = z.infer<typeof PostEventCard>;
@@ -135,8 +139,12 @@ export const LoreAlbum = z.object({
   cover: MediaVariants.nullable(),
   count: z.number().int(),
   canAdd: z.boolean(),
-  /** Hosts choose who sees the album. */
+  /** Hosts choose who sees the album and whether guests add to it. */
   canManage: z.boolean(),
+  /** Everyone holding a seat may add photos (D-218); off means only hosts add. */
+  guestsCanAdd: z.boolean().default(true),
+  /** The album closes then and its photos are deleted: 7 days after the plan ends (D-218). */
+  closesAt: z.iso.datetime().optional(),
   items: z.array(LoreItem),
   nextCursor: z.string().nullable(),
 });
@@ -155,6 +163,13 @@ export const AddLoreBody = z.object({
 export type AddLoreBody = z.infer<typeof AddLoreBody>;
 export const LoreVisibilityBody = z.object({ visibility: LoreVisibility });
 export type LoreVisibilityBody = z.infer<typeof LoreVisibilityBody>;
+/** Host settings for an album (D-218): who sees it, and whether guests add to it. */
+export const LoreSettingsBody = z
+  .object({ visibility: LoreVisibility.optional(), guestsCanAdd: z.boolean().optional() })
+  .refine((b) => b.visibility !== undefined || b.guestsCanAdd !== undefined, {
+    message: 'Change at least one setting',
+  });
+export type LoreSettingsBody = z.infer<typeof LoreSettingsBody>;
 
 /** Full-size, short-lived links for the photos this viewer may keep (blocked people's photos left out). */
 export const LoreDownload = z.object({
