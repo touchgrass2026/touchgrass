@@ -1046,3 +1046,7 @@ District's behaviour on top of the plan deck (D-219): scrolling down inside the 
 - **Swiping between states.** When the visible plan changes, the shared value animates (220 ms) to the new card's remembered sheet scroll, which is 0 the first time. So the next plan opens as a card at its own top, and coming back to a plan you'd scrolled opens it full screen again. Per-card scroll memory, route-param updates, prefetching, analytics and feed clicks are unchanged.
 - **Reduce Motion.** No in-between sizes and no shrink or fade: the deck snaps between card and full screen when the sheet passes half the distance (60 pt), still driven by scroll, and moves between plans jump without animating.
 - **State for tests and assistive tech.** The deck frame carries `accessibilityState.expanded`. It flips at p ≥ 0.5 and is the same switch Reduce Motion snaps on.
+
+## D-222 The keyboard never covers the field being typed in
+
+- The app draws edge to edge, so Android no longer shrinks the window for the keyboard and fields (and pinned buttons such as Publish) ended up under it; only the chat screen and sheets handled the keyboard. The kit `Screen` now handles it for every screen: `useKeyboardLift` measures how far the keyboard overlaps the screen body in window coordinates (so stack headers and safe areas don't skew it) and pads the body by that much, which lifts the scroll area and the pinned footer above the keyboard; then it scrolls the focused field into view with 24 pt to spare. iOS reacts on keyboardWillShow, Android on keyboardDidShow.
