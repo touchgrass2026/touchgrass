@@ -82,4 +82,8 @@ name: Plot a plan and manage it
 - scrollUntilVisible:
     element: 'Hosting'
     direction: DOWN
+# Keep scrolling until the new plan's own title is on screen, not just the row heading.
+- scrollUntilVisible:
+    element: 'Maestro chai walk'
+    direction: DOWN
 - assertVisible: 'Maestro chai walk'
