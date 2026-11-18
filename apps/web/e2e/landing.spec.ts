@@ -106,18 +106,22 @@ test.describe('landing page sections and forms (D-169)', () => {
   test('explains the app in ordered sections and passes axe', async ({ page }) => {
     await page.goto('/?lang=en');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Log off. Pull up.');
+    // D-225: the city, the app at work, safety, plain answers, then the waitlist ahead of the invite check.
     await expect(page.getByRole('heading', { level: 2 })).toHaveText([
-      'How it works',
-      'What you can do',
-      'Safety comes first',
-      'Invite-only, on purpose',
-      'Got an invite code?',
+      'Small plans, all over Hyderabad',
+      'How a plan comes together',
+      'After the first plan',
+      'Verified adults. SOS on every plan.',
+      'Free, 18+, Hyderabad first',
       'No invite yet?',
-      'Questions',
+      'Got an invite code?',
     ]);
     await expect(page.getByRole('heading', { level: 3, name: 'Pull up' })).toBeVisible();
     await expect(page.getByText('SOS and live location sharing')).toBeVisible();
-    await page.getByText('Does it cost anything?').click();
+    await expect(page.getByText('Gachibowli', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: /Board games night plan card/ })).toBeVisible();
+    // Answers are on the page, not behind a disclosure.
+    await expect(page.getByText('Does it cost anything?')).toBeVisible();
     await expect(page.getByText('plans are free at launch')).toBeVisible();
     await page.getByRole('link', { name: 'Join the waitlist' }).click();
     await expect(page).toHaveURL(/#waitlist$/);

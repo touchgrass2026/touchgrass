@@ -5,8 +5,7 @@ import { useActionState } from 'react';
 import { checkInviteAction, type InviteCheckState } from './actions';
 import { StoreLinks } from './store-links';
 
-const input =
-  'min-h-11 w-full rounded-xl border-2 border-input bg-surface px-3 font-mono text-lg uppercase tracking-widest text-text';
+const input = 'lp-input lp-code';
 
 export function InviteCheck({
   t,
@@ -26,9 +25,9 @@ export function InviteCheck({
     error: null,
   });
   return (
-    <div className="flex flex-col gap-4">
-      <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label htmlFor="invite-code" className="flex grow flex-col gap-1 font-semibold">
+    <div className="lp-check-wrap">
+      <form action={action} className="lp-inline-form">
+        <label htmlFor="invite-code" className="lp-field">
           {t.label}
           <input
             id="invite-code"
@@ -42,21 +41,17 @@ export function InviteCheck({
             className={input}
           />
         </label>
-        <button
-          type="submit"
-          disabled={pending}
-          className="min-h-11 shrink-0 rounded-full bg-primary px-6 font-bold text-on-primary disabled:opacity-50"
-        >
+        <button type="submit" disabled={pending} className="lp-btn">
           {t.submit}
         </button>
       </form>
       <div aria-live="polite" data-testid="invite-result">
         {state.status === 'valid' ? (
-          <div className="flex flex-col gap-3 rounded-2xl border-2 border-primary p-4">
-            <p className="text-lg font-bold">{t.valid}</p>
+          <div className="lp-result">
+            <p className="lp-result-title">{t.valid}</p>
             {state.inviterName ? <p>{t.validFrom.replace('{{name}}', state.inviterName)}</p> : null}
-            <p className="font-semibold">{t.nextTitle}</p>
-            <ol className="list-decimal space-y-1 pl-6">
+            <p className="lp-strong">{t.nextTitle}</p>
+            <ol className="lp-steps">
               <li>{t.step1}</li>
               <li>{t.step2}</li>
               <li>{t.step3.replace('{{code}}', state.code ?? '')}</li>
@@ -64,11 +59,9 @@ export function InviteCheck({
             <StoreLinks playUrl={playUrl} appStoreUrl={appStoreUrl} />
           </div>
         ) : null}
-        {state.status === 'invalid' ? (
-          <p className="rounded-2xl border-2 border-border p-4 font-semibold">{t.invalid}</p>
-        ) : null}
+        {state.status === 'invalid' ? <p className="lp-result">{t.invalid}</p> : null}
         {state.status === 'error' ? (
-          <p role="alert" className="font-semibold text-[var(--tg-danger)]">
+          <p role="alert" className="lp-error">
             {state.error === 'RATE_LIMITED' ? errors.RATE_LIMITED : errors.INTERNAL}
           </p>
         ) : null}

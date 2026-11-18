@@ -8,20 +8,14 @@ export function StoreLinks({
 }) {
   if (!playUrl && !appStoreUrl) return null;
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="lp-stores">
       {playUrl ? (
-        <a
-          href={playUrl}
-          className="inline-flex min-h-11 items-center rounded-full bg-primary px-6 py-3 font-bold text-on-primary"
-        >
+        <a href={playUrl} className="lp-btn-quiet">
           Google Play
         </a>
       ) : null}
       {appStoreUrl ? (
-        <a
-          href={appStoreUrl}
-          className="inline-flex min-h-11 items-center rounded-full bg-accent px-6 py-3 font-bold text-on-accent"
-        >
+        <a href={appStoreUrl} className="lp-btn-quiet">
           App Store
         </a>
       ) : null}

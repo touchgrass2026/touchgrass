@@ -2635,12 +2635,38 @@ export const en = {
       contact: 'Say hello: {{email}}',
       back: 'Back to home',
     },
-    heroBody:
-      'TouchGrass is an invite-only app for meeting people in person in Hyderabad. Find a small plan nearby or Plot your own, then spend the evening with real people instead of a screen.',
-    checkCta: 'Check an invite code',
+    heroLine: 'An invite-only app for small, in-person plans in Hyderabad.',
+    city: {
+      title: 'Small plans, all over Hyderabad',
+      intro: 'Plans stay close to home. A few you could Plot this week:',
+      caption: 'You pick your neighbourhood when you sign up.',
+      run: { what: 'Sunday run', where: 'KBR Park, Jubilee Hills' },
+      chai: { what: 'Chai after work', where: 'Madhapur' },
+      games: { what: 'Board games night', where: 'Gachibowli' },
+      mic: { what: 'Open mic', where: 'Lamakaan, Banjara Hills' },
+      walk: { what: 'Sunset walk', where: 'Necklace Road' },
+      trek: { what: 'Day trek', where: 'Ananthagiri Hills, Vikarabad' },
+    },
+    shots: {
+      explore:
+        'The Explore tab in the TouchGrass app: stories from Sneha R. and Karthik R., who is free now, and a featured art and sketching plan.',
+      exploreCaption: 'Explore: plans nearby and who is free now',
+      planCard:
+        'A Board games night plan card in Gachibowli: Monday 10:28 pm, 3 going, 2 spots left, with a Pull up button.',
+      pullingUp:
+        'The Plans tab after pulling up: a “You’re pulling up” badge and upcoming plans like Book swap & coffee and Yoga in the park.',
+      chats:
+        'The Chats tab: Ananya R. is pulling up in 10, and the Sunrise walk + chai group thanks its host.',
+      neighbourhood:
+        'The neighbourhood step of sign-up: Banjara Hills, Gachibowli, Jubilee Hills, Kondapur and Madhapur.',
+      liveLocation:
+        'The Share live location screen: sent to 2 contacts until 1:46 pm, with Also send on WhatsApp, Stop sharing and SOS buttons.',
+      liveCaption: 'Live location goes to your trusted contacts.',
+    },
+    inviteLink: 'Have an invite code? Check it',
     waitlistCta: 'Join the waitlist',
     getApp: 'Get the app',
-    howTitle: 'How it works',
+    howTitle: 'How a plan comes together',
     how: {
       find: {
         title: 'Find or Plot',
@@ -2659,12 +2685,8 @@ export const en = {
         body: 'Afterwards, everyone who was there adds photos to the plan’s Lore. It stays open for 7 days, so save the ones you want.',
       },
     },
-    featuresTitle: 'What you can do',
+    afterTitle: 'After the first plan',
     features: {
-      plans: {
-        title: 'Plans',
-        body: 'Small, real-world plans in your city. See who is hosting and who is going before you decide.',
-      },
       crews: {
         title: 'Crews',
         body: 'Groups that meet again and again, like a Sunday run or a weekly quiz night.',
@@ -2673,12 +2695,8 @@ export const en = {
         title: 'Squad',
         body: 'Add the people you click with, see what they are pulling up to and go together.',
       },
-      chat: {
-        title: 'Chat',
-        body: 'Every plan has its own group chat, so you can sort out the details and find each other.',
-      },
     },
-    safetyTitle: 'Safety comes first',
+    safetyTitle: 'Verified adults. SOS on every plan.',
     safetyIntro: 'Meeting new people should feel easy. These are always on:',
     safety: {
       adults: 'Everyone is 18 or over, and every account is verified with a phone number.',
@@ -2687,10 +2705,7 @@ export const en = {
         'Reliability tracking, so people who often skip plans they said yes to are noticed.',
       report: 'Report or block anyone, any time. Our team reviews reports.',
       sos: 'SOS and live location sharing with your trusted contacts during a plan.',
-      mystery:
-        'Mystery plans show the exact spot only to confirmed people, shortly before the start.',
     },
-    inviteTitle: 'Invite-only, on purpose',
     inviteBody:
       'Every new member joins with an invite code from someone already on TouchGrass or from our team. It keeps plans small, friendly and accountable while we grow.',
     inviteCities: 'We are starting in Hyderabad. Other cities come next.',
@@ -2732,7 +2747,7 @@ export const en = {
         consent: 'Tick the box so we may contact you.',
       },
     },
-    faqTitle: 'Questions',
+    faqTitle: 'Free, 18+, Hyderabad first',
     faq: {
       whoQ: 'Who can join?',
       whoA: 'Anyone 18 or over with an invite code. Members can invite friends, and we invite people from the waitlist as there is room.',

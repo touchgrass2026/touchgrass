@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import { joinWaitlistAction, type WaitlistField, type WaitlistState } from './actions';
 
-const input = 'min-h-11 w-full rounded-xl border-2 border-input bg-surface px-3 text-text';
-const label = 'flex flex-col gap-1 font-semibold';
+const input = 'lp-input';
+const label = 'lp-field';
 
 export function WaitlistForm({
   t,
@@ -31,11 +31,7 @@ export function WaitlistForm({
   });
   if (state.done)
     return (
-      <p
-        role="status"
-        className="rounded-2xl border-2 border-primary p-4 text-lg font-bold"
-        data-testid="waitlist-done"
-      >
+      <p role="status" className="lp-done" data-testid="waitlist-done">
         {t.done}
       </p>
     );
@@ -44,18 +40,18 @@ export function WaitlistForm({
     [hint, invalid(f) ? `waitlist-${f}-error` : null].filter(Boolean).join(' ') || undefined;
   const fieldError = (f: WaitlistField) =>
     invalid(f) ? (
-      <span id={`waitlist-${f}-error`} className="font-semibold text-[var(--tg-danger)]">
+      <span id={`waitlist-${f}-error`} className="lp-error">
         {t.errors[f]}
       </span>
     ) : null;
   const contactInvalid = invalid('contact');
   return (
-    <form action={action} className="flex flex-col gap-4" noValidate>
+    <form action={action} className="lp-form" noValidate>
       <input type="hidden" name="language" value={language} />
       {source ? <input type="hidden" name="source" value={source} /> : null}
       {referral ? <input type="hidden" name="ref" value={referral} /> : null}
       {state.fields.length > 0 || state.error ? (
-        <p role="alert" className="font-semibold text-[var(--tg-danger)]">
+        <p role="alert" className="lp-error lp-form-wide">
           {state.error
             ? state.error === 'RATE_LIMITED'
               ? errors.RATE_LIMITED
@@ -78,16 +74,30 @@ export function WaitlistForm({
         />
         {fieldError('name')}
       </label>
+      <label htmlFor="waitlist-city" className={label}>
+        {t.city}
+        <input
+          id="waitlist-city"
+          name="city"
+          maxLength={60}
+          autoComplete="address-level2"
+          defaultValue={state.values.city}
+          aria-invalid={invalid('city') || undefined}
+          aria-describedby={describedBy('city')}
+          className={input}
+        />
+        {fieldError('city')}
+      </label>
       <fieldset
-        className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4"
+        className="lp-contact lp-form-wide"
         aria-describedby={describedBy('contact', 'waitlist-contact-hint')}
       >
-        <legend className="px-1 font-semibold">{`${t.phone} / ${t.email}`}</legend>
-        <p id="waitlist-contact-hint" className="text-muted">
+        <legend className="lp-legend">{`${t.phone} / ${t.email}`}</legend>
+        <p id="waitlist-contact-hint" className="lp-hint">
           {t.contactHint}
         </p>
         {fieldError('contact')}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="lp-pair">
           <label htmlFor="waitlist-phone" className={label}>
             {t.phone}
             <input
@@ -121,21 +131,7 @@ export function WaitlistForm({
           </label>
         </div>
       </fieldset>
-      <label htmlFor="waitlist-city" className={label}>
-        {t.city}
-        <input
-          id="waitlist-city"
-          name="city"
-          maxLength={60}
-          autoComplete="address-level2"
-          defaultValue={state.values.city}
-          aria-invalid={invalid('city') || undefined}
-          aria-describedby={describedBy('city')}
-          className={input}
-        />
-        {fieldError('city')}
-      </label>
-      <label htmlFor="waitlist-note" className={label}>
+      <label htmlFor="waitlist-note" className={`${label} lp-form-wide`}>
         {t.note}
         <textarea
           id="waitlist-note"
@@ -144,14 +140,14 @@ export function WaitlistForm({
           rows={3}
           defaultValue={state.values.note}
           aria-describedby="waitlist-note-hint"
-          className={`${input} py-2`}
+          className={`${input} lp-textarea`}
         />
-        <span id="waitlist-note-hint" className="font-normal text-muted">
+        <span id="waitlist-note-hint" className="lp-hint">
           {t.noteHint}
         </span>
       </label>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="waitlist-consent" className="flex min-h-11 items-start gap-3">
+      <div className="lp-consent lp-form-wide">
+        <label htmlFor="waitlist-consent" className="lp-check">
           <input
             id="waitlist-consent"
             name="consent"
@@ -160,20 +156,16 @@ export function WaitlistForm({
             defaultChecked={state.values.consent}
             aria-invalid={invalid('consent') || undefined}
             aria-describedby={describedBy('consent')}
-            className="mt-1 size-6 shrink-0 accent-[var(--tg-primary)]"
+            className="lp-checkbox"
           />
           <span>{t.consent}</span>
         </label>
         {fieldError('consent')}
-        <Link href="/privacy" className="min-h-11 self-start py-2 font-semibold underline">
+        <Link href="/privacy" className="lp-textlink">
           {t.privacy}
         </Link>
       </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="min-h-11 self-start rounded-full bg-primary px-6 font-bold text-on-primary disabled:opacity-50"
-      >
+      <button type="submit" disabled={pending} className="lp-btn lp-form-wide">
         {t.submit}
       </button>
     </form>
