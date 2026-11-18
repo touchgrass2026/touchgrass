@@ -26,7 +26,7 @@ const SHOTS = {
   pullingUp: { src: '/landing/pulling-up.webp', width: 720, height: 787 },
   chats: { src: '/landing/chats.webp', width: 720, height: 707 },
   neighbourhood: { src: '/landing/neighbourhood.webp', width: 720, height: 427 },
-  liveLocation: { src: '/landing/live-location.webp', width: 720, height: 933 },
+  liveLocation: { src: '/landing/live-location.webp', width: 720, height: 868 },
 } as const;
 
 /** "Log off. Pull up." keeps each sentence on its own unbroken line, so phones never split "Pull / up." */

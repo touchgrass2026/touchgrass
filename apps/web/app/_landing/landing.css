@@ -572,12 +572,13 @@ body {
 .lp-safety-shot {
   position: relative;
   width: min(100%, 24rem);
-  margin-bottom: var(--sp-md);
 }
 
+/* Sits under the screen so it never hides the SOS button. */
 .lp-safety-shot .lp-sticker {
-  bottom: calc(-1 * var(--sp-md));
-  right: calc(-1 * var(--sp-xs));
+  position: relative;
+  display: inline-block;
+  margin: calc(-1 * var(--sp-xs)) 0 0 var(--sp-md);
 }
 
 .lp-safety-text {
