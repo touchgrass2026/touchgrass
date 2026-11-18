@@ -302,6 +302,7 @@ export class ProposalsService {
       canLock: p.creatorId === viewerId && p.status === 'open' && has('time') && has('place'),
       cancelledReason: p.cancelledReason,
       held: p.heldAt !== null,
+      voterCount: new Set(votes.map((v) => v.userId)).size,
     };
   }
 
@@ -327,7 +328,7 @@ export class ProposalsService {
     const blocked = await this.graph.blockedSet(viewerId);
     const visible = rows.map((r) => r.p).filter((p) => !blocked.has(p.creatorId));
     const ids = visible.map((p) => p.id);
-    const [cards, counts] = await Promise.all([
+    const [cards, counts, votedRows] = await Promise.all([
       this.people.cards(
         viewerId,
         visible.map((p) => p.creatorId),
@@ -340,8 +341,18 @@ export class ProposalsService {
             .from(proposalOptions)
             .where(inArray(proposalOptions.proposalId, ids))
             .groupBy(proposalOptions.proposalId),
+      ids.length === 0
+        ? Promise.resolve([])
+        : this.db
+            .selectDistinct({ id: proposalOptions.proposalId })
+            .from(proposalVotes)
+            .innerJoin(proposalOptions, eq(proposalOptions.id, proposalVotes.optionId))
+            .where(
+              and(eq(proposalVotes.userId, viewerId), inArray(proposalOptions.proposalId, ids)),
+            ),
     ]);
     const optionCounts = new Map(counts.map((c) => [c.id, c.n]));
+    const voted = new Set(votedRows.map((r) => r.id));
     const rank = (s: ProposalRow['status']) => (s === 'open' ? 0 : 1);
     return {
       items: visible
@@ -361,6 +372,8 @@ export class ProposalsService {
                   optionCount: optionCounts.get(p.id) ?? 0,
                   eventId: p.eventId,
                   held: p.heldAt !== null,
+                  viewerIsCreator: p.creatorId === viewerId,
+                  viewerHasVoted: voted.has(p.id),
                 },
               ]
             : [];

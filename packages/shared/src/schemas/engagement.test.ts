@@ -3,6 +3,7 @@ import {
   AddProposalOptionBody,
   CreateProposalBody,
   CrewRecurrenceBody,
+  ProposalSummary,
   SetAvailabilityBody,
   UpdateCrewBody,
 } from './engagement';
@@ -45,5 +46,32 @@ describe('engagement request schemas (F-ENG-01..03)', () => {
         categoryInterestId: '0192f3a4-5b6c-7d8e-9f01-000000000001',
       }),
     ).toMatchObject({ autoLock: true, capacity: 10, inviteeIds: [], options: [] });
+  });
+
+  it('proposal list items from an older API default the viewer flags to false (D-224)', () => {
+    const item = {
+      id: '0192f3a4-5b6c-7d8e-9f01-000000000002',
+      title: 'Chai?',
+      status: 'open',
+      deadline: '2026-11-02T00:00:00.000Z',
+      creator: {
+        id: '0192f3a4-5b6c-7d8e-9f01-000000000003',
+        displayName: 'Asha',
+        photo: null,
+        verified: false,
+        mutualFriendCount: 0,
+      },
+      optionCount: 0,
+      eventId: null,
+      held: false,
+    };
+    const parsed = ProposalSummary.safeParse(item);
+    expect(parsed.success && parsed.data).toMatchObject({
+      viewerIsCreator: false,
+      viewerHasVoted: false,
+    });
+    expect(
+      ProposalSummary.parse({ ...item, viewerIsCreator: true, viewerHasVoted: true }),
+    ).toMatchObject({ viewerIsCreator: true, viewerHasVoted: true });
   });
 });

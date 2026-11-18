@@ -265,6 +265,8 @@ export const ProposalDetail = z.object({
   cancelledReason: z.string().nullable(),
   /** Held for review by the text filter: invitees see it once it's released (F-SAF-06). */
   held: z.boolean(),
+  /** People (organiser included) with at least one vote; `voters` per option is only a sample (D-224). */
+  voterCount: z.number().int().min(0).default(0),
 });
 export type ProposalDetail = z.infer<typeof ProposalDetail>;
 
@@ -278,6 +280,10 @@ export const ProposalSummary = z.object({
   eventId: z.uuid().nullable(),
   /** Held for review by the text filter: invitees see it once it's released (F-SAF-06). */
   held: z.boolean(),
+  /** The viewer started it (D-224). */
+  viewerIsCreator: z.boolean().default(false),
+  /** The viewer has voted for at least one option: invitees who haven't get a nudge (D-224). */
+  viewerHasVoted: z.boolean().default(false),
 });
 export type ProposalSummary = z.infer<typeof ProposalSummary>;
 export const ProposalList = z.object({ items: z.array(ProposalSummary) });

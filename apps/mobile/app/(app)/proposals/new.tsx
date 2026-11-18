@@ -6,14 +6,17 @@ import { ChipGroup } from '../../../components/ChipGroup';
 import { SquadPicker } from '../../../components/engagement/SquadPicker';
 import { interestOptions } from '../../../components/interest-options';
 import { SelectField } from '../../../components/SelectField';
-import { Button, Screen, SwitchRow, Text, TextField } from '../../../components/ui';
+import { Button, Card, Screen, SwitchRow, Text, TextField } from '../../../components/ui';
 import { useInterests } from '../../../src/features/catalog/api';
 import { useCreateProposal } from '../../../src/features/engagement/api';
 import { errorMessage } from '../../../src/lib/errors';
 
 const DEADLINES = [2, 6, 24, 48] as const;
 
-/** Start a vote (F-ENG-03): the idea, who's in, when voting closes; suggestions come next. */
+/**
+ * Start a vote (F-ENG-03): the idea, who's in, when voting closes, each in its own card; suggestions come next, on
+ * the vote itself (D-224). Nothing to type but the idea: the deadline is a chip, not a date.
+ */
 export default function NewProposalScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -48,57 +51,66 @@ export default function NewProposalScreen() {
         {t('proposals.create')}
       </Text>
       <Text tone="muted">{t('proposals.newIntro')}</Text>
-      <Text variant="heading" accessibilityRole="header">
-        {t('proposals.sectionIdea')}
+      <Card>
+        <Text variant="heading" accessibilityRole="header">
+          {t('proposals.sectionIdea')}
+        </Text>
+        <TextField
+          label={t('proposals.titleLabel')}
+          value={title}
+          onChangeText={setTitle}
+          maxLength={LIMITS.proposals.titleMaxLength}
+          testID="proposal-title"
+        />
+        <SelectField
+          label={t('events.categoryLabel')}
+          placeholder={t('events.pickCategory')}
+          searchLabel={t('onboarding.interestsSearch')}
+          options={interestOptions(interests.data?.items ?? [], t, i18n.language)}
+          value={category}
+          onChange={setCategory}
+          testID="proposal-category"
+        />
+      </Card>
+      <Card>
+        <Text variant="heading" accessibilityRole="header">
+          {t('proposals.sectionWho')}
+        </Text>
+        <SquadPicker
+          label={t('proposals.invitees')}
+          selected={invitees}
+          onChange={setInvitees}
+          max={LIMITS.proposals.maxInvitees}
+        />
+      </Card>
+      <Card>
+        <Text variant="heading" accessibilityRole="header">
+          {t('proposals.sectionWhen')}
+        </Text>
+        <ChipGroup
+          label={t('proposals.deadline')}
+          mode="single"
+          options={DEADLINES.map((h) => ({
+            id: String(h),
+            label: t('proposals.deadlineHours', { count: h }),
+          }))}
+          selected={[String(hours)]}
+          onChange={(next) => {
+            const h = Number(next[0]);
+            if (Number.isFinite(h)) setHours(h);
+          }}
+          testIDPrefix="proposal-deadline"
+        />
+        <SwitchRow
+          label={t('proposals.autoLock')}
+          value={autoLock}
+          onChange={setAutoLock}
+          testID="proposal-autolock"
+        />
+      </Card>
+      <Text tone="muted" testID="proposal-next">
+        {t('proposals.newNext')}
       </Text>
-      <TextField
-        label={t('proposals.titleLabel')}
-        value={title}
-        onChangeText={setTitle}
-        maxLength={LIMITS.proposals.titleMaxLength}
-        testID="proposal-title"
-      />
-      <SelectField
-        label={t('events.categoryLabel')}
-        placeholder={t('events.pickCategory')}
-        searchLabel={t('onboarding.interestsSearch')}
-        options={interestOptions(interests.data?.items ?? [], t, i18n.language)}
-        value={category}
-        onChange={setCategory}
-        testID="proposal-category"
-      />
-      <Text variant="heading" accessibilityRole="header">
-        {t('proposals.sectionWho')}
-      </Text>
-      <SquadPicker
-        label={t('proposals.invitees')}
-        selected={invitees}
-        onChange={setInvitees}
-        max={LIMITS.proposals.maxInvitees}
-      />
-      <Text variant="heading" accessibilityRole="header">
-        {t('proposals.sectionWhen')}
-      </Text>
-      <ChipGroup
-        label={t('proposals.deadline')}
-        mode="single"
-        options={DEADLINES.map((h) => ({
-          id: String(h),
-          label: t('proposals.deadlineHours', { count: h }),
-        }))}
-        selected={[String(hours)]}
-        onChange={(next) => {
-          const h = Number(next[0]);
-          if (Number.isFinite(h)) setHours(h);
-        }}
-        testIDPrefix="proposal-deadline"
-      />
-      <SwitchRow
-        label={t('proposals.autoLock')}
-        value={autoLock}
-        onChange={setAutoLock}
-        testID="proposal-autolock"
-      />
       {error ? (
         <Text tone="danger" accessibilityRole="alert">
           {error}

@@ -485,7 +485,24 @@ describe('collaborative plans (F-ENG-03)', () => {
     expect((await api(friend).get('/v1/proposals')).body.items[0]).toMatchObject({
       id: p.id,
       optionCount: 4,
+      viewerIsCreator: false,
+      viewerHasVoted: true,
     });
+    // `other` took their vote back: still an invitee who hasn't voted (D-224).
+    expect((await api(other).get('/v1/proposals')).body.items[0]).toMatchObject({
+      id: p.id,
+      viewerIsCreator: false,
+      viewerHasVoted: false,
+    });
+    expect((await api(organiser).get('/v1/proposals')).body.items[0]).toMatchObject({
+      id: p.id,
+      viewerIsCreator: true,
+      viewerHasVoted: false,
+    });
+    expect(
+      ((await api(organiser).get(`/v1/proposals/${p.id}`).expect(200)).body as ProposalDetail)
+        .voterCount,
+    ).toBe(1);
 
     const place = voted.options.find((o) => o.kind === 'place');
     const activity = voted.options.find((o) => o.kind === 'activity');

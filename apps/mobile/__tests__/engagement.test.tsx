@@ -8,6 +8,7 @@ import type {
   MyReferrals,
   PersonCard,
   ProposalDetail,
+  ProposalOption,
   Recap,
   StreakView,
 } from '@touchgrass/shared';
@@ -30,6 +31,7 @@ import NewProposalScreen from '../app/(app)/proposals/new';
 import RecapScreen from '../app/(app)/recaps/[id]';
 import RecapsScreen from '../app/(app)/recaps/index';
 import ReferralsScreen from '../app/(app)/referrals';
+import { todayIst } from '../components/DateTimeFields';
 import { FreeNowStrip } from '../components/engagement/FreeNowStrip';
 import { StreakCard } from '../components/engagement/StreakCard';
 import { useAuthStore } from '../src/stores/auth-store';
@@ -649,39 +651,79 @@ function proposal(over: Partial<ProposalDetail> = {}): ProposalDetail {
     held: false,
     canLock: true,
     cancelledReason: null,
+    voterCount: 1,
     ...over,
   };
 }
 
+const option = (
+  n: number,
+  kind: ProposalOption['kind'],
+  over: Partial<ProposalOption> = {},
+): ProposalOption => ({
+  id: OPT(n),
+  kind,
+  label: '',
+  startsAt: null,
+  endsAt: null,
+  address: null,
+  interestId: null,
+  votes: 0,
+  voters: [],
+  mine: false,
+  createdBy: me,
+  ...over,
+});
+
 describe('collaborative plans (F-ENG-03)', () => {
-  it('lists votes and starts one', async () => {
+  const summary = (over: Record<string, unknown>) => ({
+    id: PROP,
+    title: 'Board games?',
+    status: 'open',
+    deadline: proposal().deadline,
+    creator: kiran,
+    optionCount: 2,
+    held: false,
+    eventId: null,
+    viewerIsCreator: false,
+    viewerHasVoted: false,
+    ...over,
+  });
+
+  it('lists votes as cards, flags the ones waiting on your vote, and starts one', async () => {
+    const MINE = '0192f3a4-5b6c-7d8e-9f01-0000000c0b02';
+    const VOTED = '0192f3a4-5b6c-7d8e-9f01-0000000c0b03';
     api
       .on('GET', '/v1/proposals', {
         status: 200,
         body: {
           items: [
-            {
-              id: PROP,
-              title: 'Board games?',
-              status: 'open',
-              deadline: proposal().deadline,
-              creator: me,
-              optionCount: 2,
-              held: false,
-              eventId: null,
-            },
+            summary({}),
+            summary({ id: MINE, title: 'Chai run', creator: me, viewerIsCreator: true }),
+            summary({ id: VOTED, title: 'Biryani crawl', viewerHasVoted: true }),
           ],
         },
       })
       .on('POST', '/v1/proposals', { status: 201, body: proposal() });
     await renderWithProviders(<ProposalsScreen />, { fetchFn: api.fetch });
-    await fireEvent.press(await screen.findByRole('button', { name: /^Board games\?/ }));
+    const card = await screen.findByRole('button', { name: /^Board games\?, Your vote needed/ });
+    expect(screen.getByTestId(`proposal-needs-vote-${PROP}`)).toBeOnTheScreen();
+    // The organiser's own vote and one already voted on don't nag.
+    expect(screen.queryByTestId(`proposal-needs-vote-${MINE}`)).toBeNull();
+    expect(screen.queryByTestId(`proposal-needs-vote-${VOTED}`)).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /^Chai run, Suggested by Asha, Voting/ }),
+    ).toBeOnTheScreen();
+    await fireEvent.press(card);
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/proposals/[id]',
       params: { id: PROP },
     });
+    await fireEvent.press(screen.getByTestId('proposal-create'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/proposals/new');
 
     await renderWithProviders(<NewProposalScreen />, { fetchFn: api.fetch });
+    expect(screen.getByTestId('proposal-next')).toHaveTextContent(/You pick the winner/);
     await fireEvent.changeText(screen.getByTestId('proposal-title'), 'Board games?');
     await fireEvent.press(await screen.findByTestId('proposal-category'));
     await fireEvent.press(await screen.findByRole('radio', { name: 'Interest 0' }));
@@ -702,71 +744,209 @@ describe('collaborative plans (F-ENG-03)', () => {
     });
   });
 
-  it('vote, suggest an activity, then lock a time and place', async () => {
+  it('shows who suggested it, who has voted and how it works', async () => {
+    mockRouteParams.current = { id: PROP };
+    api.on('GET', `/v1/proposals/${PROP}`, {
+      status: 200,
+      body: proposal({
+        creator: kiran,
+        invitees: [me, meera],
+        viewerIsCreator: false,
+        canLock: false,
+      }),
+    });
+    await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByText('Suggested by Kiran')).toBeOnTheScreen();
+    expect(screen.getByTestId('proposal-status')).toHaveTextContent('Voting');
+    expect(screen.getByTestId('proposal-voted')).toHaveTextContent('1 of 3 have voted');
+    expect(
+      screen.getByText(
+        /^Vote for every time and place that works for you\. Kiran picks the winner/,
+      ),
+    ).toBeOnTheScreen();
+    // Only the organiser decides: no winner button for invitees.
+    expect(screen.queryByTestId('proposal-make-plan')).toBeNull();
+    expect(screen.queryByTestId('proposal-cancel')).toBeNull();
+  });
+
+  it('votes by tapping the option row; the most-voted option is Leading', async () => {
+    mockRouteParams.current = { id: PROP };
+    let current = proposal({
+      options: [
+        option(1, 'time', { startsAt: '2026-11-07T13:30:00.000Z', votes: 1, voters: [kiran] }),
+        option(2, 'place', { label: 'KBR Park', address: 'Jubilee Hills' }),
+        option(3, 'place', { label: 'Lamakaan', votes: 1, voters: [kiran] }),
+      ],
+    });
+    api
+      .on('GET', `/v1/proposals/${PROP}`, () => ({ status: 200, body: current }))
+      .on('POST', `/v1/proposals/${PROP}/votes`, (c) => {
+        const { optionId, vote } = c.body as { optionId: string; vote: boolean };
+        current = {
+          ...current,
+          voterCount: 2,
+          options: current.options.map((o) =>
+            o.id === optionId
+              ? {
+                  ...o,
+                  votes: o.votes + (vote ? 1 : -1),
+                  mine: vote,
+                  voters: vote ? [...o.voters, me] : o.voters.filter((v) => v.id !== me.id),
+                }
+              : o,
+          ),
+        };
+        return { status: 200, body: current };
+      });
+    await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
+    const kbr = await screen.findByRole('checkbox', { name: 'KBR Park, 0 votes' });
+    expect(kbr).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Lamakaan, 1 vote, Leading' })).toBeOnTheScreen();
+    expect(screen.getByTestId(`leading-${OPT(1)}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`leading-${OPT(2)}`)).toBeNull();
+
+    await fireEvent.press(kbr);
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'KBR Park, 1 vote, Leading' })).toBeChecked(),
+    );
+    expect(api.callsTo('POST', `/v1/proposals/${PROP}/votes`)[0]?.body).toEqual({
+      optionId: OPT(2),
+      vote: true,
+    });
+    // A tie: both places lead.
+    expect(screen.getByTestId(`leading-${OPT(2)}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`leading-${OPT(3)}`)).toBeOnTheScreen();
+    expect(screen.getByTestId('proposal-voted')).toHaveTextContent('2 of 2 have voted');
+
+    // Tapping again takes the vote back.
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'KBR Park, 1 vote, Leading' }));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'KBR Park, 0 votes' })).not.toBeChecked(),
+    );
+    expect(api.callsTo('POST', `/v1/proposals/${PROP}/votes`)[1]?.body).toEqual({
+      optionId: OPT(2),
+      vote: false,
+    });
+  });
+
+  it('suggests a time with the date and time pickers, and an activity by name', async () => {
     mockRouteParams.current = { id: PROP };
     let current = proposal();
     api
       .on('GET', `/v1/proposals/${PROP}`, () => ({ status: 200, body: current }))
-      .on('POST', `/v1/proposals/${PROP}/votes`, () => {
-        current = proposal({
-          options: current.options.map((o) =>
-            o.id === OPT(2) ? { ...o, votes: 1, mine: true, voters: [me] } : o,
-          ),
-        });
-        return { status: 200, body: current };
-      })
       .on('POST', `/v1/proposals/${PROP}/options`, (c) => {
-        const label = (c.body as { label: string }).label;
+        const body = c.body as { kind: ProposalOption['kind']; label?: string; startsAt?: string };
         current = {
           ...current,
           options: [
             ...current.options,
-            {
-              id: OPT(3),
-              kind: 'activity',
-              label,
-              startsAt: null,
-              endsAt: null,
-              address: null,
-              interestId: null,
-              votes: 0,
-              voters: [],
-              mine: false,
-              createdBy: me,
-            },
+            option(current.options.length + 1, body.kind, {
+              label: body.label ?? '',
+              startsAt: body.startsAt ?? null,
+            }),
           ],
         };
         return { status: 201, body: current };
-      })
-      .on('POST', `/v1/proposals/${PROP}/lock`, () => {
-        current = proposal({ status: 'locked', eventId: EV1, canLock: false });
-        return { status: 200, body: current };
       });
     await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
-    await fireEvent.press(await screen.findByRole('checkbox', { name: 'Vote for KBR Park' }));
-    await waitFor(() =>
-      expect(screen.getByRole('checkbox', { name: 'Vote for KBR Park' })).toBeChecked(),
-    );
+    await fireEvent.press(await screen.findByTestId('add-time'));
+    expect(screen.getByTestId('option-sheet')).toBeOnTheScreen();
+    expect(screen.queryByPlaceholderText('21/11/2026')).toBeNull();
+    expect(screen.getByTestId('option-save')).toBeDisabled();
+
+    const today = todayIst();
+    const next = new Date(Date.UTC(today.y, today.m, 15));
+    const key = next.toISOString().slice(0, 10);
+    await fireEvent.press(screen.getByTestId('option-date'));
+    await fireEvent.press(await screen.findByTestId('option-date-next'));
+    await fireEvent.press(await screen.findByTestId(`option-date-day-${key}`));
+    await fireEvent.press(screen.getByTestId('option-time'));
+    await fireEvent.press(await screen.findByTestId('option-time-hour-8'));
+    await fireEvent.press(screen.getByTestId('option-time-minute-30'));
+    await fireEvent.press(screen.getByTestId('option-time-pm'));
+    await fireEvent.press(screen.getByTestId('option-time-done'));
+    await fireEvent.press(screen.getByTestId('option-save'));
+    await waitFor(() => expect(screen.queryByTestId('option-sheet')).toBeNull());
+    expect(api.callsTo('POST', `/v1/proposals/${PROP}/options`)[0]?.body).toEqual({
+      kind: 'time',
+      // 8:30 pm IST is 3:00 pm UTC.
+      startsAt: `${key}T15:00:00.000Z`,
+      durationMinutes: 120,
+    });
+
     await fireEvent.press(screen.getByTestId('add-activity'));
     await fireEvent.changeText(screen.getByTestId('option-activity'), 'Catan');
     await fireEvent.press(screen.getByTestId('option-save'));
-    expect(await screen.findByText('Catan')).toBeOnTheScreen();
-    expect(screen.getByTestId('proposal-lock')).toBeDisabled();
-    await fireEvent.press(screen.getByTestId(`pick-${OPT(1)}`));
-    await fireEvent.press(screen.getByTestId(`pick-${OPT(2)}`));
-    await fireEvent.press(screen.getByTestId(`pick-${OPT(3)}`));
-    await fireEvent.press(screen.getByTestId('proposal-lock'));
-    expect(await screen.findByText('Confirmed. The plan is on.')).toBeOnTheScreen();
-    expect(api.callsTo('POST', `/v1/proposals/${PROP}/lock`)[0]?.body).toEqual({
-      timeOptionId: OPT(1),
-      placeOptionId: OPT(2),
-      activityOptionId: OPT(3),
+    expect(await screen.findByRole('checkbox', { name: 'Catan, 0 votes' })).toBeOnTheScreen();
+  });
+
+  it('organiser: Make it a plan opens the winner sheet on the leaders and locks those', async () => {
+    mockRouteParams.current = { id: PROP };
+    let current = proposal({
+      options: [
+        option(1, 'time', { startsAt: '2026-12-07T13:30:00.000Z', votes: 2, voters: [kiran, me] }),
+        option(2, 'time', { startsAt: '2026-12-08T13:30:00.000Z' }),
+        option(3, 'place', { label: 'KBR Park' }),
+        option(4, 'place', { label: 'Lamakaan', votes: 1, voters: [kiran] }),
+        option(5, 'activity', { label: 'Catan' }),
+      ],
     });
+    api
+      .on('GET', `/v1/proposals/${PROP}`, () => ({ status: 200, body: current }))
+      .on('GET', `/v1/events/${EV1}`, {
+        status: 200,
+        body: eventFixture({}, { title: 'Board games?', status: 'published' }),
+      })
+      .on('POST', `/v1/proposals/${PROP}/lock`, () => {
+        current = { ...current, status: 'locked', eventId: EV1, canLock: false };
+        return { status: 200, body: current };
+      });
+    await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
+    expect(
+      await screen.findByText(/^Your squad votes for every time and place that works for them/),
+    ).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('proposal-make-plan'));
+    expect(screen.getByTestId('proposal-winner-sheet')).toBeOnTheScreen();
+    expect(screen.getByText(/you can decide now or wait\.$/)).toBeOnTheScreen();
+    expect(screen.getByTestId(`pick-${OPT(1)}`)).toBeChecked();
+    expect(screen.getByTestId(`pick-${OPT(2)}`)).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Lamakaan, 1 vote' })).toBeChecked();
+    // Nobody voted for an activity: it stays optional.
+    expect(screen.getByTestId('pick-no-activity')).toBeChecked();
+    await fireEvent.press(screen.getByTestId(`pick-${OPT(5)}`));
+    await fireEvent.press(screen.getByTestId('proposal-lock'));
+    await waitFor(() =>
+      expect(api.callsTo('POST', `/v1/proposals/${PROP}/lock`)[0]?.body).toEqual({
+        timeOptionId: OPT(1),
+        placeOptionId: OPT(4),
+        activityOptionId: OPT(5),
+      }),
+    );
+    expect(await screen.findByTestId('proposal-confirmed')).toBeOnTheScreen();
+    expect(screen.getByText("It's a plan")).toBeOnTheScreen();
+    expect(await screen.findByText('KBR Park · KBR Park gate 1')).toBeOnTheScreen();
+    expect(screen.getByTestId('proposal-status')).toHaveTextContent('Confirmed');
+    expect(screen.queryByTestId('proposal-make-plan')).toBeNull();
+    expect(screen.queryByTestId('add-time')).toBeNull();
     await fireEvent.press(screen.getByTestId('proposal-open-plan'));
     expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/events/[id]', params: { id: EV1 } });
   });
 
-  it('closed votes explain why; the organiser can call it off', async () => {
+  it('organiser: Make it a plan waits for a time and a place', async () => {
+    mockRouteParams.current = { id: PROP };
+    api.on('GET', `/v1/proposals/${PROP}`, {
+      status: 200,
+      body: proposal({
+        canLock: false,
+        options: [option(1, 'time', { startsAt: '2026-12-07T13:30:00.000Z' })],
+      }),
+    });
+    await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('proposal-make-plan')).toBeDisabled();
+    expect(screen.getByText('Needs at least one time and one place.')).toBeOnTheScreen();
+  });
+
+  it('calling it off asks first, inline', async () => {
     mockRouteParams.current = { id: PROP };
     let current = proposal({ canLock: false });
     api
@@ -775,9 +955,43 @@ describe('collaborative plans (F-ENG-03)', () => {
         current = proposal({ status: 'cancelled', cancelledReason: 'BY_CREATOR', canLock: false });
         return { status: 200, body: current };
       });
+    const alert = jest.spyOn(Alert, 'alert');
     await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
     await fireEvent.press(await screen.findByTestId('proposal-cancel'));
-    expect(await screen.findByText('Called off by the organiser.')).toBeOnTheScreen();
+    expect(screen.getByText(/^Call off this vote\?/)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('proposal-cancel-keep'));
+    expect(screen.queryByText(/^Call off this vote\?/)).toBeNull();
+    expect(api.callsTo('POST', `/v1/proposals/${PROP}/cancel`)).toHaveLength(0);
+
+    await fireEvent.press(screen.getByTestId('proposal-cancel'));
+    await fireEvent.press(screen.getByTestId('proposal-cancel-confirm'));
+    expect(await screen.findByTestId('proposal-called-off')).toBeOnTheScreen();
+    expect(screen.getByText('No plan this time')).toBeOnTheScreen();
+    expect(screen.getByText('Called off by the organiser.')).toBeOnTheScreen();
+    expect(screen.getByTestId('proposal-status')).toHaveTextContent('Called off');
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  it('after the deadline invitees wait for the organiser to pick', async () => {
+    mockRouteParams.current = { id: PROP };
+    api.on('GET', `/v1/proposals/${PROP}`, {
+      status: 200,
+      body: proposal({
+        creator: kiran,
+        invitees: [me],
+        viewerIsCreator: false,
+        canLock: false,
+        deadline: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    });
+    await renderWithProviders(<ProposalScreen />, { fetchFn: api.fetch });
+    expect(
+      await screen.findByText('Voting has closed. Waiting for Kiran to pick the winner.'),
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('proposal-status')).toHaveTextContent('Voting closed');
+    expect(screen.getByRole('checkbox', { name: 'KBR Park, 0 votes' })).toBeDisabled();
+    expect(screen.queryByTestId('add-place')).toBeNull();
   });
 });
 
