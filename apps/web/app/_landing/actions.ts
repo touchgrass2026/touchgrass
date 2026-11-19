@@ -9,6 +9,7 @@ import {
 import { headers } from 'next/headers';
 import { isSupportedLanguage } from '../../lib/i18n';
 import { publicPost } from '../../lib/public-api';
+import { splitWaitlistContact } from '../../lib/waitlist-contact';
 
 /** The visitor's address chain, so the API's per-address limits apply per visitor (as the admin sign-in does). */
 async function forwardedFor(): Promise<Record<string, string>> {
@@ -52,10 +53,9 @@ const FIELDS: readonly WaitlistField[] = ['name', 'phone', 'email', 'contact', '
 
 export interface WaitlistValues {
   name: string;
-  phone: string;
-  email: string;
+  /** One "mobile number or email" field (D-226); routed to the API's phone or email below. */
+  contact: string;
   city: string;
-  note: string;
   consent: boolean;
 }
 
@@ -80,15 +80,15 @@ export async function joinWaitlistAction(
 ): Promise<WaitlistState> {
   const values: WaitlistValues = {
     name: text(form, 'name').slice(0, 60),
-    phone: text(form, 'phone').slice(0, 20),
-    email: text(form, 'email').slice(0, 254),
+    contact: text(form, 'contact').slice(0, 254),
     city: text(form, 'city').slice(0, 60),
-    note: text(form, 'note').slice(0, 200),
     consent: form.get('consent') === 'on',
   };
   const language = text(form, 'language');
+  const { contact, ...rest } = values;
   const body = {
-    ...values,
+    ...rest,
+    ...splitWaitlistContact(contact),
     language: isSupportedLanguage(language) ? language : 'en',
     source: text(form, 'source').slice(0, 64) || undefined,
     ref: text(form, 'ref').slice(0, 32) || undefined,

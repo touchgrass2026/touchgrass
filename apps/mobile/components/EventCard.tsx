@@ -163,7 +163,8 @@ export function EventCard({
               importantForAccessibility="no"
             />
             <LinearGradient
-              colors={[media.scrimTop, media.clear, theme.colors.surface]}
+              // Title and place sit on the bottom of the photo: it ends in the dark scrim, never the light surface.
+              colors={[media.scrimTop, media.clear, media.scrim]}
               locations={[0, 0.4, 1]}
               style={StyleSheet.absoluteFill}
             />

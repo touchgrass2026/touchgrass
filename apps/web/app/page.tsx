@@ -1,5 +1,6 @@
 import {
   BRAND,
+  FOUNDERS,
   isReferralCode,
   normalizeWaitlistSource,
   SUPPORTED_LANGUAGES,
@@ -11,6 +12,7 @@ import { resolveLanguage, strings } from '../lib/i18n';
 import { LegalFooter } from '../lib/legal-page';
 import { landingFontVariables } from './_landing/fonts';
 import { InviteCheck } from './_landing/invite-check';
+import { Phone } from './_landing/phone';
 import { StoreLinks } from './_landing/store-links';
 import { WaitlistForm } from './_landing/waitlist-form';
 import './_landing/landing.css';
@@ -19,15 +21,11 @@ interface PageProps {
   searchParams: Promise<{ lang?: string; ref?: string; utm_source?: string }>;
 }
 
-/** Real Android captures from the Maestro runs (D-225), cropped to the app's own pixels, in public/landing. */
-const SHOTS = {
-  explore: { src: '/landing/explore.webp', width: 720, height: 1243 },
-  planCard: { src: '/landing/plan-card.webp', width: 912, height: 760 },
-  pullingUp: { src: '/landing/pulling-up.webp', width: 720, height: 787 },
-  chats: { src: '/landing/chats.webp', width: 720, height: 707 },
-  neighbourhood: { src: '/landing/neighbourhood.webp', width: 720, height: 427 },
-  liveLocation: { src: '/landing/live-location.webp', width: 720, height: 868 },
-} as const;
+/**
+ * Stock photos (Pexels licence, D-226) standing in for the owner's own; credits in public/landing/photos/CREDITS.md.
+ * Each exists at 1600 and 800 px on the longest side.
+ */
+const photo = (name: string, size: 1600 | 800) => `/landing/photos/${name}-${String(size)}.webp`;
 
 /** "Log off. Pull up." keeps each sentence on its own unbroken line, so phones never split "Pull / up." */
 function Tagline({ text }: { text: string }) {
@@ -44,7 +42,7 @@ function Tagline({ text }: { text: string }) {
   );
 }
 
-/** Public home page (D-169, redesigned in D-225): the app in Hyderabad, shown with real screens; the waitlist leads. */
+/** Public home page (D-169; D-225 brand; D-226 people and places, one phone frame, shorter). The waitlist leads. */
 export default async function Home({ searchParams }: PageProps) {
   const { lang, ref, utm_source: utmSource } = await searchParams;
   // Where the visitor came from (D-191): kept with their waitlist entry.
@@ -57,11 +55,17 @@ export default async function Home({ searchParams }: PageProps) {
   const playUrl = process.env.NEXT_PUBLIC_PLAY_STORE_URL || null;
   const appStoreUrl = process.env.NEXT_PUBLIC_APP_STORE_URL || null;
   const errors = { RATE_LIMITED: t.errors.RATE_LIMITED, INTERNAL: t.errors.INTERNAL };
-  const places = [l.city.run, l.city.chai, l.city.games, l.city.mic, l.city.walk, l.city.trek];
-  const tour = [
-    { step: l.how.find, shot: SHOTS.planCard, alt: l.shots.planCard, size: 'wide' },
-    { step: l.how.pullUp, shot: SHOTS.pullingUp, alt: l.shots.pullingUp, size: 'mid' },
-    { step: l.how.meet, shot: SHOTS.chats, alt: l.shots.chats, size: 'narrow' },
+  const tiles = [
+    { key: 'run', photo: 'run', plan: l.city.run, width: 1600 },
+    { key: 'heritage', photo: 'charminar', plan: l.city.heritage, width: 800 },
+    { key: 'chai', photo: 'chai', plan: l.city.chai, width: 800 },
+    { key: 'mic', photo: 'open-mic', plan: l.city.mic, width: 800 },
+    { key: 'trek', photo: 'trek', plan: l.city.trek, width: 1600 },
+  ] as const;
+  const steps = [
+    { step: l.how.find, screen: 'plan', alt: l.shots.plan },
+    { step: l.how.pullUp, screen: 'plans', alt: l.shots.plans },
+    { step: l.how.meet, screen: 'chat', alt: l.shots.chat },
   ] as const;
   const after = [l.how.lore, l.features.squad, l.features.crews];
   const safety = [
@@ -76,7 +80,6 @@ export default async function Home({ searchParams }: PageProps) {
     [l.faq.costQ, l.faq.costA],
     [l.faq.cityQ, l.faq.cityA],
     [l.faq.phoneQ, l.faq.phoneA],
-    [l.faq.mysteryQ, l.faq.mysteryA],
   ] as const;
   const query = (code: string) =>
     `/?lang=${code}${referral ? `&ref=${referral}` : ''}${source ? `&utm_source=${source}` : ''}`;
@@ -85,8 +88,8 @@ export default async function Home({ searchParams }: PageProps) {
     <main lang={language} className={`lp ${landingFontVariables}`}>
       <header className="lp-nav lp-wrap">
         <Link href={query(language)} className="lp-brand">
-          <Image src="/landing/logo.png" alt="" width={40} height={40} priority />
-          <span>{BRAND.name}</span>
+          <Image src="/landing/logo.png" alt="" width={40} height={40} />
+          <span className="lp-brand-name">{BRAND.name}</span>
         </Link>
         <div className="lp-nav-links">
           <Link href={`/about?lang=${language}`} className="lp-navlink">
@@ -106,6 +109,9 @@ export default async function Home({ searchParams }: PageProps) {
             ))}
           </nav>
         </div>
+        <a href="#waitlist" className="lp-btn lp-nav-cta">
+          {l.waitlistCta}
+        </a>
       </header>
 
       <section aria-labelledby="hero-title" className="lp-hero lp-wrap">
@@ -129,102 +135,92 @@ export default async function Home({ searchParams }: PageProps) {
           </div>
           <StoreLinks playUrl={playUrl} appStoreUrl={appStoreUrl} />
         </div>
-        <figure className="lp-hero-shot">
-          <Image
-            src={SHOTS.explore.src}
-            width={SHOTS.explore.width}
-            height={SHOTS.explore.height}
-            alt={l.shots.explore}
-            sizes="(min-width: 60rem) 360px, 72vw"
-            priority
-            className="lp-shot"
-          />
-          <figcaption className="lp-sticker">{l.shots.exploreCaption}</figcaption>
+        <figure className="lp-hero-visual">
+          <div className="lp-hero-photo">
+            <Image
+              src={photo('board-games', 1600)}
+              alt={l.heroPhotoAlt}
+              fill
+              priority
+              sizes="(min-width: 60rem) 52vw, 100vw"
+            />
+          </div>
+          <div className="lp-hero-phone">
+            <Phone screen="explore" alt={l.shots.explore} sizes="(min-width: 60rem) 260px, 44vw" />
+            <figcaption className="lp-sticker">{l.shots.exploreCaption}</figcaption>
+          </div>
         </figure>
       </section>
 
-      <section id="hyderabad" aria-labelledby="hyderabad-title" className="lp-section lp-wrap">
-        <div className="lp-city">
-          <div className="lp-city-list">
-            <h2 id="hyderabad-title" className="lp-h2">
-              {l.city.title}
-            </h2>
-            <p className="lp-intro">{l.city.intro}</p>
-            <ul className="lp-places">
-              {places.map((p) => (
-                <li key={p.what}>
-                  <span className="lp-place-what">{p.what}</span>
-                  <span className="lp-place-where">{p.where}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <figure className="lp-city-shot">
-            <Image
-              src={SHOTS.neighbourhood.src}
-              width={SHOTS.neighbourhood.width}
-              height={SHOTS.neighbourhood.height}
-              alt={l.shots.neighbourhood}
-              sizes="(min-width: 60rem) 480px, 92vw"
-              className="lp-shot"
-            />
-            <figcaption className="lp-sticker">{l.city.caption}</figcaption>
-          </figure>
+      <section id="hyderabad" aria-labelledby="hyderabad-title" className="lp-section">
+        <div className="lp-wrap lp-head">
+          <h2 id="hyderabad-title" className="lp-h2">
+            {l.city.title}
+          </h2>
+          <p className="lp-intro">{l.city.intro}</p>
         </div>
+        <ul className="lp-mosaic">
+          {tiles.map((tile) => (
+            <li key={tile.key} className={`lp-tile lp-tile-${tile.key}`}>
+              <Image
+                src={photo(tile.photo, tile.width)}
+                alt={tile.plan.alt}
+                fill
+                sizes={
+                  tile.width === 1600
+                    ? '(min-width: 40rem) 50vw, 100vw'
+                    : '(min-width: 40rem) 25vw, 50vw'
+                }
+              />
+              <p className="lp-tile-caption">
+                <span className="lp-tile-what">{tile.plan.what}</span>
+                <span className="lp-tile-where">{tile.plan.where}</span>
+              </p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section id="how" aria-labelledby="how-title" className="lp-section lp-wrap">
         <h2 id="how-title" className="lp-h2">
           {l.howTitle}
         </h2>
-        <ol className="lp-tour">
-          {tour.map(({ step, shot, alt, size }) => (
-            <li key={step.title} className={`lp-tour-${size}`}>
-              <figure>
-                <Image
-                  src={shot.src}
-                  width={shot.width}
-                  height={shot.height}
-                  alt={alt}
-                  sizes="(min-width: 60rem) 40vw, 92vw"
-                  className="lp-shot"
-                />
-                <figcaption>
-                  <h3 className="lp-h3">{step.title}</h3>
-                  <p>{step.body}</p>
-                </figcaption>
-              </figure>
+        {/* On phones the steps swipe sideways; keyboard users reach the row by Tab (WCAG 2.1.1). */}
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be focusable */}
+        <ol className="lp-steps-row" tabIndex={0} aria-label={l.howTitle}>
+          {steps.map(({ step, screen, alt }) => (
+            <li key={step.title} className="lp-step">
+              <Phone
+                screen={screen}
+                alt={alt}
+                sizes="(min-width: 60rem) 280px, (min-width: 40rem) 30vw, 72vw"
+              />
+              <h3 className="lp-h3">{step.title}</h3>
+              <p>{step.body}</p>
             </li>
           ))}
         </ol>
-      </section>
-
-      <section id="after" aria-labelledby="after-title" className="lp-section lp-section-s lp-wrap">
-        <div className="lp-rows">
-          <h2 id="after-title" className="lp-h2">
+        <section className="lp-after" aria-labelledby="after-title">
+          <h2 id="after-title" className="lp-after-title">
             {l.afterTitle}
           </h2>
-          <dl>
+          <ul className="lp-after-list">
             {after.map((item) => (
-              <div key={item.title} className="lp-row">
-                <dt className="lp-h3">{item.title}</dt>
-                <dd>{item.body}</dd>
-              </div>
+              <li key={item.title}>
+                <span className="lp-after-name">{item.title}</span> {item.body}
+              </li>
             ))}
-          </dl>
-        </div>
+          </ul>
+        </section>
       </section>
 
       <section id="safety" aria-labelledby="safety-title" className="lp-band">
         <div className="lp-wrap lp-safety">
           <figure className="lp-safety-shot">
-            <Image
-              src={SHOTS.liveLocation.src}
-              width={SHOTS.liveLocation.width}
-              height={SHOTS.liveLocation.height}
+            <Phone
+              screen="liveLocation"
               alt={l.shots.liveLocation}
-              sizes="(min-width: 60rem) 420px, 92vw"
-              className="lp-shot"
+              sizes="(min-width: 60rem) 280px, 64vw"
             />
             <figcaption className="lp-sticker">{l.shots.liveCaption}</figcaption>
           </figure>
@@ -233,7 +229,7 @@ export default async function Home({ searchParams }: PageProps) {
               {l.safetyTitle}
             </h2>
             <p className="lp-intro">{l.safetyIntro}</p>
-            <ul className="lp-list">
+            <ul className="lp-checks">
               {safety.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -258,6 +254,30 @@ export default async function Home({ searchParams }: PageProps) {
         </div>
       </section>
 
+      <section
+        aria-labelledby="founders-title"
+        className="lp-founders lp-wrap"
+        data-testid="landing-founders"
+      >
+        <h2 id="founders-title" className="lp-founders-title">
+          {l.founders.title}
+        </h2>
+        <ul className="lp-founders-list">
+          {FOUNDERS.map((f) => (
+            <li key={f.name}>
+              <span className="lp-founder-name">{f.name}</span>
+              <span className="lp-muted">{l.about.founderRole}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="lp-founders-line">
+          {l.about.foundersIntro}{' '}
+          <Link href={`/about?lang=${language}`} className="lp-textlink">
+            {l.founders.more}
+          </Link>
+        </p>
+      </section>
+
       <div className="lp-well">
         <section id="waitlist" aria-labelledby="waitlist-title" className="lp-wrap lp-join">
           <div className="lp-join-text">
@@ -265,7 +285,6 @@ export default async function Home({ searchParams }: PageProps) {
               {l.waitlist.title}
             </h2>
             <p className="lp-intro">{l.waitlist.body}</p>
-            <p>{l.inviteBody}</p>
             <p className="lp-muted">{l.inviteCities}</p>
           </div>
           <WaitlistForm
@@ -276,11 +295,7 @@ export default async function Home({ searchParams }: PageProps) {
             referral={referral}
           />
         </section>
-        <section
-          id="invite"
-          aria-labelledby="invite-title"
-          className="lp-wrap lp-join lp-join-check"
-        >
+        <section id="invite" aria-labelledby="invite-title" className="lp-wrap lp-check-row">
           <div className="lp-join-text">
             <h2 id="invite-title" className="lp-h2 lp-h2-s">
               {l.check.title}

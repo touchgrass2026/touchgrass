@@ -2636,64 +2636,82 @@ export const en = {
       back: 'Back to home',
     },
     heroLine: 'An invite-only app for small, in-person plans in Hyderabad.',
+    heroPhotoAlt: 'Friends around a wooden café table, in the middle of a board game.',
+    founders: {
+      title: 'Who is behind it',
+      more: 'More about us',
+    },
     city: {
       title: 'Small plans, all over Hyderabad',
-      intro: 'Plans stay close to home. A few you could Plot this week:',
-      caption: 'You pick your neighbourhood when you sign up.',
-      run: { what: 'Sunday run', where: 'KBR Park, Jubilee Hills' },
-      chai: { what: 'Chai after work', where: 'Madhapur' },
-      games: { what: 'Board games night', where: 'Gachibowli' },
-      mic: { what: 'Open mic', where: 'Lamakaan, Banjara Hills' },
-      walk: { what: 'Sunset walk', where: 'Necklace Road' },
-      trek: { what: 'Day trek', where: 'Ananthagiri Hills, Vikarabad' },
+      intro: 'A few you could Plot this week:',
+      run: {
+        what: 'Sunday 5K run',
+        where: 'KBR Park',
+        alt: 'Two friends jogging side by side on a city path in the morning.',
+      },
+      chai: {
+        what: 'Chai after work',
+        where: 'Madhapur',
+        alt: 'Two friends laughing over cups of tea at a café table.',
+      },
+      mic: {
+        what: 'Open mic night',
+        where: 'Lamakaan, Banjara Hills',
+        alt: 'A young man playing an acoustic guitar at an outdoor café.',
+      },
+      trek: {
+        what: 'Day trek',
+        where: 'Ananthagiri Hills',
+        alt: 'A group of friends on a hilltop, watching the sun go down.',
+      },
+      heritage: {
+        what: 'Heritage walk',
+        where: 'Charminar',
+        alt: 'Charminar in the morning, with autos and people on the street in front.',
+      },
     },
     shots: {
       explore:
-        'The Explore tab in the TouchGrass app: stories from Sneha R. and Karthik R., who is free now, and a featured art and sketching plan.',
-      exploreCaption: 'Explore: plans nearby and who is free now',
-      planCard:
-        'A Board games night plan card in Gachibowli: Monday 10:28 pm, 3 going, 2 spots left, with a Pull up button.',
-      pullingUp:
-        'The Plans tab after pulling up: a “You’re pulling up” badge and upcoming plans like Book swap & coffee and Yoga in the park.',
-      chats:
-        'The Chats tab: Ananya R. is pulling up in 10, and the Sunrise walk + chai group thanks its host.',
-      neighbourhood:
-        'The neighbourhood step of sign-up: Banjara Hills, Gachibowli, Jubilee Hills, Kondapur and Madhapur.',
+        'The Explore tab: stories from Ananya, Sneha and Vikram, Karthik and Priya free now, and a Sunday 5K run at KBR Park.',
+      exploreCaption: 'Plans near you, and who is free now',
+      plan: 'A plan in the app: Chai after work in Madhapur, Monday 6:30 to 7:30 pm, 3 going, 3 spots left, with Pull up and Maybe buttons.',
+      plans:
+        'The Plans tab: next up is Board games night in Gachibowli, Friday at 7 pm, marked “You’re pulling up”, then an open mic and a Sunday run.',
+      chat: 'The Board games night plan chat: “Booked the big table by the window”, “Bringing Catan and Codenames”, “Pulling up in 5”.',
       liveLocation:
-        'The Share live location screen: sent to 2 contacts until 1:46 pm, with Also send on WhatsApp, Stop sharing and SOS buttons.',
+        'The Share live location screen: sharing until 7:45 pm, sent to 2 contacts, with Also send on WhatsApp, Stop sharing and SOS.',
       liveCaption: 'Live location goes to your trusted contacts.',
     },
     inviteLink: 'Have an invite code? Check it',
     waitlistCta: 'Join the waitlist',
-    getApp: 'Get the app',
     howTitle: 'How a plan comes together',
     how: {
       find: {
         title: 'Find or Plot',
-        body: 'Browse small plans near you: coffee, runs, board games, treks, open mics. Nothing fits? Plot your own in a minute.',
+        body: 'Browse small plans near you, or Plot your own in a minute.',
       },
       pullUp: {
         title: 'Pull up',
-        body: 'Say you are coming. You get a spot and join the plan’s group chat to say hi before you meet.',
+        body: 'Say you are coming. You get a spot and the plan’s group chat.',
       },
       meet: {
         title: 'Meet',
-        body: 'Show up and check in at the venue. Small groups make it easy to talk to everyone.',
+        body: 'Say hi in the chat, show up and check in. Small groups, easy talk.',
       },
       lore: {
         title: 'Keep the Lore',
-        body: 'Afterwards, everyone who was there adds photos to the plan’s Lore. It stays open for 7 days, so save the ones you want.',
+        body: 'Everyone who was there adds photos for 7 days.',
       },
     },
     afterTitle: 'After the first plan',
     features: {
       crews: {
         title: 'Crews',
-        body: 'Groups that meet again and again, like a Sunday run or a weekly quiz night.',
+        body: 'Groups that meet again, like a Sunday run or a weekly quiz.',
       },
       squad: {
         title: 'Squad',
-        body: 'Add the people you click with, see what they are pulling up to and go together.',
+        body: 'Add the people you click with and go together next time.',
       },
     },
     safetyTitle: 'Verified adults. SOS on every plan.',
@@ -2706,8 +2724,6 @@ export const en = {
       report: 'Report or block anyone, any time. Our team reviews reports.',
       sos: 'SOS and live location sharing with your trusted contacts during a plan.',
     },
-    inviteBody:
-      'Every new member joins with an invite code from someone already on TouchGrass or from our team. It keeps plans small, friendly and accountable while we grow.',
     inviteCities: 'We are starting in Hyderabad. Other cities come next.',
     check: {
       title: 'Got an invite code?',
@@ -2727,20 +2743,16 @@ export const en = {
       title: 'No invite yet?',
       body: 'Join the waitlist. When there is room, we send you an invite code.',
       name: 'Your name',
-      phone: 'Mobile number',
-      email: 'Email',
-      contactHint:
-        'Give us a mobile number, an email, or both. We only use them to send your invite.',
+      contact: 'Mobile number or email',
+      contactHint: 'Either works. We only use it to send your invite.',
       city: 'City',
-      note: 'What would you like to do? (optional)',
-      noteHint: 'For example: weekend treks, board games, open mics. Up to 200 characters.',
-      consent: 'TouchGrass may contact me about an invite. I have read the privacy policy.',
-      privacy: 'Read the privacy policy',
+      consent: 'TouchGrass may contact me about an invite, as the {{privacy}} explains.',
+      privacyLink: 'privacy policy',
       submit: 'Join the waitlist',
       done: "You're on the list. We'll be in touch when there's a spot for you.",
       errors: {
         name: 'Tell us your name.',
-        phone: 'Enter a valid Indian mobile number.',
+        phone: 'Enter a valid Indian mobile number, or an email.',
         email: 'Enter a valid email address.',
         contact: 'Add a mobile number or an email.',
         city: 'Tell us your city.',
@@ -2757,9 +2769,6 @@ export const en = {
       cityA: 'Hyderabad first. Tell us your city on the waitlist so we know where to go next.',
       phoneQ: 'Who sees my phone number?',
       phoneA: 'Nobody else. Other members see your profile, never your number.',
-      mysteryQ: 'What is a mystery plan?',
-      mysteryA:
-        'A plan whose exact spot stays hidden. Confirmed people see it shortly before the start; everyone else sees only the area.',
     },
     inviteEmail: {
       subject: 'Your TouchGrass invite',

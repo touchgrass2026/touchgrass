@@ -8,6 +8,7 @@ import { joinWaitlistAction, type WaitlistField, type WaitlistState } from './ac
 const input = 'lp-input';
 const label = 'lp-field';
 
+/** Name, one "mobile number or email", city and consent (D-226); the server action routes the contact. */
 export function WaitlistForm({
   t,
   errors,
@@ -27,7 +28,7 @@ export function WaitlistForm({
     done: false,
     fields: [],
     error: null,
-    values: { name: '', phone: '', email: '', city: 'Hyderabad', note: '', consent: false },
+    values: { name: '', contact: '', city: 'Hyderabad', consent: false },
   });
   if (state.done)
     return (
@@ -36,15 +37,17 @@ export function WaitlistForm({
       </p>
     );
   const invalid = (f: WaitlistField) => state.fields.includes(f);
-  const describedBy = (f: WaitlistField, hint?: string) =>
-    [hint, invalid(f) ? `waitlist-${f}-error` : null].filter(Boolean).join(' ') || undefined;
+  // The phone and email checks both belong to the one contact input.
+  const contactErrors = (['contact', 'phone', 'email'] as const).filter(invalid);
+  const errorId = (f: string) => `waitlist-${f}-error`;
+  const describedBy = (ids: (string | null)[]) => ids.filter(Boolean).join(' ') || undefined;
   const fieldError = (f: WaitlistField) =>
     invalid(f) ? (
-      <span id={`waitlist-${f}-error`} className="lp-error">
+      <span id={errorId(f)} className="lp-error">
         {t.errors[f]}
       </span>
     ) : null;
-  const contactInvalid = invalid('contact');
+  const [beforePrivacy = '', afterPrivacy = ''] = t.consent.split('{{privacy}}');
   return (
     <form action={action} className="lp-form" noValidate>
       <input type="hidden" name="language" value={language} />
@@ -69,7 +72,7 @@ export function WaitlistForm({
           autoComplete="name"
           defaultValue={state.values.name}
           aria-invalid={invalid('name') || undefined}
-          aria-describedby={describedBy('name')}
+          aria-describedby={describedBy([invalid('name') ? errorId('name') : null])}
           className={input}
         />
         {fieldError('name')}
@@ -83,87 +86,57 @@ export function WaitlistForm({
           autoComplete="address-level2"
           defaultValue={state.values.city}
           aria-invalid={invalid('city') || undefined}
-          aria-describedby={describedBy('city')}
+          aria-describedby={describedBy([invalid('city') ? errorId('city') : null])}
           className={input}
         />
         {fieldError('city')}
       </label>
-      <fieldset
-        className="lp-contact lp-form-wide"
-        aria-describedby={describedBy('contact', 'waitlist-contact-hint')}
-      >
-        <legend className="lp-legend">{`${t.phone} / ${t.email}`}</legend>
-        <p id="waitlist-contact-hint" className="lp-hint">
-          {t.contactHint}
-        </p>
-        {fieldError('contact')}
-        <div className="lp-pair">
-          <label htmlFor="waitlist-phone" className={label}>
-            {t.phone}
-            <input
-              id="waitlist-phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              maxLength={20}
-              autoComplete="tel-national"
-              defaultValue={state.values.phone}
-              aria-invalid={invalid('phone') || contactInvalid || undefined}
-              aria-describedby={describedBy('phone')}
-              className={input}
-            />
-            {fieldError('phone')}
-          </label>
-          <label htmlFor="waitlist-email" className={label}>
-            {t.email}
-            <input
-              id="waitlist-email"
-              name="email"
-              type="email"
-              maxLength={254}
-              autoComplete="email"
-              defaultValue={state.values.email}
-              aria-invalid={invalid('email') || contactInvalid || undefined}
-              aria-describedby={describedBy('email')}
-              className={input}
-            />
-            {fieldError('email')}
-          </label>
-        </div>
-      </fieldset>
-      <label htmlFor="waitlist-note" className={`${label} lp-form-wide`}>
-        {t.note}
-        <textarea
-          id="waitlist-note"
-          name="note"
-          maxLength={200}
-          rows={3}
-          defaultValue={state.values.note}
-          aria-describedby="waitlist-note-hint"
-          className={`${input} lp-textarea`}
+      <label htmlFor="waitlist-contact" className={`${label} lp-form-wide`}>
+        {t.contact}
+        <input
+          id="waitlist-contact"
+          name="contact"
+          required
+          maxLength={254}
+          autoComplete="email"
+          spellCheck={false}
+          autoCapitalize="none"
+          defaultValue={state.values.contact}
+          aria-invalid={contactErrors.length > 0 || undefined}
+          aria-describedby={describedBy([
+            'waitlist-contact-hint',
+            ...contactErrors.map((f) => errorId(f)),
+          ])}
+          className={input}
         />
-        <span id="waitlist-note-hint" className="lp-hint">
-          {t.noteHint}
+        <span id="waitlist-contact-hint" className="lp-hint">
+          {t.contactHint}
         </span>
+        {contactErrors.map((f) => (
+          <span key={f} id={errorId(f)} className="lp-error">
+            {t.errors[f]}
+          </span>
+        ))}
       </label>
       <div className="lp-consent lp-form-wide">
+        <input
+          id="waitlist-consent"
+          name="consent"
+          type="checkbox"
+          required
+          defaultChecked={state.values.consent}
+          aria-invalid={invalid('consent') || undefined}
+          aria-describedby={describedBy([invalid('consent') ? errorId('consent') : null])}
+          className="lp-checkbox"
+        />
         <label htmlFor="waitlist-consent" className="lp-check">
-          <input
-            id="waitlist-consent"
-            name="consent"
-            type="checkbox"
-            required
-            defaultChecked={state.values.consent}
-            aria-invalid={invalid('consent') || undefined}
-            aria-describedby={describedBy('consent')}
-            className="lp-checkbox"
-          />
-          <span>{t.consent}</span>
+          {beforePrivacy}
+          <Link href="/privacy" className="lp-inline-link">
+            {t.privacyLink}
+          </Link>
+          {afterPrivacy}
         </label>
         {fieldError('consent')}
-        <Link href="/privacy" className="lp-textlink">
-          {t.privacy}
-        </Link>
       </div>
       <button type="submit" disabled={pending} className="lp-btn lp-form-wide">
         {t.submit}
