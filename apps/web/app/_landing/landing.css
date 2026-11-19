@@ -668,6 +668,17 @@ html {
   justify-self: center;
 }
 
+/*
+ * The live-location screen ends just under SOS, so show the top of the phone (the whole screen width, nothing
+ * cut sideways) and let the empty lower half fade into the band instead of framing a blank screen.
+ */
+.lp-phone-peek {
+  aspect-ratio: 390 / 600;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent);
+  mask-image: linear-gradient(to bottom, #000 80%, transparent);
+}
+
 /* Under the screen, so it never covers the SOS button. */
 .lp-safety-shot .lp-sticker {
   position: relative;

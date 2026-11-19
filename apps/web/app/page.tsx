@@ -217,11 +217,13 @@ export default async function Home({ searchParams }: PageProps) {
       <section id="safety" aria-labelledby="safety-title" className="lp-band">
         <div className="lp-wrap lp-safety">
           <figure className="lp-safety-shot">
-            <Phone
-              screen="liveLocation"
-              alt={l.shots.liveLocation}
-              sizes="(min-width: 60rem) 280px, 64vw"
-            />
+            <div className="lp-phone-peek">
+              <Phone
+                screen="liveLocation"
+                alt={l.shots.liveLocation}
+                sizes="(min-width: 60rem) 280px, 64vw"
+              />
+            </div>
             <figcaption className="lp-sticker">{l.shots.liveCaption}</figcaption>
           </figure>
           <div className="lp-safety-text">
