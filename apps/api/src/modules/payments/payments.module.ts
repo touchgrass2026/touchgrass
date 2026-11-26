@@ -15,6 +15,7 @@ import { PlatformModule } from '../platform/platform.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { AdminPaymentsService } from './admin-payments.service.js';
+import { CheckInReaderModule } from '../events/check-in-reader.js';
 import { CheckInSignals } from './check-in-signals.js';
 import { DisputesService } from './disputes.service.js';
 import { PaidSeatsService } from './paid-seats.service.js';
@@ -47,6 +48,7 @@ import { WebhooksService } from './webhooks.service.js';
 @Module({
   imports: [
     AccountModule,
+    CheckInReaderModule,
     CitiesModule,
     EventsModule,
     NotificationsModule,

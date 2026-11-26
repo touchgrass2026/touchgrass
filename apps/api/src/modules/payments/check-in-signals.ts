@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { CheckInReader } from '../events/check-in-reader.js';
 import { EventSearchService } from '../events/event-search.service.js';
 
 export interface HeadcountFlag {
@@ -8,10 +9,8 @@ export interface HeadcountFlag {
 }
 
 /**
- * Where open fake-headcount flags come from (D-227's `CheckInReader`, D-229). Registered at start-up, so this
- * port does not depend on the door tools: `register({ openFlags: async (id) => (await reader.flags(id))
- * .filter((f) => f.reviewedAt === null).map((f) => ({ id: `${id}:${f.kind}`, reason: f.kind, raisedAt:
- * new Date(f.flaggedAt) })) })`. Until one registers, no plan has flags.
+ * Where open fake-headcount flags come from. By default D-227's `CheckInReader` (unreviewed flags on the plan);
+ * tests can register another source.
  */
 export interface HeadcountFlagSource {
   openFlags(eventId: string): Promise<HeadcountFlag[]>;
@@ -19,13 +18,16 @@ export interface HeadcountFlagSource {
 
 /**
  * What escrow needs to know about the door (D-229): who checked in (and when, for dispute evidence) and whether
- * anyone flagged the headcount. Check-ins come from the events module's reader; flags from a registered source.
+ * anyone flagged the headcount. Check-ins come from the events module's search; flags from `CheckInReader`.
  */
 @Injectable()
 export class CheckInSignals {
   private flagSource: HeadcountFlagSource | null = null;
 
-  constructor(private readonly search: EventSearchService) {}
+  constructor(
+    private readonly search: EventSearchService,
+    private readonly reader: CheckInReader,
+  ) {}
 
   register(source: HeadcountFlagSource): void {
     if (this.flagSource) throw new Error('Headcount flag source already registered');
@@ -37,6 +39,15 @@ export class CheckInSignals {
   }
 
   openFlags(eventId: string): Promise<HeadcountFlag[]> {
-    return this.flagSource ? this.flagSource.openFlags(eventId) : Promise.resolve([]);
+    if (this.flagSource) return this.flagSource.openFlags(eventId);
+    return this.reader.flags(eventId).then((flags) =>
+      flags
+        .filter((f) => f.reviewedAt === null)
+        .map((f) => ({
+          id: `${eventId}:${f.kind}`,
+          reason: f.kind,
+          raisedAt: new Date(f.flaggedAt),
+        })),
+    );
   }
 }

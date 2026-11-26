@@ -20,7 +20,6 @@ import {
 } from '../src/adapters/payments/fake.payments.js';
 import { EventStore } from '../src/modules/events/event-store.service.js';
 import { EventsService } from '../src/modules/events/events.service.js';
-import { CheckInSignals } from '../src/modules/payments/check-in-signals.js';
 import { PaymentsHandlers } from '../src/modules/payments/payments.handlers.js';
 import { PayoutsService } from '../src/modules/payments/payouts.service.js';
 import { WebhooksService } from '../src/modules/payments/webhooks.service.js';
@@ -50,7 +49,6 @@ const gateway = new FakePaymentsGateway();
 let admin: Member;
 const PRICE = 50_000;
 /** Plans with an open fake-headcount flag (the at-event door tools register the real source). */
-const flagged = new Set<string>();
 
 beforeAll(async () => {
   h = await createHarness({ payments: gateway });
@@ -63,14 +61,6 @@ beforeAll(async () => {
     .send({ refreshToken: s.refreshToken })
     .expect(200);
   admin = { id: s.user.id, token: refreshed.body.accessToken as string, phone: s.phone };
-  h.app.get(CheckInSignals).register({
-    openFlags: (eventId) =>
-      Promise.resolve(
-        flagged.has(eventId)
-          ? [{ id: `flag-${eventId}`, reason: 'More scans than people', raisedAt: new Date() }]
-          : [],
-      ),
-  });
 });
 afterAll(async () => {
   await h.close();
@@ -296,7 +286,11 @@ describe('escrow payouts from check-ins (D-229)', () => {
     await buy(b, plan.id);
     await checkInBySql(plan.id, a.id);
     await complete(plan.id);
-    flagged.add(plan.id);
+    // A real D-227 flag row: CheckInSignals reads it through CheckInReader.
+    await h.pool.query(
+      `INSERT INTO event_check_in_flags (event_id, kind, count) VALUES ($1, 'shared_device', 3)`,
+      [plan.id],
+    );
     await h.app.get(PayoutsService).createFor(plan.id);
     expect(await payoutOf(plan.id)).toMatchObject({
       status: 'on_hold',
@@ -317,7 +311,7 @@ describe('escrow payouts from check-ins (D-229)', () => {
       checkedInSeats: 1,
       withheldPaise: 44_100,
       maxNetPaise: 88_200,
-      flags: [expect.objectContaining({ reason: 'More scans than people' })],
+      flags: [expect.objectContaining({ reason: 'shared_device' })],
     });
     const someone = await member(h);
     await request(h.http)
@@ -357,7 +351,6 @@ describe('escrow payouts from check-ins (D-229)', () => {
       .set(...bearer(admin.token))
       .send({ note: 'Again' })
       .expect(409);
-    flagged.delete(plan.id);
   });
 
   it('a paid plan nobody checked in to waits for an admin, even with KYC done', async () => {

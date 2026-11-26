@@ -44,6 +44,7 @@ function paidEvent(
     type: 'plan',
     status: 'published',
     title: 'Pottery wheel night',
+    heldReason: null,
     cover: null,
     startsAt: '2026-11-07T12:30:00.000Z',
     endsAt: '2026-11-07T15:30:00.000Z',
