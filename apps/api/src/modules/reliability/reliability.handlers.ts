@@ -3,6 +3,7 @@ import type { DomainEventBus } from '../../worker/domain-event-bus.js';
 import { EventSearchService } from '../events/event-search.service.js';
 import { EVENT_COMPLETED_EVENT } from '../events/events.service.js';
 import { RSVP_CANCELLED_EVENT } from '../events/rsvp.service.js';
+import { HOST_CANCELLED_PAID_EVENT } from '../payments/payment-events.js';
 import { ReliabilityService } from './reliability.service.js';
 
 /** Worker: outcomes come from finished plans (check-in vs no-show) and late cancellations. */
@@ -24,6 +25,15 @@ export class ReliabilityHandlers {
           ? new Date(e.payload.cancelledAt)
           : new Date(e.occurredAt);
       await this.reliability.record(String(e.payload.userId), e.aggregateId, 'late_cancel', at);
+    });
+    // A host calling off a plan people paid for counts like a no-show (D-229).
+    bus.subscribe(HOST_CANCELLED_PAID_EVENT, 'reliability.host-cancel', async (e) => {
+      if (typeof e.payload.hostUserId !== 'string') return;
+      const at =
+        typeof e.payload.cancelledAt === 'string'
+          ? new Date(e.payload.cancelledAt)
+          : new Date(e.occurredAt);
+      await this.reliability.record(e.payload.hostUserId, e.aggregateId, 'host_cancel', at);
     });
   }
 

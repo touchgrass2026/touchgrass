@@ -623,6 +623,12 @@ describe('platform fee, payouts and KYC (F-PAY-03)', () => {
     const [a, b] = [await member(h), await member(h)];
     const pa = await buy(a, plan.id);
     await buy(b, plan.id);
+    // Both came: escrow pays checked-in paid seats (D-229).
+    await h.pool.query(
+      `UPDATE rsvps SET status = 'checked_in', checked_in_at = now(), check_in_method = 'qr'
+       WHERE event_id = $1 AND user_id = ANY($2)`,
+      [plan.id, [a.id, b.id]],
+    );
     // A partial refund already went back before the plan.
     await h.pool.query(
       `UPDATE payments SET refunded_paise = 10000, status = 'partially_refunded' WHERE id = $1`,

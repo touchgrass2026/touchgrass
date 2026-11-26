@@ -31,6 +31,8 @@ export const ADMIN_SECTIONS = {
   challenges: ['admin', 'city_curator'],
   featureFlags: ['super_admin'],
   payments: ['admin', 'support'],
+  /** Releasing or adjusting held payouts and answering disputes moves money (D-229): admins only. */
+  payoutReview: ['admin'],
   weights: ['admin'],
   notificationTemplates: ['admin'],
   analytics: ['admin', 'city_curator'],

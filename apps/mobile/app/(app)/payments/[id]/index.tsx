@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DisputeSection } from '../../../../components/DisputeSection';
 import { Button, ErrorState, LoadingState, Screen, Text } from '../../../../components/ui';
 import { formatTime, formatWhen } from '../../../../src/features/events/format';
 import { useCancelCheckout, useCheckout, usePayment } from '../../../../src/features/payments/api';
@@ -120,6 +121,7 @@ export default function PaymentStatusScreen() {
             }}
             testID="open-receipt"
           />
+          {p.kind !== 'deposit' ? <DisputeSection paymentId={p.id} /> : null}
         </>
       ) : null}
       {p.refunds.map((r) => (

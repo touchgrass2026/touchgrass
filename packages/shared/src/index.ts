@@ -26,6 +26,7 @@ export * from './schemas/events';
 export * from './schemas/discovery';
 export * from './schemas/chat';
 export * from './schemas/payments';
+export * from './schemas/tickets';
 export * from './schemas/after';
 export * from './rrule';
 export * from './schemas/engagement';

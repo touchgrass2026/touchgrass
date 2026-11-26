@@ -8,12 +8,12 @@ import {
   encodeCursor,
   feeBreakdown,
   LIMITS,
+  type PaymentKind,
   type PaymentList,
   type PaymentView,
   type Receipt,
   type RefundQuote,
   type RefundView,
-  refundFor,
   DEFAULT_REFUND_POLICY,
   TimeIdCursor,
   LOCALE_DEFAULTS,
@@ -24,6 +24,8 @@ import { uuidv7 } from 'uuidv7';
 import { PaymentsGateway } from '../../adapters/payments/payments.port.js';
 import { pepperedHash, randomToken } from '../../common/auth/hashing.js';
 import { PaymentCredits } from './payment-credits.js';
+import { CheckInSignals } from './check-in-signals.js';
+import { memberCancelRefund } from './payment.policy.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { ENV } from '../../config/config.module.js';
 import type { Env } from '../../config/env.js';
@@ -44,6 +46,8 @@ export type PaymentRow = typeof payments.$inferSelect;
 export type RefundRow = typeof refunds.$inferSelect;
 
 const PAID_STATUSES = ['captured', 'partially_refunded', 'refunded'] as const;
+/** Payments that pay for a seat (a deposit only guarantees one). */
+export const TICKET_KINDS = ['seat', 'plus_one', 'resale'] as const;
 const OPEN_STATUSES = ['created', 'failed'] as const;
 
 /** Next receipt number, "TG-<year>-<6 digits>" from a database sequence (gap-free enough for invoices). */
@@ -85,9 +89,10 @@ export class PaymentsService {
     private readonly outbox: OutboxService,
     private readonly credits: PaymentCredits,
     private readonly cities: CitiesService,
+    private readonly checkIns: CheckInSignals,
   ) {}
 
-  private hashToken(token: string): string {
+  hashToken(token: string): string {
     return pepperedHash(this.env.TOKEN_HASH_PEPPER, `checkout:${token}`);
   }
 
@@ -95,7 +100,7 @@ export class PaymentsService {
     return `${this.env.WEB_PUBLIC_URL}/pay/${token}`;
   }
 
-  private session(p: PaymentRow, token: string): CheckoutSession {
+  session(p: PaymentRow, token: string): CheckoutSession {
     return {
       paymentId: p.id,
       status: p.status,
@@ -115,42 +120,40 @@ export class PaymentsService {
   ): Promise<CheckoutResult> {
     if (body.receiptEmail) await this.users.setReceiptEmail(userId, body.receiptEmail);
     if (body.useCredit) return this.checkoutWithCredit(userId, eventId, body, now);
+    return this.seatCheckout(userId, eventId, { kind: 'seat', fromOffer: body.fromOffer }, now);
+  }
+
+  /**
+   * Holds a seat and records its checkout in one locked transaction, then creates the gateway order. A `deposit`
+   * (D-229) holds a seat on a popular free plan the same way, for the deposit amount.
+   */
+  async seatCheckout(
+    userId: string,
+    eventId: string,
+    opts: { kind: 'seat' | 'deposit'; fromOffer: boolean; depositPaise?: number },
+    now: Date = new Date(),
+  ): Promise<CheckoutResult> {
     const token = randomToken();
-    const open = await this.openFor(userId, eventId, now);
-    if (open?.providerOrderId) {
-      // Same order, fresh link (the old token is only stored hashed, so it cannot be shown again).
-      const [p] = await this.db
-        .update(payments)
-        .set({ checkoutTokenHash: this.hashToken(token) })
-        .where(and(eq(payments.id, open.id), eq(payments.status, 'created')))
-        .returning();
-      if (p) return { kind: 'checkout', session: this.session(p, token) };
-    }
-    const feeBps = await this.settings.get('platform_fee_bps');
+    const refreshed = await this.refreshOpen(userId, eventId, opts.kind, token, now);
+    if (refreshed) return { kind: 'checkout', session: refreshed };
+    // The platform keeps a forfeited deposit whole; tickets carry the platform fee.
+    const feeBps = opts.kind === 'deposit' ? 0 : await this.settings.get('platform_fee_bps');
     const paymentId = uuidv7();
     const holdExpiresAt = new Date(now.getTime() + LIMITS.payments.holdMs);
     const outcome = await this.rsvp.holdForCheckout(
       userId,
       eventId,
-      { fromOffer: body.fromOffer },
+      { fromOffer: opts.fromOffer, deposit: opts.kind === 'deposit' },
       async (tx, locked) => {
-        // Any earlier open checkout for this plan is superseded by this one.
-        await tx
-          .update(payments)
-          .set({ status: 'expired' })
-          .where(
-            and(
-              eq(payments.eventId, eventId),
-              eq(payments.userId, userId),
-              inArray(payments.status, [...OPEN_STATUSES]),
-            ),
-          );
+        await this.supersedeOpen(tx, eventId, userId, opts.kind);
         await tx.insert(payments).values({
           id: paymentId,
           eventId,
           userId,
+          holderUserId: userId,
+          kind: opts.kind,
           status: 'created',
-          amountPaise: locked.pricePaise,
+          amountPaise: opts.kind === 'deposit' ? (opts.depositPaise ?? 0) : locked.pricePaise,
           feeBps,
           checkoutTokenHash: this.hashToken(token),
           holdExpiresAt,
@@ -159,6 +162,46 @@ export class PaymentsService {
       now,
     );
     if (outcome === 'waitlisted') return { kind: 'waitlisted' };
+    const p = await this.attachOrder(paymentId, now);
+    return { kind: 'checkout', session: this.session(p, token) };
+  }
+
+  /** An open checkout keeps its order but gets a fresh link (the old token is stored hashed only). */
+  async refreshOpen(
+    userId: string,
+    eventId: string,
+    kind: PaymentKind,
+    token: string,
+    now: Date,
+    extra: { claimTokenHash?: string } = {},
+  ): Promise<CheckoutSession | null> {
+    const open = await this.openFor(userId, eventId, kind, now);
+    if (!open?.providerOrderId) return null;
+    const [p] = await this.db
+      .update(payments)
+      .set({ checkoutTokenHash: this.hashToken(token), ...extra })
+      .where(and(eq(payments.id, open.id), eq(payments.status, 'created')))
+      .returning();
+    return p ? this.session(p, token) : null;
+  }
+
+  /** Any earlier open checkout of the same kind for this plan is superseded by a new one. */
+  async supersedeOpen(tx: Tx, eventId: string, userId: string, kind: PaymentKind): Promise<void> {
+    await tx
+      .update(payments)
+      .set({ status: 'expired' })
+      .where(
+        and(
+          eq(payments.eventId, eventId),
+          eq(payments.userId, userId),
+          eq(payments.kind, kind),
+          inArray(payments.status, [...OPEN_STATUSES]),
+        ),
+      );
+  }
+
+  /** Creates the gateway order for a recorded checkout. If the gateway fails, the hold goes back. */
+  async attachOrder(paymentId: string, now: Date): Promise<PaymentRow> {
     const [created] = await this.db.select().from(payments).where(eq(payments.id, paymentId));
     if (!created) throw new AppError('INTERNAL', 'Checkout vanished');
     let orderId: string;
@@ -166,7 +209,7 @@ export class PaymentsService {
       const order = await this.gateway.createOrder({
         amountPaise: created.amountPaise,
         receipt: paymentId,
-        notes: { eventId, paymentId },
+        notes: { eventId: created.eventId, paymentId, kind: created.kind },
       });
       orderId = order.providerOrderId;
     } catch (err) {
@@ -182,7 +225,7 @@ export class PaymentsService {
       .set({ providerOrderId: orderId })
       .where(eq(payments.id, paymentId))
       .returning();
-    return { kind: 'checkout', session: this.session(p ?? created, token) };
+    return p ?? created;
   }
 
   /**
@@ -203,20 +246,13 @@ export class PaymentsService {
       eventId,
       { fromOffer: body.fromOffer },
       async (tx, locked) => {
-        await tx
-          .update(payments)
-          .set({ status: 'expired' })
-          .where(
-            and(
-              eq(payments.eventId, eventId),
-              eq(payments.userId, userId),
-              inArray(payments.status, [...OPEN_STATUSES]),
-            ),
-          );
+        await this.supersedeOpen(tx, eventId, userId, 'seat');
         await tx.insert(payments).values({
           id: paymentId,
           eventId,
           userId,
+          holderUserId: userId,
+          kind: 'seat',
           status: 'created',
           amountPaise: locked.pricePaise,
           feeBps,
@@ -279,7 +315,12 @@ export class PaymentsService {
     await this.release(p, 'expired', now);
   }
 
-  private async openFor(userId: string, eventId: string, now: Date): Promise<PaymentRow | null> {
+  async openFor(
+    userId: string,
+    eventId: string,
+    kind: PaymentKind,
+    now: Date,
+  ): Promise<PaymentRow | null> {
     const [p] = await this.db
       .select()
       .from(payments)
@@ -287,6 +328,7 @@ export class PaymentsService {
         and(
           eq(payments.eventId, eventId),
           eq(payments.userId, userId),
+          eq(payments.kind, kind),
           eq(payments.status, 'created'),
           sql`${payments.holdExpiresAt} > ${now}`,
         ),
@@ -295,20 +337,23 @@ export class PaymentsService {
     return p ?? null;
   }
 
-  /** Releases the held seat and closes the checkout in one transaction (under the event lock). */
+  /**
+   * Releases what the checkout held and closes it in one transaction (under the event lock): the buyer's own
+   * seat, a reserved +1 seat, or nothing for a resale (the seller keeps their seat until the payment lands).
+   */
   async release(p: PaymentRow, status: 'expired' | 'failed', now: Date): Promise<void> {
-    if (!p.userId) return;
-    await this.rsvp.releaseHold(
-      p.eventId,
-      p.userId,
-      async (tx) => {
-        await tx
-          .update(payments)
-          .set({ status })
-          .where(and(eq(payments.id, p.id), inArray(payments.status, [...OPEN_STATUSES])));
-      },
-      now,
-    );
+    const close = async (tx: Tx): Promise<void> => {
+      await tx
+        .update(payments)
+        .set({ status })
+        .where(and(eq(payments.id, p.id), inArray(payments.status, [...OPEN_STATUSES])));
+    };
+    if (!p.userId || p.kind === 'resale') {
+      await this.db.transaction(close);
+      return;
+    }
+    if (p.kind === 'plus_one') await this.rsvp.releaseGuestHold(p.eventId, p.userId, close, now);
+    else await this.rsvp.releaseHold(p.eventId, p.userId, close, now);
   }
 
   /** Every minute: checkouts past their ten minutes give their seat back (F-PAY-01). */
@@ -337,6 +382,7 @@ export class PaymentsService {
       holdExpiresAt: p.holdExpiresAt.toISOString(),
       providerOrderId: p.providerOrderId,
       keyId: this.gateway.publicKeyId,
+      kind: p.kind,
       simulate: this.canSimulate(),
       returnUrl: `touchgrass://payments/${p.id}`,
     };
@@ -433,6 +479,7 @@ export class PaymentsService {
         eventStartsAt: (core?.startsAt ?? p.createdAt).toISOString(),
         eventTimezone: (core && zones.get(core.cityId)) ?? LOCALE_DEFAULTS.timezone,
         status: p.status,
+        kind: p.kind,
         amountPaise: p.amountPaise,
         refundedPaise: p.refundedPaise,
         holdExpiresAt: p.holdExpiresAt.toISOString(),
@@ -444,7 +491,10 @@ export class PaymentsService {
     });
   }
 
-  /** Event detail hook: the viewer's open or paid checkout for this plan. */
+  /**
+   * Event detail hook: the viewer's open or paid checkout for their own seat (or deposit) on this plan. A ticket
+   * they passed on, or a +1 they bought for a friend, is not their seat.
+   */
   async viewerPayment(userId: string, eventId: string): Promise<ViewerPayment | null> {
     const [p] = await this.db
       .select()
@@ -453,7 +503,15 @@ export class PaymentsService {
         and(
           eq(payments.userId, userId),
           eq(payments.eventId, eventId),
-          inArray(payments.status, ['created', 'failed', 'captured', 'partially_refunded']),
+          inArray(payments.kind, ['seat', 'resale', 'deposit']),
+          or(
+            inArray(payments.status, ['created', 'failed']),
+            and(
+              inArray(payments.status, ['captured', 'partially_refunded']),
+              eq(payments.holderUserId, userId),
+              isNull(payments.ticketReleasedAt),
+            ),
+          ),
         ),
       )
       .orderBy(desc(payments.createdAt))
@@ -489,7 +547,13 @@ export class PaymentsService {
         n: sql<number>`coalesce(sum(${payments.amountPaise} - ${payments.refundedPaise}), 0)::int`,
       })
       .from(payments)
-      .where(and(inArray(payments.eventId, eventIds), inArray(payments.status, [...PAID_STATUSES])))
+      .where(
+        and(
+          inArray(payments.eventId, eventIds),
+          inArray(payments.kind, [...TICKET_KINDS]),
+          inArray(payments.status, [...PAID_STATUSES]),
+        ),
+      )
       .groupBy(payments.eventId);
     for (const r of rows) out.set(r.eventId, r.n);
     return out;
@@ -503,7 +567,15 @@ export class PaymentsService {
     const paid = await this.capturedFor(userId, eventId);
     if (!paid) return { paidPaise: 0, refundPaise: 0, reason: 'NO_REFUNDS', policy };
     const remaining = paid.amountPaise - paid.refundedPaise;
-    const quote = refundFor(policy, remaining, core.startsAt, now);
+    const checkedIn = (await this.checkIns.checkIns(eventId)).has(userId);
+    const quote = memberCancelRefund({
+      policy,
+      remainingPaise: remaining,
+      startsAt: core.startsAt,
+      now,
+      checkedIn,
+      method: paid.method,
+    });
     return {
       paidPaise: paid.amountPaise,
       refundPaise: quote.refundPaise,
@@ -512,6 +584,10 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * The payment backing the seat someone holds on a plan: their own ticket, a +1 a friend bought them, or a
+   * ticket transferred to them (D-229). Deposits are not tickets.
+   */
   async capturedFor(
     userId: string,
     eventId: string,
@@ -522,8 +598,9 @@ export class PaymentsService {
       .from(payments)
       .where(
         and(
-          eq(payments.userId, userId),
+          eq(payments.holderUserId, userId),
           eq(payments.eventId, eventId),
+          inArray(payments.kind, [...TICKET_KINDS]),
           inArray(payments.status, ['captured', 'partially_refunded']),
           isNull(payments.ticketReleasedAt),
         ),
@@ -642,6 +719,7 @@ export class PaymentsService {
   /** Payment records are kept for tax law, detached from the person. */
   async eraseFor(userId: string, tx: Tx): Promise<void> {
     await tx.update(payments).set({ userId: null }).where(eq(payments.userId, userId));
+    await tx.update(payments).set({ holderUserId: null }).where(eq(payments.holderUserId, userId));
     await this.users.setReceiptEmail(userId, null, tx);
   }
 }

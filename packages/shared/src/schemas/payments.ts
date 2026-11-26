@@ -76,6 +76,13 @@ export function feeBreakdown(
 
 // ---------- checkout and payments (F-PAY-01) ----------
 
+/**
+ * What a payment pays for (D-229): the payer's own `seat`, a `plus_one` seat for a friend who claims it by link,
+ * a `resale` (buying a member's transferred ticket) or a refundable `deposit` on a popular free plan.
+ */
+export const PaymentKind = z.enum(['seat', 'plus_one', 'resale', 'deposit']);
+export type PaymentKind = z.infer<typeof PaymentKind>;
+
 export const PaymentStatus = z.enum([
   'created',
   'captured',
@@ -132,6 +139,7 @@ export const PaymentView = z.object({
   /** The plan's city zone, so its time shows as the host set it (D-133). */
   eventTimezone: z.string().default(LOCALE_DEFAULTS.timezone),
   status: PaymentStatus,
+  kind: PaymentKind.default('seat'),
   amountPaise: Paise,
   refundedPaise: Paise,
   holdExpiresAt: z.iso.datetime(),
@@ -169,7 +177,15 @@ export type Receipt = z.infer<typeof Receipt>;
 export const RefundQuote = z.object({
   paidPaise: Paise,
   refundPaise: Paise,
-  reason: z.enum(['HOST_CANCELLED', 'BEFORE_CUTOFF', 'AFTER_CUTOFF', 'NO_REFUNDS', 'HOLD_EXPIRED']),
+  /** `CHECKED_IN`: nothing comes back once you have checked in (D-229). */
+  reason: z.enum([
+    'HOST_CANCELLED',
+    'BEFORE_CUTOFF',
+    'AFTER_CUTOFF',
+    'NO_REFUNDS',
+    'HOLD_EXPIRED',
+    'CHECKED_IN',
+  ]),
   policy: RefundPolicy,
 });
 export type RefundQuote = z.infer<typeof RefundQuote>;
@@ -178,6 +194,7 @@ export type RefundQuote = z.infer<typeof RefundQuote>;
 export const CheckoutPage = z.object({
   paymentId: z.uuid(),
   status: PaymentStatus,
+  kind: PaymentKind.default('seat'),
   eventTitle: z.string(),
   eventStartsAt: z.iso.datetime(),
   amountPaise: Paise,

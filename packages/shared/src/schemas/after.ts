@@ -180,7 +180,8 @@ export type LoreDownload = z.infer<typeof LoreDownload>;
 
 // ---------- reliability (F-SAF-02) ----------
 
-export type ReliabilityKind = 'check_in' | 'no_show' | 'late_cancel';
+/** `host_cancel`: the host called off a plan people had paid for (D-229); it weighs like a no-show. */
+export type ReliabilityKind = 'check_in' | 'no_show' | 'late_cancel' | 'host_cancel';
 
 export interface ReliabilityEventInput {
   kind: ReliabilityKind;
@@ -221,7 +222,8 @@ export function reliabilityOutcome(events: ReliabilityEventInput[], now: Date): 
         noShowsRecent += 1;
         if (!lastNoShow || e.at > lastNoShow) lastNoShow = e.at;
       }
-    } else missed += w * R.lateCancelWeight;
+    } else if (e.kind === 'host_cancel') missed += w;
+    else missed += w * R.lateCancelWeight;
   }
   const score = kept + missed === 0 ? 100 : Math.round((kept / (kept + missed)) * 1000) / 10;
   const tier: ReliabilityTier =

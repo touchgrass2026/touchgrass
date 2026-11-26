@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DEFAULT_REFUND_POLICY, refundFor } from '@touchgrass/shared';
-import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
+import { DEFAULT_REFUND_POLICY } from '@touchgrass/shared';
+import { and, eq, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { PaymentsGateway } from '../../adapters/payments/payments.port.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -10,11 +10,19 @@ import { OutboxService } from '../../infra/outbox/outbox.service.js';
 import { PaymentCredits } from './payment-credits.js';
 import { EventStore } from '../events/event-store.service.js';
 import {
+  depositOutcome,
+  hostCancelCountsAgainstHost,
+  hostCancelRefund,
+  memberCancelRefund,
+} from './payment.policy.js';
+import {
   type PaymentRow,
   PaymentsService,
   REFUND_REQUESTED_EVENT,
   type RefundRow,
+  TICKET_KINDS,
 } from './payments.service.js';
+import { HOST_CANCELLED_PAID_EVENT } from './payment-events.js';
 
 export const MAX_REFUND_ATTEMPTS = 5;
 const RETRY_AFTER_MS = 60_000;
@@ -73,51 +81,158 @@ export class RefundsService {
     return id;
   }
 
-  /** Attendee dropped out of a paid plan: refund per the plan's policy at the time they cancelled. */
+  /**
+   * Someone dropped out (F-PAY-02, D-229). Their ticket is refunded per the plan's policy at the time they
+   * cancelled, and so is a +1 seat they bought that nobody claimed (cancelling released it). A deposit comes back
+   * on an early cancel and is forfeited on a late one. Returns the refunds requested.
+   */
   async onAttendeeCancelled(
     eventId: string,
     userId: string,
     cancelledAt: Date,
-  ): Promise<string | null> {
+    late: boolean = false,
+  ): Promise<string[]> {
     const core = await this.store.core(eventId);
-    if (!core) return null;
+    if (!core) return [];
     return this.db.transaction(async (tx) => {
+      const out: string[] = [];
       const paid = await this.payments.capturedFor(userId, eventId, tx);
-      if (!paid) return null;
-      // The ticket is gone whatever the refund: this payment never backs a seat again.
-      await tx
-        .update(payments)
-        .set({ ticketReleasedAt: cancelledAt })
-        .where(eq(payments.id, paid.id));
-      const left = paid.amountPaise - (await this.committed(paid.id, tx));
-      const quote = refundFor(
-        core.refundPolicy ?? DEFAULT_REFUND_POLICY,
-        left,
-        core.startsAt,
-        cancelledAt,
-      );
-      // A free entry is a ticket, not money: it comes back whole or not at all.
-      if (paid.method === 'credit' && quote.refundPaise < left) return null;
-      return quote.refundPaise > 0
-        ? this.request(tx, paid, quote.refundPaise, 'BEFORE_CUTOFF')
-        : null;
+      const unclaimed = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(
+            eq(payments.eventId, eventId),
+            eq(payments.userId, userId),
+            eq(payments.kind, 'plus_one'),
+            isNull(payments.holderUserId),
+            isNull(payments.ticketReleasedAt),
+            inArray(payments.status, ['captured', 'partially_refunded']),
+          ),
+        );
+      for (const p of [...(paid ? [paid] : []), ...unclaimed]) {
+        // The ticket is gone whatever the refund: this payment never backs a seat again.
+        await tx
+          .update(payments)
+          .set({ ticketReleasedAt: cancelledAt })
+          .where(eq(payments.id, p.id));
+        const left = p.amountPaise - (await this.committed(p.id, tx));
+        const quote = memberCancelRefund({
+          policy: core.refundPolicy ?? DEFAULT_REFUND_POLICY,
+          remainingPaise: left,
+          startsAt: core.startsAt,
+          now: cancelledAt,
+          checkedIn: false,
+          method: p.method,
+        });
+        const id =
+          quote.refundPaise > 0
+            ? await this.request(tx, p, quote.refundPaise, 'BEFORE_CUTOFF')
+            : null;
+        if (id) out.push(id);
+      }
+      const deposit = await this.openDeposit(tx, eventId, userId);
+      if (deposit) {
+        const id = await this.settleDeposit(
+          tx,
+          deposit,
+          depositOutcome(late ? 'cancelled_late' : 'cancelled_early'),
+          cancelledAt,
+        );
+        if (id) out.push(id);
+      }
+      return out;
     });
   }
 
-  /** Host cancelled: every ticket is refunded in full and open checkouts are closed (F-PAY-02). */
-  async onEventCancelled(eventId: string, now: Date = new Date()): Promise<number> {
+  /** A captured deposit on this plan not yet returned or forfeited. */
+  async openDeposit(tx: Tx, eventId: string, userId: string): Promise<PaymentRow | null> {
+    const [p] = await tx
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.eventId, eventId),
+          eq(payments.holderUserId, userId),
+          eq(payments.kind, 'deposit'),
+          eq(payments.status, 'captured'),
+          isNull(payments.depositOutcome),
+        ),
+      )
+      .for('update')
+      .limit(1);
+    return p ?? null;
+  }
+
+  /** Returns a deposit in full (a refund) or keeps it (D-229). Once per deposit. */
+  async settleDeposit(
+    tx: Tx,
+    deposit: PaymentRow,
+    outcome: 'return' | 'forfeit',
+    now: Date,
+  ): Promise<string | null> {
+    const [claimed] = await tx
+      .update(payments)
+      .set({
+        depositOutcome: outcome === 'return' ? 'returned' : 'forfeited',
+        depositSettledAt: now,
+      })
+      .where(and(eq(payments.id, deposit.id), isNull(payments.depositOutcome)))
+      .returning({ id: payments.id });
+    if (!claimed || outcome === 'forfeit') return null;
+    return this.request(tx, deposit, deposit.amountPaise, 'DEPOSIT_RETURNED');
+  }
+
+  /**
+   * The plan was called off: every ticket and deposit is refunded in full whatever the policy, and open checkouts
+   * are closed (F-PAY-02). When its own host called off a plan people had paid for, a domain event lets the
+   * reliability module count it against them (D-229).
+   */
+  async onEventCancelled(
+    eventId: string,
+    now: Date = new Date(),
+    cancelledBy: string | null = null,
+  ): Promise<number> {
     const rows = await this.db.select().from(payments).where(eq(payments.eventId, eventId));
     let refunded = 0;
+    // Tickets people still held when the plan was called off (counted the same on a retry).
+    const refundedTickets = rows.filter(
+      (p) =>
+        (TICKET_KINDS as readonly string[]).includes(p.kind) &&
+        p.ticketReleasedAt === null &&
+        ['captured', 'partially_refunded', 'refunded'].includes(p.status),
+    ).length;
     for (const p of rows) {
       if (p.status === 'captured' || p.status === 'partially_refunded') {
-        const id = await this.db.transaction((tx) =>
-          this.request(tx, p, p.amountPaise, 'HOST_CANCELLED'),
-        );
+        const id = await this.db.transaction(async (tx) => {
+          if (p.kind === 'deposit') {
+            const open = await this.openDeposit(tx, eventId, p.holderUserId ?? '');
+            return open?.id === p.id ? this.settleDeposit(tx, open, 'return', now) : null;
+          }
+          const left = p.amountPaise - (await this.committed(p.id, tx));
+          return this.request(tx, p, hostCancelRefund(left).refundPaise, 'HOST_CANCELLED');
+        });
         if (id) refunded += 1;
       } else if (p.status === 'created' || p.status === 'failed') {
         await this.payments.release(p, 'expired', now);
       }
     }
+    const hosts = await this.store.hosts(eventId);
+    const primaryHostId = hosts.find((h) => h.role === 'host')?.userId ?? null;
+    if (hostCancelCountsAgainstHost({ cancelledBy, primaryHostId, refundedTickets }))
+      await this.db.transaction((tx) =>
+        this.outbox.add(tx, {
+          aggregateType: 'event',
+          aggregateId: eventId,
+          type: HOST_CANCELLED_PAID_EVENT,
+          payload: {
+            eventId,
+            hostUserId: primaryHostId,
+            refundedTickets,
+            cancelledAt: now.toISOString(),
+          },
+        }),
+      );
     return refunded;
   }
 

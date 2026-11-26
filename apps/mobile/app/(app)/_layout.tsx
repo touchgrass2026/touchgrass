@@ -75,6 +75,12 @@ export default function AppLayout() {
         <Stack.Screen name="events/[id]/signal" options={{ title: t('ate.signalTitle') }} />
         <Stack.Screen name="events/[id]/newcomers" options={{ title: t('ate.newcomers') }} />
         <Stack.Screen name="events/[id]/checkout" options={{ title: t('payments.payNow') }} />
+        <Stack.Screen
+          name="events/[id]/transfer"
+          options={{ title: t('tickets.transferButton') }}
+        />
+        <Stack.Screen name="events/[id]/gift" options={{ title: t('tickets.plusOneTitle') }} />
+        <Stack.Screen name="transfers/[id]" options={{ title: t('tickets.offerTitle') }} />
         <Stack.Screen name="events/[id]/perk" options={{ title: t('perks.title') }} />
         <Stack.Screen name="payments/[id]/index" options={{ title: t('payments.receipt') }} />
         <Stack.Screen name="payments/[id]/receipt" options={{ title: t('payments.receipt') }} />

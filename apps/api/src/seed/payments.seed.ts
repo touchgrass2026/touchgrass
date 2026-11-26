@@ -6,6 +6,7 @@ import type { Tx } from '../infra/database/database.module.js';
 import {
   eventHosts,
   events,
+  paymentDisputes,
   hostAccounts,
   hostApplications,
   payments,
@@ -22,6 +23,9 @@ const HOUR = 3_600_000;
 /** Venue staff PIN for every seeded partner venue (development only). */
 export const SEED_STAFF_PIN = '2468';
 const FEE_BPS = 1000;
+/** The seeded plan whose payout waits on a dispute (D-229; the web e2e answers it and releases the payout). */
+export const HELD_SLUG = 'seedhold001';
+export const HELD_TITLE = 'Pottery masterclass';
 
 export interface PaymentsSeedContext {
   cityId: string;
@@ -38,6 +42,8 @@ export interface PaymentsSeedSummary {
   payouts: number;
   partnerVenues: number;
   perks: number;
+  /** Payouts held for an admin's review (D-229). */
+  heldPayouts: number;
 }
 
 const PERKS = [
@@ -239,6 +245,7 @@ export async function seedPayments(
         id,
         eventId,
         userId,
+        holderUserId: userId,
         status: 'captured',
         amountPaise: price,
         feeBps: FEE_BPS,
@@ -293,13 +300,146 @@ export async function seedPayments(
     );
   }
 
+  // Escrow review (D-229): a finished paid plan whose payout waits on a buyer's dispute. Two buyers checked in;
+  // the third never did and says they were not let in. Its own slug, long past, so no other seed reads it.
+  const holdHost = hosts[0];
+  const holdVenue = venueRows[0];
+  const holdBuyers = attendeesPool.slice(60, 63);
+  const [holdExists] = await tx
+    .select({ id: events.id })
+    .from(events)
+    .where(eq(events.slug, HELD_SLUG))
+    .limit(1);
+  if (!holdExists && holdHost && holdVenue && holdBuyers.length === 3) {
+    const startsAt = new Date(now.getTime() - 40 * DAY);
+    const endsAt = new Date(startsAt.getTime() + 3 * HOUR);
+    const price = 39_900;
+    const point: GeoPoint = { lat: holdVenue.lat, lng: holdVenue.lng };
+    const eventId = uuidv7();
+    await tx.insert(events).values({
+      id: eventId,
+      slug: HELD_SLUG,
+      type: 'plan',
+      status: 'completed',
+      title: HELD_TITLE,
+      description: 'Ticket covers clay, glazes and firing.',
+      categoryInterestId: ctx.interestIds[0] ?? null,
+      cityId: ctx.cityId,
+      neighbourhoodId: holdVenue.hoodId,
+      venueId: holdVenue.id,
+      location: point,
+      address: holdVenue.address,
+      placeName: holdVenue.name,
+      approxCenter: point,
+      startsAt,
+      endsAt,
+      capacity: 12,
+      minGroupSize: 4,
+      pricePaise: price,
+      refundPolicy: { kind: 'full', cutoffHours: 24, partialPct: null },
+      visibility: 'public',
+      indoor: true,
+      accessibility: { stepFree: true, accessibleRestroom: true, quietSpace: false },
+      creatorUserId: holdHost,
+      completedAt: endsAt,
+      publishedAt: new Date(startsAt.getTime() - 20 * DAY),
+    });
+    await tx.insert(eventHosts).values({ eventId, userId: holdHost, role: 'host' });
+    await tx.insert(rsvps).values({
+      eventId,
+      userId: holdHost,
+      status: 'checked_in',
+      checkedInAt: startsAt,
+      checkInMethod: 'qr',
+    });
+    const share = feeBreakdown(price, FEE_BPS);
+    const paid: { id: string; checkedIn: boolean; userId: string }[] = [];
+    for (const [j, userId] of holdBuyers.entries()) {
+      const capturedAt = new Date(startsAt.getTime() - (3 + j) * DAY);
+      const seq = await tx.execute<{ n: number }>(
+        sql`SELECT nextval('receipt_number_seq')::int AS n`,
+      );
+      const id = uuidv7();
+      await tx.insert(payments).values({
+        id,
+        eventId,
+        userId,
+        holderUserId: userId,
+        kind: 'seat',
+        status: 'captured',
+        amountPaise: price,
+        feeBps: FEE_BPS,
+        providerOrderId: `order_seed${HELD_SLUG}${String(j)}`,
+        providerPaymentId: `pay_seed${HELD_SLUG}${String(j)}`,
+        method: 'upi',
+        checkoutTokenHash: pepperedHash('seed', randomToken()),
+        holdExpiresAt: new Date(capturedAt.getTime() + 10 * 60_000),
+        capturedAt,
+        receiptNumber: `TG-${String(capturedAt.getUTCFullYear())}-${String(seq.rows[0]?.n ?? 0).padStart(6, '0')}`,
+        createdAt: capturedAt,
+      });
+      const checkedIn = j < 2;
+      await tx
+        .insert(rsvps)
+        .values({
+          eventId,
+          userId,
+          status: checkedIn ? 'checked_in' : 'going',
+          checkedInAt: checkedIn ? new Date(startsAt.getTime() + (j + 1) * 240_000) : null,
+          checkInMethod: checkedIn ? 'qr' : null,
+        })
+        .onConflictDoNothing();
+      paid.push({ id, checkedIn, userId });
+    }
+    const payoutId = uuidv7();
+    const came = paid.filter((p) => p.checkedIn);
+    await tx.insert(payouts).values({
+      id: payoutId,
+      eventId,
+      hostUserId: holdHost,
+      status: 'on_hold',
+      holdReason: 'DISPUTE_OPEN',
+      grossPaise: price * paid.length,
+      refundsPaise: 0,
+      platformFeePaise: share.platformFeePaise * came.length,
+      gstPaise: share.gstPaise * came.length,
+      netPaise: share.hostNetPaise * came.length,
+      paidSeats: paid.length,
+      checkedInSeats: came.length,
+      withheldPaise: share.hostNetPaise * (paid.length - came.length),
+      maxNetPaise: share.hostNetPaise * paid.length,
+    });
+    await tx.insert(payoutTransfers).values(
+      came.map((p) => ({
+        id: uuidv7(),
+        payoutId,
+        paymentId: p.id,
+        amountPaise: share.hostNetPaise,
+        status: 'pending' as const,
+      })),
+    );
+    const noShow = paid.find((p) => !p.checkedIn);
+    if (noShow)
+      await tx.insert(paymentDisputes).values({
+        id: uuidv7(),
+        paymentId: noShow.id,
+        eventId,
+        userId: noShow.userId,
+        reason: 'NOT_ADMITTED',
+        note: 'The door list did not have my name.',
+        status: 'open',
+        createdAt: new Date(endsAt.getTime() + 2 * HOUR),
+      });
+  }
+
   const res = await tx.execute<Record<keyof PaymentsSeedSummary, number>>(sql`
     SELECT (SELECT count(*)::int FROM host_applications) AS "hostApplications",
            (SELECT count(*)::int FROM events WHERE slug LIKE 'seedpd%') AS "paidEvents",
            (SELECT count(*)::int FROM payments p JOIN events e ON e.id = p.event_id WHERE e.slug LIKE 'seedpd%') AS payments,
            (SELECT count(*)::int FROM payouts p JOIN events e ON e.id = p.event_id WHERE e.slug LIKE 'seedpd%') AS payouts,
            (SELECT count(*)::int FROM venues WHERE is_partner AND google_place_id LIKE 'seed\\_%') AS "partnerVenues",
-           (SELECT count(*)::int FROM venue_perks k JOIN venues v ON v.id = k.venue_id WHERE v.google_place_id LIKE 'seed\\_%') AS perks`);
+           (SELECT count(*)::int FROM venue_perks k JOIN venues v ON v.id = k.venue_id WHERE v.google_place_id LIKE 'seed\\_%') AS perks,
+           (SELECT count(*)::int FROM payouts p JOIN events e ON e.id = p.event_id WHERE e.slug = ${HELD_SLUG} AND p.status = 'on_hold') AS "heldPayouts"`);
   const row = res.rows[0];
   return {
     hostApplications: row?.hostApplications ?? 0,
@@ -308,5 +448,6 @@ export async function seedPayments(
     payouts: row?.payouts ?? 0,
     partnerVenues: row?.partnerVenues ?? 0,
     perks: row?.perks ?? 0,
+    heldPayouts: row?.heldPayouts ?? 0,
   };
 }

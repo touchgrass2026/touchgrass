@@ -19,6 +19,7 @@ import {
   locationLabel,
   rsvpLabel,
 } from '../src/features/events/format';
+import { ApiError } from '../src/lib/api-client';
 import { errorMessage, reasonText } from '../src/lib/errors';
 import { useTheme } from '../src/theme/theme';
 import { readAppEnvironment } from '../src/config';
@@ -43,6 +44,16 @@ import { loreCountdown } from '../src/features/after/lore-window';
  * viewer — an approximate circle for unrevealed mystery plans — so the screen cannot leak the spot.
  */
 /** Live location can be shared for a plan from 2 h before it starts until 3 h after it ends (F-SAF-04). */
+/** The refundable deposit an RSVP was refused for (D-229), or null for any other error. */
+function depositOf(err: unknown): number | null {
+  if (!(err instanceof ApiError) || typeof err.details !== 'object' || err.details === null)
+    return null;
+  const d = err.details as { reason?: unknown; amountPaise?: unknown };
+  return d.reason === 'DEPOSIT_REQUIRED' && typeof d.amountPaise === 'number'
+    ? d.amountPaise
+    : null;
+}
+
 function canShareFor(
   event: Pick<EventDetail, 'startsAt' | 'endsAt' | 'status'>,
   now: number,
@@ -114,7 +125,9 @@ export function EventDetailView({
       | '/events/[id]/attendees'
       | '/events/[id]/plus-one'
       | '/events/[id]/requests'
-      | '/events/[id]/checkout',
+      | '/events/[id]/checkout'
+      | '/events/[id]/transfer'
+      | '/events/[id]/gift',
   ): void => {
     router.push({ pathname, params: { id: event.id } });
   };
@@ -128,6 +141,15 @@ export function EventDetailView({
       if (res && 'status' in res && res.status === 'waitlisted') setNotice(t('events.waitlisted'));
       return true;
     } catch (err) {
+      // A popular free plan may ask for a refundable deposit (D-229): pulling up goes through checkout.
+      const deposit = depositOf(err);
+      if (deposit !== null) {
+        router.push({
+          pathname: '/events/[id]/checkout',
+          params: { id: event.id, deposit: String(deposit) },
+        });
+        return false;
+      }
       setError(errorMessage(t, err));
       return false;
     }
@@ -506,6 +528,26 @@ export function EventDetailView({
                 }}
                 testID="open-ticket"
               />
+              {paid ? (
+                <>
+                  <Button
+                    label={t('tickets.transferButton')}
+                    variant="ghost"
+                    onPress={() => {
+                      go('/events/[id]/transfer');
+                    }}
+                    testID="transfer-ticket"
+                  />
+                  <Button
+                    label={t('tickets.plusOneButton')}
+                    variant="ghost"
+                    onPress={() => {
+                      go('/events/[id]/gift');
+                    }}
+                    testID="buy-plus-one"
+                  />
+                </>
+              ) : null}
               {v.canCheckIn ? (
                 <Button
                   label={t('events.checkIn')}

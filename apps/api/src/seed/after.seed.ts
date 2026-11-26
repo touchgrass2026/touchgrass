@@ -1,4 +1,10 @@
-import { GREAT_TAGS, IMPROVE_TAGS, LIMITS, reliabilityOutcome } from '@touchgrass/shared';
+import {
+  GREAT_TAGS,
+  IMPROVE_TAGS,
+  LIMITS,
+  type ReliabilityKind,
+  reliabilityOutcome,
+} from '@touchgrass/shared';
 import { eq, sql } from 'drizzle-orm';
 import sharp from 'sharp';
 import { uuidv7 } from 'uuidv7';
@@ -98,7 +104,7 @@ export async function seedAfter(
     WHERE r.status = 'cancelled' AND r.late_cancel
     ON CONFLICT DO NOTHING`);
   const ledger = await tx.select().from(reliabilityEvents);
-  const byUser = new Map<string, { kind: 'check_in' | 'no_show' | 'late_cancel'; at: Date }[]>();
+  const byUser = new Map<string, { kind: ReliabilityKind; at: Date }[]>();
   for (const l of ledger)
     byUser.set(l.userId, [...(byUser.get(l.userId) ?? []), { kind: l.kind, at: l.at }]);
   for (const [userId, events] of byUser) {

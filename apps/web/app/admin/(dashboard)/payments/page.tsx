@@ -1,6 +1,7 @@
 import { AdminPaymentsOverview, formatPaise, resources } from '@touchgrass/shared';
 import { adminApi } from '../../../../lib/admin-session';
 import { retryAction } from './actions';
+import { PayoutReview } from './review';
 import { canOpen } from '../../../../lib/admin-nav';
 import { NoAccess } from '../../../../lib/admin-ui';
 
@@ -62,6 +63,8 @@ export default async function PaymentsPage() {
           </div>
         ))}
       </dl>
+
+      <PayoutReview />
 
       <h2 className="text-2xl font-bold">{t.recentPayments}</h2>
       <div className="overflow-x-auto">
