@@ -18,6 +18,8 @@ export interface LoreSummary {
  */
 export interface EventHookSet {
   canHostPaid?: (userId: string) => Promise<boolean>;
+  /** Throws when the person may not plot plans (hosting removed for payment strikes, D-228). */
+  assertCanHost?: (userId: string) => Promise<void>;
   /** Someone has paid or is paying: the price is locked. */
   hasPayments?: (eventId: string) => Promise<boolean>;
   viewerPayment?: (userId: string, eventId: string) => Promise<ViewerPayment | null>;
@@ -41,6 +43,11 @@ export class EventHooks {
   /** Without the hosting module nobody sells tickets. */
   canHostPaid(userId: string): Promise<boolean> {
     return this.hooks.canHostPaid ? this.hooks.canHostPaid(userId) : Promise.resolve(false);
+  }
+
+  /** Without the hosting module nobody is barred from plotting. */
+  assertCanHost(userId: string): Promise<void> {
+    return this.hooks.assertCanHost ? this.hooks.assertCanHost(userId) : Promise.resolve();
   }
 
   hasPayments(eventId: string): Promise<boolean> {

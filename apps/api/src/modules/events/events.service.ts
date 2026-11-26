@@ -17,6 +17,7 @@ import {
   type PublicEventView,
   TimeIdCursor,
   type UpdateEventBody,
+  withPaymentImage,
 } from '@touchgrass/shared';
 import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
@@ -41,6 +42,7 @@ import { REDIS } from '../../infra/redis/redis.module.js';
 import { CitiesService } from '../cities/cities.service.js';
 import { InterestsService } from '../interests/interests.service.js';
 import { MediaService } from '../media/media.service.js';
+import { isPaymentQrAsset } from '../media/payment-qr.js';
 import { type AfterCommit, GONE } from '../moderation/moderation-targets.js';
 import { ModerationService } from '../moderation/moderation.service.js';
 import { SanctionsReader } from '../moderation/sanctions-reader.js';
@@ -129,8 +131,15 @@ export class EventsService {
     opts: { type?: 'crew_session' } = {},
   ): Promise<EventDetail> {
     // Crew sessions are generated on the crew's behalf; muting applies to what a person posts themselves.
-    if (opts.type !== 'crew_session') await this.sanctions.assertCanPost(userId, now);
-    const screen = this.moderation.screen(body.title, body.description);
+    if (opts.type !== 'crew_session') {
+      await this.sanctions.assertCanPost(userId, now);
+      // Hosting removed after payment strikes (D-228).
+      await this.hooks.assertCanHost(userId);
+    }
+    // Abuse, payment diversion and phone numbers are held for review (D-228).
+    let screen = this.moderation.screenPlan([body.title, body.description], {
+      paid: body.pricePaise > 0,
+    });
     const ctx = await this.access.context(userId);
     const curated = body.type === 'curated' && opts.type !== 'crew_session';
     if (curated && !roles.some((r) => CURATOR_ROLES.includes(r)))
@@ -142,7 +151,9 @@ export class EventsService {
     if (!matchesGenderOnly(body.visibility, ctx)) throw genderOnlyError(body.visibility);
     this.assertTiming(new Date(body.startsAt), now);
     await this.assertTaxonomy(body.categoryInterestId, body.interestIds, body.vibeTagIds);
-    if (body.coverMediaId) await this.assertCover(userId, body.coverMediaId);
+    // A UPI / bank QR code as the cover is a payment ask too (D-228).
+    if (body.coverMediaId && (await this.assertCover(userId, body.coverMediaId)))
+      screen = withPaymentImage(screen);
     const where = await this.resolveWhere(body.where);
     // City curators publish curated plans only in the cities they curate (D-118).
     if (curated && !inScope(await this.scope.scope({ userId, roles }), where.cityId))
@@ -324,14 +335,19 @@ export class EventsService {
         body.interestIds ?? [],
         body.vibeTagIds ?? [],
       );
-    if (body.coverMediaId) await this.assertCover(userId, body.coverMediaId);
+    const paymentCover = body.coverMediaId
+      ? await this.assertCover(userId, body.coverMediaId)
+      : false;
     const where = body.where ? await this.resolveWhere(body.where) : null;
     if (opts.staff && where && !inScope(opts.staff, where.cityId))
       throw new AppError('FORBIDDEN', 'That place is in a city you do not curate', {
         reason: 'OTHER_CITY',
       });
     const beforeExact = await this.store.exactLocation(eventId);
-    const screen = this.moderation.screen(body.title, body.description);
+    const texts = this.moderation.screenPlan([body.title, body.description], {
+      paid: price > 0,
+    });
+    const screen = paymentCover ? withPaymentImage(texts) : texts;
 
     await withRedisLock(this.redis, eventLockKey(eventId), () =>
       this.db.transaction(async (tx) => {
@@ -946,7 +962,8 @@ export class EventsService {
       ]);
   }
 
-  private async assertCover(userId: string, mediaId: string): Promise<void> {
+  /** Checks a cover can be used; true when it is a payment QR code (D-228). */
+  private async assertCover(userId: string, mediaId: string): Promise<boolean> {
     const asset = await this.media.ownedOrThrow(userId, mediaId);
     if (asset.purpose !== 'event_cover')
       throw new AppError('VALIDATION_FAILED', 'Not a cover image', [
@@ -954,6 +971,7 @@ export class EventsService {
       ]);
     if (asset.status !== 'ready')
       throw new AppError('MEDIA_NOT_READY', 'Cover is still processing');
+    return isPaymentQrAsset(asset);
   }
 
   private async resolveWhere(where: EventWhere): Promise<ResolvedWhere> {

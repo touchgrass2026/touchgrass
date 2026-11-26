@@ -24,6 +24,7 @@ import { AppSettingsService } from '../platform/app-settings.service.js';
 import { FeatureFlagsService } from '../platform/feature-flags.service.js';
 import { PeopleService } from '../profiles/people.service.js';
 import { UsersService } from '../users/users.service.js';
+import { HostConductService } from './host-conduct.service.js';
 
 type ApplicationRow = typeof hostApplications.$inferSelect;
 
@@ -41,14 +42,18 @@ function toApplication(a: ApplicationRow): HostApplication {
   };
 }
 
-/** Pure rule (F-HST-01): free plans need a verified profile (when the flag asks for it); paid plans also need an approved application. */
+/**
+ * Pure rule (F-HST-01): free plans need a verified profile (when the flag asks for it); paid plans also need an
+ * approved application. Hosting removed for payment strikes (D-228) takes both away.
+ */
 export function hostingRights(
   verified: boolean,
   verificationRequired: boolean,
   application: { status: string } | null,
   ticketsEnabled = true,
+  revoked = false,
 ): { canHostFree: boolean; canHostPaid: boolean } {
-  const canHostFree = verified || !verificationRequired;
+  const canHostFree = !revoked && (verified || !verificationRequired);
   return {
     canHostFree,
     canHostPaid: ticketsEnabled && canHostFree && application?.status === 'approved',
@@ -65,6 +70,7 @@ export class HostingService {
     private readonly settings: AppSettingsService,
     private readonly payouts: PayoutsService,
     private readonly people: PeopleService,
+    private readonly conduct: HostConductService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -85,14 +91,21 @@ export class HostingService {
   }
 
   async status(userId: string): Promise<HostStatus> {
-    const [application, verified, required, account, feeBps] = await Promise.all([
+    const [application, verified, required, account, feeBps, revoked] = await Promise.all([
       this.latest(userId),
       this.users.verifiedIds([userId]),
       this.flags.isEnabled('require_verification_to_host'),
       this.payouts.account(userId),
       this.settings.get('platform_fee_bps'),
+      this.conduct.revoked(userId),
     ]);
-    const rights = hostingRights(verified.has(userId), required, application, this.ticketsEnabled);
+    const rights = hostingRights(
+      verified.has(userId),
+      required,
+      application,
+      this.ticketsEnabled,
+      revoked,
+    );
     return {
       ...rights,
       ticketsEnabled: this.ticketsEnabled,
@@ -113,6 +126,7 @@ export class HostingService {
         reason: 'TICKETS_OFF',
       });
     const status = await this.status(userId);
+    await this.conduct.assertCanHost(userId);
     if (!status.canHostFree)
       throw new AppError('VERIFICATION_REQUIRED', 'Verify your profile to host');
     if (status.application && status.application.status !== 'rejected')

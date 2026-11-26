@@ -8,6 +8,7 @@ import { ObjectStorage } from '../../adapters/storage/storage.port.js';
 import { DB, type Database } from '../../infra/database/database.module.js';
 import { mediaAssets, type VariantKeys } from '../../infra/database/schema/index.js';
 import { ModerationService } from '../moderation/moderation.service.js';
+import { hasPaymentQrCode, PAYMENT_QR } from './payment-qr.js';
 import { VideoRejected, VideoTranscoder } from './video.js';
 
 /** Refuse decompression bombs: 40 megapixels is far above any phone camera output. */
@@ -18,6 +19,8 @@ const MAX_INPUT_PIXELS = 40_000_000;
  */
 const MAX_ANIMATED_PIXELS = 120_000_000;
 const [SM, MD, LG] = LIMITS.imageSizes;
+/** Purposes scanned for payment QR codes (D-228): plan covers and chat photos. */
+const QR_SCANNED = new Set<string>(['event_cover', 'chat']);
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -190,9 +193,13 @@ export class MediaProcessor {
         this.moderationProvider.moderateImage(frame),
       ),
     );
+    // Plan covers and chat photos showing a UPI / bank QR code are labelled (D-228): a plan or a plan-chat
+    // message that uses one is held for review, while friends' direct messages are left alone.
+    const paymentQr =
+      !animated && QR_SCANNED.has(asset.purpose) ? await hasPaymentQrCode(lg.buffer) : false;
     const verdict = {
       verdict: verdicts.some((v) => v.verdict === 'flagged') ? 'flagged' : 'clean',
-      labels: verdicts.flatMap((v) => v.labels),
+      labels: [...verdicts.flatMap((v) => v.labels), ...(paymentQr ? [PAYMENT_QR] : [])],
     };
     const status = verdict.verdict === 'flagged' ? 'flagged' : 'ready';
 

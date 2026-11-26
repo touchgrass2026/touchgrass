@@ -2,13 +2,17 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestj
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type * as Dto from '@touchgrass/shared';
 import {
+  AcknowledgeHostRulesBody,
+  ADMIN_SECTIONS,
   AdminHostApplicationList,
   AdminHostApplicationQuery,
   CreateHostApplicationBody,
   EventAnalytics,
   HostAnalytics,
   HostApplication,
+  HostConduct,
   HostStatus,
+  ReinstateHostingBody,
   ReviewHostApplicationBody,
 } from '@touchgrass/shared';
 import { CurrentUser, Roles } from '../../common/auth/decorators.js';
@@ -21,6 +25,7 @@ import { AppError } from '../../common/errors/app-error.js';
 import { AdminScopeService } from '../../common/auth/admin-scope.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { HostAnalyticsService } from './host-analytics.service.js';
+import { HostConductService } from './host-conduct.service.js';
 import { HostingService } from './hosting.service.js';
 
 /** Hosting status, applications to sell tickets (F-HST-01) and insights (F-HST-02). */
@@ -31,7 +36,27 @@ export class HostingController {
   constructor(
     private readonly hosting: HostingService,
     private readonly analytics: HostAnalyticsService,
+    private readonly conduct: HostConductService,
   ) {}
+
+  /** The host rule and payment strikes (D-228). */
+  @Get('conduct')
+  @ApiZodResponse(200, HostConduct)
+  hostConduct(@CurrentUser() user: AuthPrincipal): Promise<Dto.HostConduct> {
+    return this.conduct.conduct(user.userId);
+  }
+
+  /** "No payments outside TouchGrass": agreed once, before the first plan (D-228). */
+  @Post('rules/ack')
+  @Idempotent()
+  @ApiZodBody(AcknowledgeHostRulesBody)
+  @ApiZodResponse(201, HostConduct)
+  acknowledgeRules(
+    @CurrentUser() user: AuthPrincipal,
+    @Body(new ZodPipe(AcknowledgeHostRulesBody)) body: Dto.AcknowledgeHostRulesBody,
+  ): Promise<Dto.HostConduct> {
+    return this.conduct.acknowledge(user.userId, body.rule);
+  }
 
   @Get('status')
   @ApiZodResponse(200, HostStatus)
@@ -110,5 +135,32 @@ export class HostApplicationsAdminController {
       details: { note: body.note },
     });
     return result;
+  }
+}
+
+/** Giving hosting back after payment strikes (D-228). */
+@ApiTags('admin')
+@ApiBearerAuth()
+@Controller({ path: 'admin/hosting', version: '1' })
+export class HostingAdminController {
+  constructor(private readonly conduct: HostConductService) {}
+
+  @Get(':userId/conduct')
+  @Roles(...ADMIN_SECTIONS.moderation)
+  @ApiZodResponse(200, HostConduct)
+  conductOf(@Param('userId', new ParseUUIDPipe()) userId: string): Promise<Dto.HostConduct> {
+    return this.conduct.conduct(userId);
+  }
+
+  @Post(':userId/reinstate')
+  @Roles(...ADMIN_SECTIONS.moderation)
+  @ApiZodBody(ReinstateHostingBody)
+  @ApiZodResponse(201, HostConduct)
+  reinstate(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('userId', new ParseUUIDPipe()) userId: string,
+    @Body(new ZodPipe(ReinstateHostingBody)) body: Dto.ReinstateHostingBody,
+  ): Promise<Dto.HostConduct> {
+    return this.conduct.reinstate(user.userId, userId, body.note);
   }
 }

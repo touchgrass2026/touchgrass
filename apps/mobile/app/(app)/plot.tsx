@@ -48,6 +48,7 @@ import { interestOptions } from '../../components/interest-options';
 import { PickList } from '../../components/PickList';
 import { PlaceRow } from '../../components/plot/PlaceRow';
 import { CoHostsSheet } from '../../components/plot/CoHostsSheet';
+import { HostRulesSheet } from '../../components/plot/HostRulesSheet';
 import {
   GroupNote,
   RowError,
@@ -84,6 +85,7 @@ import {
 } from '../../src/features/events/api';
 import { isoToIst, istToIso, quickPick } from '../../src/features/events/format';
 import { useHostStatus } from '../../src/features/payments/api';
+import { useAcknowledgeHostRules, useHostConduct } from '../../src/features/hosting/api';
 import { money } from '../../src/features/payments/format';
 import { ApiError } from '../../src/lib/api-client';
 import { errorMessage } from '../../src/lib/errors';
@@ -320,6 +322,11 @@ function PlotForm({
   const update = useUpdateEvent(existing?.id ?? '');
   const fromPlace = useVenueFromPlace();
   const host = useHostStatus();
+  // "No payments outside TouchGrass" (D-228): agreed once, before a first plan.
+  const conduct = useHostConduct(existing === null);
+  const acknowledge = useAcknowledgeHostRules();
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rulesAgreed = useRef(false);
   const canSell = host.data?.canHostPaid === true || (existing?.pricePaise ?? 0) > 0;
   const [form, setForm] = useState<FormState>(() =>
     existing ? fromEvent(existing) : initialState(),
@@ -550,6 +557,10 @@ function PlotForm({
         const parsed = CreateEventBody.safeParse({ ...fields, where: picked.where });
         if (!parsed.success) {
           showIssues(parsed.error.issues);
+          return;
+        }
+        if (conduct.data?.rulesAcknowledged === false && !rulesAgreed.current) {
+          setRulesOpen(true);
           return;
         }
         setLeaving(true);
@@ -1397,6 +1408,25 @@ function PlotForm({
 
       {sheet === 'coHosts' ? (
         <CoHostsSheet selected={coHosts} onChange={setCoHosts} onClose={close} />
+      ) : null}
+
+      {rulesOpen ? (
+        <HostRulesSheet
+          busy={acknowledge.isPending}
+          error={acknowledge.error ? errorMessage(t, acknowledge.error) : null}
+          onClose={() => {
+            setRulesOpen(false);
+          }}
+          onAgree={() => {
+            acknowledge.mutate('no_off_platform_payments', {
+              onSuccess: () => {
+                rulesAgreed.current = true;
+                setRulesOpen(false);
+                void submit();
+              },
+            });
+          }}
+        />
       ) : null}
 
       {sheet === 'price' && canSell ? (

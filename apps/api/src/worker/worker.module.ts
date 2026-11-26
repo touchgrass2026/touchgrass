@@ -51,6 +51,7 @@ import { EventCommentsHandlers } from '../modules/event-comments/event-comments.
 import { ReliabilityHandlers } from '../modules/reliability/reliability.handlers.js';
 import { DiscoveryHandlers } from '../modules/discovery/discovery.handlers.js';
 import { HostingModule } from '../modules/hosting/hosting.module.js';
+import { HostingHandlers } from '../modules/hosting/hosting.handlers.js';
 import { PaymentsModule } from '../modules/payments/payments.module.js';
 import { PerksModule } from '../modules/perks/perks.module.js';
 import { AuthModule } from '../modules/auth/auth.module.js';
@@ -94,6 +95,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly proposalsHandlers: ProposalsHandlers,
     private readonly gamificationHandlers: GamificationHandlers,
     private readonly referralsHandlers: ReferralsHandlers,
+    private readonly hostingHandlers: HostingHandlers,
     private readonly remindersHandlers: RemindersHandlers,
     private readonly analytics: AnalyticsService,
     private readonly analyticsCounters: AnalyticsCountersService,
@@ -168,6 +170,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     this.proposalsHandlers.registerOn(this.bus);
     this.gamificationHandlers.registerOn(this.bus);
     this.referralsHandlers.registerOn(this.bus);
+    this.hostingHandlers.registerOn(this.bus);
     this.remindersHandlers.registerOn(this.bus);
     for (const type of Object.keys(TRACKED_EVENTS))
       this.bus.subscribe(type, 'analytics.track', async (e) => {

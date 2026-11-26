@@ -10,6 +10,8 @@ export const ReferralRejectReason = z.enum([
   'DUPLICATE_DEVICE',
   'SAME_DEVICE',
   'LIMIT_REACHED',
+  /** The referrer's own phone number (D-228). */
+  'SELF_REFERRAL',
 ]);
 export type ReferralRejectReason = z.infer<typeof ReferralRejectReason>;
 

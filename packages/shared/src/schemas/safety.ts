@@ -240,6 +240,8 @@ export const UserSanction = z.object({
   liftedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   byName: z.string().nullable(),
+  /** Set on payment strikes (D-228): a warning that counts towards losing hosting, and can be lifted. */
+  code: z.enum(['off_platform_payment']).nullable().default(null),
 });
 export type UserSanction = z.infer<typeof UserSanction>;
 

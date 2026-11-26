@@ -101,6 +101,7 @@ function paidEvent(
     lore: null,
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
     ...overrides,
   };
@@ -729,7 +730,7 @@ describe('hosting (F-HST-01/02, F-PAY-03)', () => {
     expect(screen.queryByTestId('plot-price')).toBeNull();
     expect(screen.queryByTestId('plot-price-row')).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Paid' })).toBeNull();
-    expect(screen.getByTestId('plot-paid-hint')).toBeOnTheScreen();
+    expect(await screen.findByTestId('plot-paid-hint')).toBeOnTheScreen();
   });
 
   it('with ticket sales off, nobody is told they need an approved host account (D-206)', async () => {

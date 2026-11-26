@@ -85,6 +85,7 @@ function message(overrides: Partial<Message> = {}): Message {
     system: null,
     deleted: false,
     held: false,
+    heldReason: null,
     clientId: null,
     createdAt: '2026-11-03T10:00:00.000Z',
     ...overrides,
@@ -183,6 +184,7 @@ function eventFixture(viewer: Partial<EventDetail['viewer']> = {}): EventDetail 
     lore: null,
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
   };
 }

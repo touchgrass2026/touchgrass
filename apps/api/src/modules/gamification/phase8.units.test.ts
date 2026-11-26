@@ -13,7 +13,7 @@ import {
   lockBlock,
   timeOptionBlock,
 } from '../proposals/proposals.policy.js';
-import { rejectReason } from '../referrals/referrals.service.js';
+import { countsAsAttendance, rejectReason } from '../referrals/referrals.service.js';
 import {
   challengeProgress,
   challengeState,
@@ -242,7 +242,7 @@ describe('challenge progress (F-GAM-03)', () => {
 });
 
 describe('referral fraud checks and recap helpers (F-GRW-01, F-GAM-04)', () => {
-  const r = { refereePhoneHash: 'h', refereeDeviceId: 'd' };
+  const r = { refereePhoneHash: 'h', refereeDeviceId: 'd', referrerPhoneHash: 'p' };
   const base = {
     phoneRewarded: false,
     deviceRewarded: false,
@@ -257,6 +257,21 @@ describe('referral fraud checks and recap helpers (F-GRW-01, F-GAM-04)', () => {
       rejectReason({ ...r, refereeDeviceId: null }, { ...base, deviceRewarded: true }),
     ).toBeNull();
     expect(rejectReason(r, { ...base, referrerRewarded: 20 })).toBe('LIMIT_REACHED');
+  });
+  it('your own number never refers itself, whatever else is true (D-228)', () => {
+    expect(rejectReason({ ...r, referrerPhoneHash: 'h' }, base)).toBe('SELF_REFERRAL');
+    expect(rejectReason({ ...r, referrerPhoneHash: 'h' }, { ...base, phoneRewarded: true })).toBe(
+      'SELF_REFERRAL',
+    );
+    // Older referrals have no referrer phone recorded: the other checks still apply.
+    expect(rejectReason({ ...r, referrerPhoneHash: null }, base)).toBeNull();
+  });
+  it('only a plan neither of them hosts counts as showing up (D-228)', () => {
+    expect(countsAsAttendance(['host'], 'referrer', 'friend')).toBe(true);
+    expect(countsAsAttendance([], 'referrer', 'friend')).toBe(true);
+    expect(countsAsAttendance(['referrer'], 'referrer', 'friend')).toBe(false);
+    expect(countsAsAttendance(['host', 'referrer'], 'referrer', 'friend')).toBe(false);
+    expect(countsAsAttendance(['friend'], 'referrer', 'friend')).toBe(false);
   });
   it('most frequent value, first seen wins ties', () => {
     expect(mostFrequent([])).toBeNull();

@@ -13,3 +13,4 @@ export * from './admin-console.js';
 export * from './stories.js';
 export * from './comments.js';
 export * from './waitlist.js';
+export * from './hosting.js';

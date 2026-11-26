@@ -416,6 +416,46 @@ describe('Profiles: squad actions, block and report (F-SOC-05)', () => {
     });
     expect(api.callsTo('POST', '/v1/reports')[0]?.headers['idempotency-key']).toMatch(/^report-/);
   });
+
+  it('a free plan can be reported for asking me to pay (D-228)', async () => {
+    mockRouteParams.current = {
+      targetType: 'event',
+      targetId: ids.asset,
+      name: 'Sunset frisbee',
+      paid: '0',
+    };
+    api.on('POST', '/v1/reports', { status: 201, body: { id: ids.asset, severity: 'medium' } });
+    await renderWithProviders(<ReportScreen />, { fetchFn: api.fetch });
+    expect(screen.queryByRole('radio', { name: 'Asked to pay outside the app' })).toBeNull();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Asked me to pay' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Send report' }));
+    expect(await screen.findByText('Thanks. We are on it.')).toBeOnTheScreen();
+    expect(api.callsTo('POST', '/v1/reports')[0]?.body).toMatchObject({
+      targetType: 'event',
+      category: 'asked_to_pay',
+    });
+  });
+
+  it('a paid plan offers "Asked to pay outside the app" instead (D-228)', async () => {
+    mockRouteParams.current = { targetType: 'event', targetId: ids.asset, paid: '1' };
+    await renderWithProviders(<ReportScreen />, { fetchFn: api.fetch });
+    expect(screen.getByRole('radio', { name: 'Asked to pay outside the app' })).toBeOnTheScreen();
+    expect(screen.queryByRole('radio', { name: 'Asked me to pay' })).toBeNull();
+  });
+
+  it('a person can be reported for either money ask (D-228)', async () => {
+    mockRouteParams.current = { targetType: 'user', targetId: ids.other };
+    await renderWithProviders(<ReportScreen />, { fetchFn: api.fetch });
+    expect(screen.getByRole('radio', { name: 'Asked me to pay' })).toBeOnTheScreen();
+    expect(screen.getByRole('radio', { name: 'Asked to pay outside the app' })).toBeOnTheScreen();
+  });
+
+  it('a story offers no money reasons (D-228)', async () => {
+    mockRouteParams.current = { targetType: 'story', targetId: ids.asset };
+    await renderWithProviders(<ReportScreen />, { fetchFn: api.fetch });
+    expect(screen.getByRole('radio', { name: 'Spam' })).toBeOnTheScreen();
+    expect(screen.queryByRole('radio', { name: 'Asked me to pay' })).toBeNull();
+  });
 });
 
 describe('Settings: blocked people and social privacy', () => {

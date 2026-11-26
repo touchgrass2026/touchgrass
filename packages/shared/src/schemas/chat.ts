@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LIMITS } from '../constants';
+import { HeldReason } from '../enums';
 import { LocalizedName } from './catalog';
 import { MediaVariants } from './media';
 import { PersonCard } from './social';
@@ -72,6 +73,8 @@ export const Message = z.object({
   deleted: z.boolean(),
   /** Your own message, held for review by the text filter: nobody else sees it yet (F-SAF-06). */
   held: z.boolean(),
+  /** Why your own message is held (D-228): plan chats hold payment asks; null when it is not held. */
+  heldReason: HeldReason.nullable().default(null),
   clientId: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });

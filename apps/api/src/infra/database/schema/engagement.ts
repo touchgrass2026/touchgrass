@@ -248,6 +248,8 @@ export const referrals = pgTable('referrals', {
   code: text('code').notNull(),
   refereePhoneHash: text('referee_phone_hash').notNull(),
   refereeDeviceId: text('referee_device_id'),
+  /** The referrer's phone, so lifetime limits survive deleting and re-creating an account (D-228). */
+  referrerPhoneHash: text('referrer_phone_hash'),
   status: text('status', { enum: ['pending', 'rewarded', 'rejected'] })
     .notNull()
     .default('pending'),

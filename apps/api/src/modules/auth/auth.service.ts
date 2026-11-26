@@ -170,6 +170,7 @@ export class AuthService {
             refereeId: user.id,
             code: body.inviteCode,
             phoneHash: user.phoneHash ?? '',
+            referrerPhoneHash: (await this.users.findById(referrerId, tx))?.phoneHash ?? null,
             deviceId: body.device.deviceId,
             sameDeviceAsReferrer: await this.sessions.hasDevice(
               referrerId,

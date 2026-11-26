@@ -3,18 +3,23 @@
 import { guarded } from '../../../../../lib/admin-action';
 
 import { randomUUID } from 'node:crypto';
-import { AdminUserDetail, SanctionKind } from '@touchgrass/shared';
+import { AdminUserDetail, HostConduct, SanctionKind } from '@touchgrass/shared';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { AdminApiError, adminApi } from '../../../../../lib/admin-session';
 
-async function call(userId: string, path: string, body: unknown): Promise<void> {
+async function call(
+  userId: string,
+  path: string,
+  body: unknown,
+  schema: typeof AdminUserDetail | typeof HostConduct = AdminUserDetail,
+): Promise<void> {
   let error: string | null = null;
   try {
     await adminApi(
       path,
-      AdminUserDetail,
+      schema,
       {
         method: 'POST',
         headers: { 'idempotency-key': `admin-user-${randomUUID()}` },
@@ -67,5 +72,15 @@ export async function setVerifiedAction(form: FormData): Promise<void> {
     await call(f.userId, `/v1/admin/users/${f.userId}/verification`, {
       verified: f.verified === 'true',
     });
+  });
+}
+
+const Reinstate = z.object({ userId: z.uuid(), note: z.string().trim().min(3).max(500) });
+
+/** Gives hosting back after payment strikes (D-228); audited by the API. */
+export async function reinstateHostingAction(form: FormData): Promise<void> {
+  await guarded(async () => {
+    const f = Reinstate.parse(Object.fromEntries(form));
+    await call(f.userId, `/v1/admin/hosting/${f.userId}/reinstate`, { note: f.note }, HostConduct);
   });
 }

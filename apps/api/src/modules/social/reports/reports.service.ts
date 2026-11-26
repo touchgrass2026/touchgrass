@@ -10,7 +10,7 @@ import { OutboxService } from '../../../infra/outbox/outbox.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { ModerationService } from '../../moderation/moderation.service.js';
 import { SocialGraphService } from '../graph/social-graph.service.js';
-import { CATEGORY_SEVERITY, escalate } from './report-severity.js';
+import { CATEGORY_SEVERITY, categoryFitsTarget, escalate } from './report-severity.js';
 import { ReportTargetRegistry } from './report-targets.registry.js';
 
 export const REPORT_CREATED_EVENT = 'report.created';
@@ -31,6 +31,10 @@ export class ReportsService {
     reporterId: string,
     body: CreateReportBody,
   ): Promise<{ id: string; severity: Severity }> {
+    if (!categoryFitsTarget(body.targetType, body.category))
+      throw new AppError('VALIDATION_FAILED', 'That reason does not fit this report', [
+        { path: 'category', message: 'Not for this kind of content', code: 'custom' },
+      ]);
     const resolver = this.targets.get(body.targetType);
     if (!resolver)
       throw new AppError(

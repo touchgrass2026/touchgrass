@@ -98,6 +98,7 @@ function detail(over: Partial<EventDetail> = {}): EventDetail {
     lore: null,
     crew: null,
     held: false,
+    heldReason: null,
     ...over,
   };
 }

@@ -6,13 +6,16 @@ import { AppError } from '../../common/errors/app-error.js';
 import { DB, type Database, type Tx } from '../../infra/database/database.module.js';
 import { userSanctions } from '../../infra/database/schema/index.js';
 import { AuditService } from '../../common/audit/audit.service.js';
+import { OutboxService } from '../../infra/outbox/outbox.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { UsersService } from '../users/users.service.js';
 import { type AfterCommit } from '../moderation/moderation-targets.js';
+import { PAYMENT_STRIKE_RECORDED_EVENT } from '../moderation/sanctions-reader.js';
 
 const DAY_MS = 86_400_000;
+const PAYMENT_STRIKE_REASON = 'Asked for payment outside TouchGrass';
 /** People who run moderation can't be sanctioned from the tools they use (ask a super admin). */
 const STAFF_ROLES = ['moderator', 'admin', 'super_admin', 'support'];
 
@@ -34,6 +37,7 @@ export class SanctionsService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     private readonly profiles: ProfilesService,
+    private readonly outbox: OutboxService,
   ) {}
 
   /** Applies a sanction inside the caller's transaction; returns the notice to send once it has committed. */
@@ -89,7 +93,52 @@ export class SanctionsService {
     return undefined;
   }
 
-  /** Ends a mute or suspension early, or lifts a ban. */
+  /**
+   * Records a payment strike (D-228) in the reviewer's transaction: a coded warning, audited, and an outbox event
+   * the hosting module counts (it removes hosting at the threshold and tells the person). Staff are skipped.
+   */
+  async recordPaymentStrike(
+    adminId: string,
+    userId: string,
+    tx: Tx,
+    opts: { moderationItemId: string; now?: Date },
+  ): Promise<string | null> {
+    const user = await this.users.findById(userId, tx);
+    if (!user || user.status === 'deleted' || userId === adminId) return null;
+    const roles = await this.users.rolesOf(userId, tx);
+    if (roles.some((r) => STAFF_ROLES.includes(r))) return null;
+    const id = uuidv7();
+    await tx.insert(userSanctions).values({
+      id,
+      userId,
+      kind: 'warn',
+      code: 'off_platform_payment',
+      reason: PAYMENT_STRIKE_REASON,
+      until: null,
+      createdByUserId: adminId,
+      moderationItemId: opts.moderationItemId,
+      ...(opts.now ? { createdAt: opts.now } : {}),
+    });
+    await this.audit.record(
+      {
+        adminUserId: adminId,
+        action: 'users.payment_strike',
+        targetType: 'user',
+        targetId: userId,
+        details: { sanctionId: id, moderationItemId: opts.moderationItemId },
+      },
+      tx,
+    );
+    await this.outbox.add(tx, {
+      aggregateType: 'user',
+      aggregateId: userId,
+      type: PAYMENT_STRIKE_RECORDED_EVENT,
+      payload: { userId, sanctionId: id },
+    });
+    return id;
+  }
+
+  /** Ends a mute or suspension early, lifts a ban, or takes back a payment strike given in error. */
   async lift(adminId: string, sanctionId: string, now: Date = new Date()): Promise<string> {
     return this.db.transaction(async (tx) => {
       const [s] = await tx
@@ -98,7 +147,11 @@ export class SanctionsService {
         .where(eq(userSanctions.id, sanctionId))
         .for('update');
       if (!s) throw AppError.notFound('Sanction');
-      if (s.kind === 'warn' || s.liftedAt || (s.until && s.until.getTime() <= now.getTime()))
+      if (
+        (s.kind === 'warn' && !s.code) ||
+        s.liftedAt ||
+        (s.until && s.until.getTime() <= now.getTime())
+      )
         throw new AppError('CONFLICT', 'Nothing to lift', { reason: 'ALREADY_RESOLVED' });
       await tx
         .update(userSanctions)
@@ -178,6 +231,7 @@ export class SanctionsService {
       liftedAt: r.liftedAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
       byName: r.createdByUserId ? (names.get(r.createdByUserId) ?? null) : null,
+      code: r.code,
     }));
   }
 

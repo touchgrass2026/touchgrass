@@ -90,6 +90,7 @@ function plan(n: number, overrides: Partial<EventDetail> = {}): EventDetail {
     lore: null,
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
     ...overrides,
   };
