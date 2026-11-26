@@ -10,10 +10,13 @@ import {
   type Message,
   type MessagePage,
   type MuteBody,
+  primaryHoldReason,
   ROOMS,
+  screenPlanChat,
   type SendMessageBody,
   TimeIdCursor,
   type ModerationPreview,
+  withPaymentImage,
 } from '@touchgrass/shared';
 import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
@@ -36,6 +39,7 @@ import { type AfterCommit, GONE } from '../moderation/moderation-targets.js';
 import { SanctionsReader } from '../moderation/sanctions-reader.js';
 import { EventSearchService } from '../events/event-search.service.js';
 import { MediaService } from '../media/media.service.js';
+import { isPaymentQrAsset } from '../media/payment-qr.js';
 import { PeopleService } from '../profiles/people.service.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { SocialGraphService } from '../social/graph/social-graph.service.js';
@@ -740,10 +744,16 @@ export class ChatService {
     );
     const mediaIds = rows.flatMap((r) => (r.mediaAssetId && !r.deletedAt ? [r.mediaAssetId] : []));
     const images = new Map<string, MediaVariants | null>();
-    for (const m of await this.media.byIds(mediaIds))
+    const paymentQrs = new Set<string>();
+    for (const m of await this.media.byIds(mediaIds)) {
       images.set(m.id, m.status === 'ready' ? await this.media.urlsFor(m.variantKeys) : null);
+      if (isPaymentQrAsset(m)) paymentQrs.add(m.id);
+    }
     const pollIds = rows.flatMap((r) => (r.pollId ? [r.pollId] : []));
     const pollViews = await this.polls.views(viewerId, pollIds);
+    const planChats = await this.planChatsAmong(
+      rows.flatMap((r) => (r.heldAt && r.senderId === viewerId ? [r.conversationId] : [])),
+    );
     return rows.map((r) => {
       const reply = r.replyToId ? replies.find((x) => x.id === r.replyToId) : undefined;
       const reacts = reactionRows.filter((x) => x.messageId === r.id);
@@ -779,10 +789,34 @@ export class ChatService {
         system: r.system,
         deleted,
         held: r.heldAt !== null && r.senderId === viewerId,
+        // Your own held message says why (D-228): plan chats also hold payment asks.
+        heldReason:
+          r.heldAt !== null && r.senderId === viewerId
+            ? planChats.has(r.conversationId)
+              ? r.mediaAssetId && paymentQrs.has(r.mediaAssetId)
+                ? 'payment'
+                : primaryHoldReason(screenPlanChat(r.body).reasons)
+              : 'content'
+            : null,
         clientId: r.senderId === viewerId ? r.clientId : null,
         createdAt: r.createdAt.toISOString(),
       };
     });
+  }
+
+  /** Which of these conversations are plan group chats (only looked up for held messages). */
+  private async planChatsAmong(conversationIds: string[]): Promise<Set<string>> {
+    if (conversationIds.length === 0) return new Set();
+    const rows = await this.db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          inArray(conversations.id, [...new Set(conversationIds)]),
+          eq(conversations.kind, 'event'),
+        ),
+      );
+    return new Set(rows.map((r) => r.id));
   }
 
   /**
@@ -800,8 +834,10 @@ export class ChatService {
     const a = await this.access(userId, conversationId, now);
     this.assertWritable(a);
     await this.sanctions.assertCanPost(userId, now);
-    const screen = this.moderation.screen(body.kind === 'text' ? body.body : null);
-    const heldAt = screen.flagged ? now : null;
+    const text = body.kind === 'text' ? body.body : null;
+    // Plan group chats also hold payment asks (D-228); direct messages between friends never do.
+    let screen =
+      a.conv.kind === 'event' ? this.moderation.screenPlanChat(text) : this.moderation.screen(text);
     if (body.replyToId && !(await this.messageInConversation(conversationId, body.replyToId)))
       throw new AppError('VALIDATION_FAILED', 'Reply target not found', [
         { path: 'replyToId', message: 'Not in this chat', code: 'custom' },
@@ -814,7 +850,11 @@ export class ChatService {
         ]);
       if (asset.status !== 'ready')
         throw new AppError('MEDIA_NOT_READY', 'Image is still processing');
+      // A UPI / bank QR code in a plan chat is a payment ask too (D-228).
+      if (a.conv.kind === 'event' && isPaymentQrAsset(asset))
+        screen = withPaymentImage(this.moderation.screenPlanChat(text));
     }
+    const heldAt = screen.flagged ? now : null;
     const id = uuidv7();
     const created = await this.db.transaction(async (tx) => {
       const claimed = await tx

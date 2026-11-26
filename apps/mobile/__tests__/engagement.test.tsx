@@ -1209,6 +1209,13 @@ describe('referrals (F-GRW-01)', () => {
     expect(screen.getByTestId('referral-credits')).toHaveTextContent('Free entries: 1');
     expect(screen.getByText(/That number was referred before/)).toBeOnTheScreen();
     expect(screen.getByText('Someone who left')).toBeOnTheScreen();
+    // The reward comes when the friend shows up, not when they sign up (D-228).
+    expect(screen.getByTestId('referral-timing')).toHaveTextContent(
+      'You get your reward when your friend shows up to their first plan.',
+    );
+    expect(
+      screen.getByText(/Joined. Your reward comes when they show up to their first plan/),
+    ).toBeOnTheScreen();
     await act(async () => {
       await fireEvent.press(screen.getByTestId('referral-share'));
     });
@@ -1288,6 +1295,7 @@ function eventFixture(
     lore: { count: 3, canAdd: true },
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
     ...over,
   };

@@ -17,7 +17,11 @@ export class ReferralsHandlers {
 
   registerOn(bus: DomainEventBus): void {
     bus.subscribe(RSVP_CHECKED_IN_EVENT, 'referrals.first-check-in', async (e) => {
-      await this.referrals.onCheckIn(String(e.payload.userId), new Date(e.occurredAt));
+      await this.referrals.onCheckIn(
+        String(e.payload.userId),
+        typeof e.payload.eventId === 'string' ? e.payload.eventId : null,
+        new Date(e.occurredAt),
+      );
     });
     bus.subscribe(REFERRAL_REWARDED_EVENT, 'referrals.push-rewarded', async (e) => {
       const refereeId = String(e.payload.refereeId);

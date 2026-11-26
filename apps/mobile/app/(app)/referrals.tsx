@@ -53,6 +53,8 @@ export default function ReferralsScreen() {
           <Text>• {t('referrals.perCredits', { count: r.perReferral.credits })}</Text>
         ) : null}
         <Text>• {t('referrals.badge')}</Text>
+        {/* Rewards follow real attendance, not sign-ups (D-228). */}
+        <Text testID="referral-timing">{t('referrals.rewardTiming')}</Text>
         <Text tone="muted">{t('referrals.friendGets')}</Text>
       </View>
       <Text variant="heading" accessibilityRole="header">

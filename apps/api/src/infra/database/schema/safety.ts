@@ -103,5 +103,7 @@ export const userSanctions = pgTable('user_sanctions', {
   liftedByUserId: uuid('lifted_by_user_id'),
   createdByUserId: uuid('created_by_user_id'),
   moderationItemId: uuid('moderation_item_id'),
+  /** Set on strikes (D-228): a confirmed report of asking for payment outside TouchGrass. */
+  code: text('code', { enum: ['off_platform_payment'] }),
   ...timestamps,
 });

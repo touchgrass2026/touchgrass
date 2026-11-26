@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { adminApi } from '../../../../lib/admin-session';
 import { canOpen } from '../../../../lib/admin-nav';
 import { NoAccess } from '../../../../lib/admin-ui';
+import { categoryLabel, holdReasonLabels } from '../../../../lib/moderation-labels';
 
 const t = resources.en.admin;
 const fmt = new Intl.DateTimeFormat('en-IN', {
@@ -89,7 +90,9 @@ export default async function ModerationQueuePage({
                   <td className="p-2">{i.source}</td>
                   <td className="p-2">{i.reportCount}</td>
                   <td className="p-2">
-                    {typeof i.details.lastCategory === 'string' ? i.details.lastCategory : ''}
+                    {[categoryLabel(i.details), ...holdReasonLabels(i.details)]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </td>
                   <td className="p-2 whitespace-nowrap">{fmt.format(new Date(i.createdAt))}</td>
                 </tr>

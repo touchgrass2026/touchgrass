@@ -58,8 +58,9 @@ export class ReferralCodesService {
   }
 
   /**
-   * Records who referred a new member at sign-up. Joining on the referrer's own phone earns nothing, and is
-   * decided here because only sign-up knows both devices.
+   * Records who referred a new member at sign-up. Joining on the referrer's own phone or number earns nothing,
+   * and is decided here because only sign-up knows both devices. Nothing is rewarded yet: the referrer earns
+   * when the friend checks in at their first plan.
    */
   async attach(
     tx: Tx,
@@ -68,10 +69,15 @@ export class ReferralCodesService {
       refereeId: string;
       code: string;
       phoneHash: string;
+      /** The referrer's phone (D-228): limits follow the number, not the account. */
+      referrerPhoneHash: string | null;
       deviceId: string;
       sameDeviceAsReferrer: boolean;
     },
   ): Promise<void> {
+    // Your own number can't refer itself, even from a fresh account (D-228).
+    const self = input.referrerPhoneHash !== null && input.referrerPhoneHash === input.phoneHash;
+    const rejectReason = self ? 'SELF_REFERRAL' : input.sameDeviceAsReferrer ? 'SAME_DEVICE' : null;
     await tx
       .insert(referrals)
       .values({
@@ -80,9 +86,10 @@ export class ReferralCodesService {
         refereeId: input.refereeId,
         code: input.code.trim().toUpperCase(),
         refereePhoneHash: input.phoneHash,
+        referrerPhoneHash: input.referrerPhoneHash,
         refereeDeviceId: input.deviceId,
-        status: input.sameDeviceAsReferrer ? 'rejected' : 'pending',
-        rejectReason: input.sameDeviceAsReferrer ? 'SAME_DEVICE' : null,
+        status: rejectReason ? 'rejected' : 'pending',
+        rejectReason,
       })
       .onConflictDoNothing();
   }

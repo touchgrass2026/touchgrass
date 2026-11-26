@@ -4,12 +4,19 @@ import type {
   EventLocationView,
   FriendsGoing,
   EventSummary,
+  HeldReason,
   MediaVariants,
   PersonCard,
   PublicEventView,
   ViewerState,
 } from '@touchgrass/shared';
-import { DEFAULT_REFUND_POLICY, isPopularPlan, LOCALE_DEFAULTS } from '@touchgrass/shared';
+import {
+  DEFAULT_REFUND_POLICY,
+  isPopularPlan,
+  LOCALE_DEFAULTS,
+  primaryHoldReason,
+  screenPlanTexts,
+} from '@touchgrass/shared';
 import { and, count, eq, gt, inArray } from 'drizzle-orm';
 import { AppError } from '../../common/errors/app-error.js';
 import { ENV } from '../../config/config.module.js';
@@ -19,6 +26,7 @@ import { eventJoinRequests, rsvps, waitlistOffers } from '../../infra/database/s
 import { CitiesService } from '../cities/cities.service.js';
 import { InterestsService } from '../interests/interests.service.js';
 import { MediaService } from '../media/media.service.js';
+import { isPaymentQrAsset } from '../media/payment-qr.js';
 import { PeopleService } from '../profiles/people.service.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { SocialGraphService } from '../social/graph/social-graph.service.js';
@@ -219,6 +227,8 @@ export class EventViewService {
       lore,
       crew,
       held: core.held,
+      // Only its hosts see a held plan; tell them why (D-228).
+      heldReason: core.held ? await this.heldReason(core) : null,
       friendsGoing: friends,
       pendingJoinRequests:
         core.visibility === 'approval' && facts.hostRole !== null
@@ -401,6 +411,18 @@ export class EventViewService {
       // Only the detail view looks up the viewer's checkout (one query per plan, not per feed card).
       payment: null,
     };
+  }
+
+  /** Why a held plan is held (D-228): its words, or a payment QR code as its cover. */
+  private async heldReason(core: EventCore): Promise<HeldReason> {
+    const reasons = screenPlanTexts([core.title, core.description], {
+      paid: core.pricePaise > 0,
+    }).reasons;
+    if (reasons.length === 0 && core.coverMediaId) {
+      const cover = await this.media.byId(core.coverMediaId);
+      if (cover && isPaymentQrAsset(cover)) return 'payment';
+    }
+    return primaryHoldReason(reasons);
   }
 
   private async covers(cores: EventCore[]): Promise<Map<string, MediaVariants>> {

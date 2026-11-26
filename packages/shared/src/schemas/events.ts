@@ -5,6 +5,7 @@ import {
   EventStatus,
   EventType,
   EventVisibility,
+  HeldReason,
   HostRole,
   JoinRequestStatus,
   ReliabilityTier,
@@ -333,6 +334,8 @@ export const EventDetail = EventSummary.extend({
   crew: z.object({ id: z.uuid(), name: z.string() }).nullable(),
   /** Held for review by the text filter: only its hosts can see it until then (F-SAF-06). */
   held: z.boolean(),
+  /** Why it is held, for its hosts' explanation (D-228); null when it is not held. */
+  heldReason: HeldReason.nullable().default(null),
   /** Squad members going (D-210), shown near "Who's pulling up". */
   friendsGoing: FriendsGoing.default(NO_FRIENDS_GOING),
 });

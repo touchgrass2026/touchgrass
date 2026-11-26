@@ -119,7 +119,8 @@ test('reports land in the moderation queue, most severe first (F-SOC-05)', async
   await page.goto('/admin/moderation');
   const row = page.getByTestId(`queue-${targetId}`);
   await expect(row).toContainText('critical');
-  await expect(row).toContainText('violence');
+  // The report reason reads in words, like the app's report screen (D-228).
+  await expect(row).toContainText('Violence or threats');
   // Metadata streams in after the body; audit the finished document.
   await expect(page).toHaveTitle(/TouchGrass/);
   const results = await new AxeBuilder({ page })

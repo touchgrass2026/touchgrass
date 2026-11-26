@@ -163,6 +163,7 @@ function completedEvent(
     lore: { count: 3, canAdd: true },
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
     ...over,
   };

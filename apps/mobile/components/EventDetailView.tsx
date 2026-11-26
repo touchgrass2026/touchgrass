@@ -315,7 +315,7 @@ export function EventDetailView({
           ) : null}
           {event.held ? (
             <Text tone="muted" accessibilityRole="alert" testID="event-held">
-              {t('moderation.held')}
+              {t(`moderation.heldReasons.${event.heldReason ?? 'content'}`)}
             </Text>
           ) : null}
           {paid ? (
@@ -849,7 +849,12 @@ export function EventDetailView({
               onPress={() => {
                 router.push({
                   pathname: '/report',
-                  params: { targetType: 'event', targetId: event.id, name: event.title },
+                  params: {
+                    targetType: 'event',
+                    targetId: event.id,
+                    name: event.title,
+                    paid: event.pricePaise > 0 ? '1' : '0',
+                  },
                 });
               }}
             />

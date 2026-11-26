@@ -6,6 +6,7 @@ import { adminApi } from '../../../../../lib/admin-session';
 import { resolveItemAction } from './actions';
 import { canOpen } from '../../../../../lib/admin-nav';
 import { NoAccess } from '../../../../../lib/admin-ui';
+import { categoryLabel, holdReasonLabels } from '../../../../../lib/moderation-labels';
 
 const t = resources.en.admin;
 const input = 'min-h-11 rounded-xl border-2 border-input bg-surface px-3 text-text';
@@ -63,6 +64,18 @@ export default async function ModerationItemPage({
         </dd>
         <dt className="font-semibold">{t.reports}</dt>
         <dd>{item.reportCount}</dd>
+        {categoryLabel(item.details) ? (
+          <>
+            <dt className="font-semibold">{t.category}</dt>
+            <dd data-testid="item-category">{categoryLabel(item.details)}</dd>
+          </>
+        ) : null}
+        {holdReasonLabels(item.details).length > 0 ? (
+          <>
+            <dt className="font-semibold">{t.holdReasonsLabel}</dt>
+            <dd data-testid="item-hold-reasons">{holdReasonLabels(item.details).join(', ')}</dd>
+          </>
+        ) : null}
         <dt className="font-semibold">{t.when}</dt>
         <dd>{fmt.format(new Date(item.createdAt))}</dd>
         {p.owner ? (

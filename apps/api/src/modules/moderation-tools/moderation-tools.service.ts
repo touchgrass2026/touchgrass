@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type {
-  ModerationItemDetail,
-  ModerationPreview,
-  ResolveModerationBody,
+import {
+  isPaymentReportCategory,
+  type ModerationItemDetail,
+  type ModerationPreview,
+  type ResolveModerationBody,
 } from '@touchgrass/shared';
 import { and, eq } from 'drizzle-orm';
 import { AppError } from '../../common/errors/app-error.js';
@@ -18,6 +19,23 @@ import { ProfilesService } from '../profiles/profiles.service.js';
 import { SanctionsService } from './sanctions.service.js';
 
 type ItemRow = typeof moderationItems.$inferSelect;
+
+/**
+ * Pure rule (D-228): taking down content after an "asked to pay" report confirms it, and that is a strike against
+ * whoever posted it. Dismissed reports and automatic flags are not strikes.
+ */
+export function confirmsPaymentStrike(
+  item: Pick<ItemRow, 'source' | 'details'>,
+  outcome: ResolveModerationBody['outcome'],
+): boolean {
+  const category = item.details.lastCategory;
+  return (
+    outcome === 'remove' &&
+    item.source === 'report' &&
+    typeof category === 'string' &&
+    isPaymentReportCategory(category)
+  );
+}
 
 /**
  * Reviewing the moderation queue (F-SAF-05, F-SAF-06): see what was flagged or reported, release it or take it
@@ -132,6 +150,11 @@ export class ModerationToolsService {
               eq(moderationItems.status, 'open'),
             ),
           );
+      if (preview.owner && confirmsPaymentStrike(item, body.outcome))
+        await this.sanctions.recordPaymentStrike(adminId, preview.owner.id, tx, {
+          moderationItemId: itemId,
+          now,
+        });
       if (body.sanction && preview.owner)
         afters.push(
           await this.sanctions.apply(adminId, preview.owner.id, body.sanction, tx, {

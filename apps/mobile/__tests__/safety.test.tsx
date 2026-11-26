@@ -721,6 +721,7 @@ describe('held content (F-SAF-06)', () => {
       system: null,
       deleted: false,
       held: true,
+      heldReason: 'content',
       clientId: null,
       createdAt: '2026-11-03T10:00:00.000Z',
     } satisfies Message;
@@ -739,5 +740,55 @@ describe('held content (F-SAF-06)', () => {
       { fetchFn: api.fetch },
     );
     expect(screen.getByText(/Under review/)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`held-reason-${message.id}`)).toBeNull();
+  });
+
+  it('a plan-chat payment ask says why it is held: payments go through TouchGrass (D-228)', async () => {
+    const message = {
+      id: '0192f3a4-5b6c-7d8e-9f01-0000000f0e03',
+      conversationId: '0192f3a4-5b6c-7d8e-9f01-0000000f0e02',
+      sender: {
+        id: ids.me,
+        displayName: 'Asha',
+        photo: null,
+        verified: false,
+        mutualFriendCount: 0,
+      },
+      mine: true,
+      kind: 'text',
+      body: 'gpay kar do, asha@ybl',
+      image: null,
+      replyTo: null,
+      reactions: [],
+      poll: null,
+      system: null,
+      deleted: false,
+      held: true,
+      heldReason: 'payment',
+      clientId: null,
+      createdAt: '2026-11-03T10:00:00.000Z',
+    } satisfies Message;
+    await renderWithProviders(
+      <MessageBubble
+        message={message}
+        group={false}
+        seenBy={[]}
+        canVote={false}
+        canClosePoll={false}
+        onLongPress={jest.fn()}
+        onRetry={jest.fn()}
+        onVote={jest.fn()}
+        onClosePoll={jest.fn()}
+      />,
+      { fetchFn: api.fetch },
+    );
+    expect(screen.getByText(/Held: pay through TouchGrass/)).toBeOnTheScreen();
+    expect(screen.getByTestId(`held-reason-${message.id}`)).toHaveTextContent(
+      /Payments go through TouchGrass so buyers are protected/,
+    );
+    // The bubble's spoken label carries the short reason too.
+    expect(screen.getByTestId(`msg-${message.id}`)).toHaveAccessibleName(
+      /Held: pay through TouchGrass/,
+    );
   });
 });

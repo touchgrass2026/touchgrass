@@ -184,7 +184,9 @@ export function MessageBubble({
       ? t('chat.failed')
       : t('chat.sending')
     : message?.held
-      ? t('moderation.heldShort')
+      ? message.heldReason === 'payment'
+        ? t('moderation.heldShortPayment')
+        : t('moderation.heldShort')
       : null;
   const sender = group && !mine && message?.sender ? message.sender.displayName : null;
   const reactions = message?.reactions ?? [];
@@ -269,6 +271,17 @@ export function MessageBubble({
           {[time, status].filter(Boolean).join(' · ')}
         </Text>
       </Pressable>
+      {message?.held && message.heldReason === 'payment' ? (
+        // Why it is held, in full, right under your own message (D-228).
+        <Text
+          variant="caption"
+          tone="muted"
+          style={styles.heldNote}
+          testID={`held-reason-${message.id}`}
+        >
+          {t('moderation.heldReasons.payment')}
+        </Text>
+      ) : null}
       {reactions.length > 0 ? (
         <Text variant="caption" style={styles.reactions}>
           {reactions.map((r) => `${r.emoji} ${String(r.count)}`).join('  ')}
@@ -297,6 +310,7 @@ const styles = StyleSheet.create({
   image: { width: 220, height: 220 },
   deleted: { fontStyle: 'italic' },
   reactions: { paddingHorizontal: 8 },
+  heldNote: { maxWidth: '85%' },
   poll: { gap: 2, padding: 12, borderWidth: 1, minWidth: 260 },
   option: { paddingVertical: 6, justifyContent: 'center', gap: 6 },
 });

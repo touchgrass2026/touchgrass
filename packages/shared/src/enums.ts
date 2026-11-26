@@ -51,8 +51,15 @@ export const ReportCategory = z.enum([
   'impersonation',
   'underage',
   'unsafe_event',
+  // "Free means free" (D-228): a free plan's host asked for money; a paid plan's host asked to be paid outside the app.
+  'asked_to_pay',
+  'asked_to_pay_outside',
   'other',
 ]);
+/** Report categories about money changing hands outside TouchGrass; confirmed ones are strikes (D-228). */
+export const PAYMENT_REPORT_CATEGORIES = ['asked_to_pay', 'asked_to_pay_outside'] as const;
+/** Why content is held for review, as shown to its author (D-228). */
+export const HeldReason = z.enum(['content', 'payment', 'contact']);
 export const Severity = z.enum(['low', 'medium', 'high', 'critical']);
 export const ModerationAction = z.enum([
   'warn',
@@ -138,6 +145,7 @@ export type ConversationType = z.infer<typeof ConversationType>;
 export type ReportTargetType = z.infer<typeof ReportTargetType>;
 export type ReportCategory = z.infer<typeof ReportCategory>;
 export type Severity = z.infer<typeof Severity>;
+export type HeldReason = z.infer<typeof HeldReason>;
 export type ModerationAction = z.infer<typeof ModerationAction>;
 export type VerificationStatus = z.infer<typeof VerificationStatus>;
 export type CityLaunchStatus = z.infer<typeof CityLaunchStatus>;
@@ -152,3 +160,24 @@ export type MediaStatus = z.infer<typeof MediaStatus>;
 export type ModerationStatus = z.infer<typeof ModerationStatus>;
 
 export type JoinRequestStatus = z.infer<typeof JoinRequestStatus>;
+
+/**
+ * Which report categories a target offers (D-228). Money asks are about plans, people and what they say; a
+ * free plan offers "Asked me to pay", a paid plan "Asked to pay outside the app".
+ */
+export function reportCategoriesFor(
+  targetType: ReportTargetType,
+  plan: { paid: boolean } | null = null,
+): ReportCategory[] {
+  const money: ReportCategory[] =
+    targetType === 'event'
+      ? [plan?.paid ? 'asked_to_pay_outside' : 'asked_to_pay']
+      : targetType === 'user' || targetType === 'message' || targetType === 'event_comment'
+        ? ['asked_to_pay', 'asked_to_pay_outside']
+        : [];
+  return ReportCategory.options.filter((c) => !isPaymentReportCategory(c) || money.includes(c));
+}
+
+export function isPaymentReportCategory(category: string): boolean {
+  return (PAYMENT_REPORT_CATEGORIES as readonly string[]).includes(category);
+}

@@ -1,9 +1,15 @@
-import { AdminUserDetail, ErrorCode, resources, SanctionKind } from '@touchgrass/shared';
+import {
+  AdminUserDetail,
+  ErrorCode,
+  HostConduct,
+  resources,
+  SanctionKind,
+} from '@touchgrass/shared';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
 import { adminApi } from '../../../../../lib/admin-session';
-import { liftAction, sanctionAction, setVerifiedAction } from './actions';
+import { liftAction, reinstateHostingAction, sanctionAction, setVerifiedAction } from './actions';
 import { canOpen } from '../../../../../lib/admin-nav';
 import { NoAccess } from '../../../../../lib/admin-ui';
 
@@ -26,7 +32,10 @@ export default async function UserDetailPage({
   if (!(await canOpen('users'))) return <NoAccess />;
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   if (!z.uuid().safeParse(id).success) notFound();
-  const u = await adminApi(`/v1/admin/users/${id}`, AdminUserDetail, {}, `/admin/users/${id}`);
+  const [u, conduct] = await Promise.all([
+    adminApi(`/v1/admin/users/${id}`, AdminUserDetail, {}, `/admin/users/${id}`),
+    adminApi(`/v1/admin/hosting/${id}/conduct`, HostConduct, {}, `/admin/users/${id}`),
+  ]);
   const error = ErrorCode.safeParse(sp.error);
   const show360 = await canOpen('customers');
   const now = Date.now();
@@ -82,6 +91,35 @@ export default async function UserDetailPage({
           </>
         ) : null}
       </dl>
+      {conduct.hostingRevoked ? (
+        // Hosting removed after payment strikes (D-228); strikes stay listed below.
+        <form
+          action={reinstateHostingAction}
+          className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4"
+          aria-label={t.reinstateHosting}
+          data-testid="hosting-revoked"
+        >
+          <p className="font-semibold">{t.hostingRevoked}</p>
+          <input type="hidden" name="userId" value={u.id} />
+          <label htmlFor="reinstate-note" className="font-semibold">
+            {t.reinstateNote}
+          </label>
+          <input
+            id="reinstate-note"
+            name="note"
+            required
+            minLength={3}
+            maxLength={500}
+            className={input}
+          />
+          <button
+            type="submit"
+            className="min-h-11 self-start rounded-full border-2 border-border px-6 font-semibold"
+          >
+            {t.reinstateHosting}
+          </button>
+        </form>
+      ) : null}
       <form action={setVerifiedAction}>
         <input type="hidden" name="userId" value={u.id} />
         <input type="hidden" name="verified" value={u.verified ? 'false' : 'true'} />
@@ -99,8 +137,9 @@ export default async function UserDetailPage({
       ) : (
         <ul className="flex flex-col gap-2">
           {u.sanctions.map((s) => {
+            // Payment strikes (D-228) are warnings that can be taken back.
             const running =
-              s.kind !== 'warn' &&
+              (s.kind !== 'warn' || s.code !== null) &&
               s.liftedAt === null &&
               (s.until === null || new Date(s.until).getTime() > now);
             return (
@@ -109,7 +148,9 @@ export default async function UserDetailPage({
                 className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-border p-3"
                 data-testid={`sanction-${s.kind}`}
               >
-                <span className="font-bold">{t.sanctions[s.kind]}</span>
+                <span className="font-bold">
+                  {s.code ? t.holdReasons.payment : t.sanctions[s.kind]}
+                </span>
                 <span>{s.reason}</span>
                 <span className="text-sm text-muted">
                   {fmt.format(new Date(s.createdAt))}

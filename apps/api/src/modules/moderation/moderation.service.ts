@@ -2,9 +2,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   decodeCursor,
   encodeCursor,
+  type HoldScreenResult,
   type ModerationQueueItem,
   type Paginated,
   type Severity,
+  screenPlanChat,
+  screenPlanTexts,
   screenTexts,
   type TextScreenResult,
 } from '@touchgrass/shared';
@@ -48,10 +51,23 @@ export class ModerationService {
     return screenTexts(...texts);
   }
 
+  /**
+   * A plan's title and description (D-228): abuse, plus payment diversion (UPI IDs and links, bank details,
+   * "pay me" asks) and phone numbers. A paid plan may name payment apps, since it sells tickets in the app.
+   */
+  screenPlan(texts: (string | null | undefined)[], opts: { paid: boolean }): HoldScreenResult {
+    return screenPlanTexts(texts, opts);
+  }
+
+  /** A message in a plan's group chat (D-228): abuse and payment asks. Phone numbers are fine there. */
+  screenPlanChat(text: string | null | undefined): HoldScreenResult {
+    return screenPlanChat(text);
+  }
+
   /** Opens an `auto_text` item for content that `screen` flagged; call in the same transaction as the write. */
   async flagText(
     target: { type: ModerationTargetType; id: string; cityId?: string | null },
-    result: TextScreenResult,
+    result: TextScreenResult | HoldScreenResult,
     db: DbOrTx = this.db,
   ): Promise<void> {
     if (!result.flagged || !result.severity) return;
@@ -61,7 +77,10 @@ export class ModerationService {
         targetId: target.id,
         source: 'auto_text',
         severity: result.severity,
-        details: { matches: result.matches },
+        details: {
+          matches: result.matches,
+          ...('reasons' in result ? { reasons: result.reasons } : {}),
+        },
         cityId: target.cityId ?? null,
       },
       db,

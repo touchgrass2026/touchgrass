@@ -147,6 +147,8 @@ export const en = {
   errors: {
     CHAT_UNAVAILABLE: 'This chat is not available right now.',
     LORE_CLOSED: 'This Lore has closed.',
+    HOSTING_REVOKED:
+      'Hosting is paused on your account after repeated reports of asking for payment outside TouchGrass.',
     MESSAGE_REQUEST_PENDING: 'Wait for them to accept your request.',
     VALIDATION_FAILED: 'Some details need fixing.',
     UNAUTHENTICATED: 'Please log in again.',
@@ -927,6 +929,15 @@ export const en = {
     itemTitle: 'Review item',
     flaggedText: 'Flagged text',
     matches: 'Matched words: {{words}}',
+    holdReasonsLabel: 'Why it was held',
+    holdReasons: {
+      content: 'Language',
+      payment: 'Payment outside TouchGrass',
+      contact: 'Phone number',
+    },
+    hostingRevoked: 'Hosting paused (payment strikes)',
+    reinstateHosting: 'Give hosting back',
+    reinstateNote: 'Why hosting is coming back',
     owner: 'Owner',
     alreadyGone: 'This content is already gone.',
     dismiss: 'Nothing wrong (release it)',
@@ -1058,6 +1069,8 @@ export const en = {
       impersonation: 'Pretending to be someone else',
       underage: 'Might be under 18',
       unsafe_event: 'Unsafe event',
+      asked_to_pay: 'Asked me to pay',
+      asked_to_pay_outside: 'Asked to pay outside the app',
       other: 'Something else',
     },
     detailsLabel: 'Tell us more (optional)',
@@ -2217,6 +2230,23 @@ export const en = {
     readyPushBody: 'See where you went and who you met.',
     shareFailed: "Couldn't share right now.",
   },
+  hostRules: {
+    title: 'One rule before you host',
+    rule: 'No payments outside TouchGrass.',
+    body: "Don't ask anyone to pay you by UPI, cash, bank transfer or any other way outside the app. Free plans stay free; paid plans sell tickets in TouchGrass, so buyers are protected and you get paid on time.",
+    consequence: 'Confirmed reports are strikes. Two strikes in a year and hosting is paused.',
+    agree: 'I agree',
+    agreeHint: 'Agree to the rule and publish your plan',
+    later: 'Not now',
+    revoked:
+      'Hosting is paused on your account after repeated reports of asking for payment outside TouchGrass. Write to us from Help if you think this is a mistake.',
+    strikePush: 'Strike: payment outside TouchGrass',
+    strikePushBody:
+      'A report that you asked for payment outside the app was confirmed. Another one pauses hosting.',
+    revokedPush: 'Hosting paused',
+    revokedPushBody:
+      'After repeated reports of asking for payment outside TouchGrass, you can no longer host plans.',
+  },
   referrals: {
     landingCode:
       "Your friend's code: {{code}}. Enter it when you sign up to skip the invite waitlist.",
@@ -2231,6 +2261,7 @@ export const en = {
     perCredits_other: '{{count}} free entries to paid plans',
     badge: 'the Plug badge',
     friendGets: 'Your friend skips the invite waitlist.',
+    rewardTiming: 'You get your reward when your friend shows up to their first plan.',
     balance: 'Your rewards',
     passes: 'Priority passes: {{count}}',
     credits: 'Free entries: {{count}}',
@@ -2238,7 +2269,7 @@ export const en = {
     friends: 'Friends you invited',
     empty: 'No one yet. Share your link to invite friends.',
     status: {
-      pending: "Joined, hasn't checked in yet",
+      pending: 'Joined. Your reward comes when they show up to their first plan',
       rewarded: 'Rewarded',
       rejected: 'No reward',
     },
@@ -2247,6 +2278,7 @@ export const en = {
       DUPLICATE_DEVICE: 'That phone was referred before.',
       SAME_DEVICE: 'Joined on your phone.',
       LIMIT_REACHED: "You've hit the referral limit.",
+      SELF_REFERRAL: 'That was your own number.',
     },
     usePass: 'Use a priority pass',
     passUsed: "You're #{{position}} on the waitlist now",
@@ -2438,6 +2470,14 @@ export const en = {
     held: 'Only you can see this until our team checks it.',
     heldShort: 'Under review',
     heldNotice: 'Saved. Our team checks it before others can see it.',
+    heldReasons: {
+      content: 'Only you can see this until our team checks it.',
+      payment:
+        'Only you can see this for now: it looks like it asks people to pay outside TouchGrass. Payments go through TouchGrass so buyers are protected. Our team will check it.',
+      contact:
+        "Only you can see this for now: plan details can't include phone numbers. People reach you in the plan chat. Our team will check it.",
+    },
+    heldShortPayment: 'Held: pay through TouchGrass',
     warnPush: 'A note from the TouchGrass team',
     warnPushBody: 'We reviewed your account: {{reason}}',
     mutePush: "You've been muted",

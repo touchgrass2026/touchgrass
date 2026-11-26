@@ -104,6 +104,7 @@ function eventFixture(
     lore: null,
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
     ...overrides,
   };
@@ -266,6 +267,47 @@ describe('Plans tab', () => {
 });
 
 describe('Event detail', () => {
+  it('a held plan tells its host why: payments go through TouchGrass, or no phone numbers (D-228)', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture(
+        { held: true, heldReason: 'payment' },
+        { isHost: true, hostRole: 'host', rsvp: 'going', canRsvp: false },
+      ),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('event-held')).toHaveTextContent(
+      /asks people to pay outside TouchGrass. Payments go through TouchGrass so buyers are protected/,
+    );
+  });
+
+  it('a held plan with a phone number says so', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture(
+        { held: true, heldReason: 'contact' },
+        { isHost: true, hostRole: 'host', rsvp: 'going', canRsvp: false },
+      ),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('event-held')).toHaveTextContent(
+      /plan details can't include phone numbers/,
+    );
+  });
+
+  it('reporting a paid plan offers "Asked to pay outside the app" (D-228)', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture({ pricePaise: 25_000 }),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Report' }));
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/report',
+      params: { targetType: 'event', targetId: EVENT_ID, name: 'Sunset frisbee', paid: '1' },
+    });
+  });
+
   it('shows the plan card, then Pull up, then the plan chat, then the details', async () => {
     const going = eventFixture({}, { rsvp: 'going', canRsvp: false });
     api
@@ -747,6 +789,87 @@ describe('Plot flow (F-EVT-01/02)', () => {
     );
     expect(api.callsTo('POST', '/v1/events')).toHaveLength(1);
     expect(api.callsTo('POST', `/v1/events/${EVENT_ID}/invites`)).toHaveLength(1);
+  });
+
+  it('asks a first-time host to agree to "No payments outside TouchGrass" once, then publishes (D-228)', async () => {
+    let acknowledged = false;
+    api
+      .on('GET', '/v1/host/conduct', () => ({
+        status: 200,
+        body: {
+          rulesAcknowledged: acknowledged,
+          acknowledgedAt: acknowledged ? '2026-11-03T10:00:00.000Z' : null,
+          hostingRevoked: false,
+          strikes: 0,
+          strikeLimit: 2,
+        },
+      }))
+      .on('POST', '/v1/host/rules/ack', () => {
+        acknowledged = true;
+        return {
+          status: 201,
+          body: {
+            rulesAcknowledged: true,
+            acknowledgedAt: '2026-11-03T10:00:00.000Z',
+            hostingRevoked: false,
+            strikes: 0,
+            strikeLimit: 2,
+          },
+        };
+      });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
+    await pickCategory(0);
+    await pickWhen();
+    await fireEvent.press(screen.getByTestId('plot-where'));
+    await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
+    await fireEvent.press(await screen.findByTestId('place-fx_lake'));
+    await screen.findByTestId('plot-picked');
+    await waitFor(() => expect(api.callsTo('GET', '/v1/host/conduct')).toHaveLength(1));
+
+    // "Not now" keeps the draft and publishes nothing.
+    await fireEvent.press(screen.getByTestId('plot-submit'));
+    expect(await screen.findByTestId('host-rules-sheet')).toBeOnTheScreen();
+    expect(screen.getByText('No payments outside TouchGrass.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('host-rules-later'));
+    expect(screen.queryByTestId('host-rules-sheet')).toBeNull();
+    expect(api.callsTo('POST', '/v1/events')).toHaveLength(0);
+
+    await fireEvent.press(screen.getByTestId('plot-submit'));
+    const agree = await screen.findByRole('button', { name: 'I agree' });
+    expect(agree).toHaveProp('accessibilityHint', 'Agree to the rule and publish your plan');
+    await fireEvent.press(agree);
+    await waitFor(() => expect(api.callsTo('POST', '/v1/events')).toHaveLength(1));
+    expect(api.callsTo('POST', '/v1/host/rules/ack')[0]?.body).toEqual({
+      rule: 'no_off_platform_payments',
+    });
+    expect(screen.queryByTestId('host-rules-sheet')).toBeNull();
+  });
+
+  it('a host who already agreed publishes straight away (D-228)', async () => {
+    api.on('GET', '/v1/host/conduct', {
+      status: 200,
+      body: {
+        rulesAcknowledged: true,
+        acknowledgedAt: '2026-11-01T10:00:00.000Z',
+        hostingRevoked: false,
+        strikes: 0,
+        strikeLimit: 2,
+      },
+    });
+    await renderWithProviders(<PlotScreen />, { fetchFn: api.fetch });
+    await fireEvent.changeText(screen.getByTestId('plot-title'), 'Sunset frisbee');
+    await pickCategory(0);
+    await pickWhen();
+    await fireEvent.press(screen.getByTestId('plot-where'));
+    await fireEvent.changeText(screen.getByTestId('plot-place-search'), 'lake');
+    await fireEvent.press(await screen.findByTestId('place-fx_lake'));
+    await screen.findByTestId('plot-picked');
+    await waitFor(() => expect(api.callsTo('GET', '/v1/host/conduct')).toHaveLength(1));
+    await fireEvent.press(screen.getByTestId('plot-submit'));
+    await waitFor(() => expect(api.callsTo('POST', '/v1/events')).toHaveLength(1));
+    expect(screen.queryByTestId('host-rules-sheet')).toBeNull();
+    expect(api.callsTo('POST', '/v1/host/rules/ack')).toHaveLength(0);
   });
 
   it('a retried submit reuses the same idempotency key, so it cannot create a second plan', async () => {

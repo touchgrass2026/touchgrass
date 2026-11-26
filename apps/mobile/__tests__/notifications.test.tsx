@@ -115,6 +115,7 @@ function eventDetail(over: Partial<EventDetail> = {}): EventDetail {
     lore: null,
     crew: null,
     held: false,
+    heldReason: null,
     friendsGoing: { people: [], total: 0 },
     ...over,
   };

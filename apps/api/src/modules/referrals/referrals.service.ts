@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { MyReferrals, ReferralBalance, ReferralRejectReason } from '@touchgrass/shared';
-import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { AppError } from '../../common/errors/app-error.js';
 import { ENV } from '../../config/config.module.js';
@@ -13,6 +13,7 @@ import {
   referrals,
 } from '../../infra/database/schema/index.js';
 import { OutboxService } from '../../infra/outbox/outbox.service.js';
+import { EventStore } from '../events/event-store.service.js';
 import { RsvpService } from '../events/rsvp.service.js';
 import type { CreditReservation } from '../payments/payment-credits.js';
 import { AppSettingsService } from '../platform/app-settings.service.js';
@@ -23,7 +24,7 @@ type ReferralRow = typeof referrals.$inferSelect;
 
 /** Why a pending referral earns nothing, given what was already rewarded (pure, unit-tested). */
 export function rejectReason(
-  r: Pick<ReferralRow, 'refereePhoneHash' | 'refereeDeviceId'>,
+  r: Pick<ReferralRow, 'refereePhoneHash' | 'refereeDeviceId' | 'referrerPhoneHash'>,
   ctx: {
     phoneRewarded: boolean;
     deviceRewarded: boolean;
@@ -31,10 +32,24 @@ export function rejectReason(
     maxRewarded: number;
   },
 ): ReferralRejectReason | null {
+  if (r.referrerPhoneHash !== null && r.referrerPhoneHash === r.refereePhoneHash)
+    return 'SELF_REFERRAL';
   if (ctx.phoneRewarded) return 'DUPLICATE_PHONE';
   if (r.refereeDeviceId && ctx.deviceRewarded) return 'DUPLICATE_DEVICE';
   if (ctx.referrerRewarded >= ctx.maxRewarded) return 'LIMIT_REACHED';
   return null;
+}
+
+/**
+ * Real attendance (D-228): a check-in counts for a referral only at a plan neither of them hosts, so a referrer
+ * can't check their friend in at their own plan to collect. Such a check-in leaves the referral pending.
+ */
+export function countsAsAttendance(
+  hostIds: readonly string[],
+  referrerId: string,
+  refereeId: string,
+): boolean {
+  return !hostIds.includes(referrerId) && !hostIds.includes(refereeId);
 }
 
 /**
@@ -52,6 +67,7 @@ export class ReferralsService {
     private readonly settings: AppSettingsService,
     private readonly people: PeopleService,
     private readonly rsvp: RsvpService,
+    private readonly store: EventStore,
   ) {}
 
   async balance(userId: string): Promise<ReferralBalance> {
@@ -101,13 +117,17 @@ export class ReferralsService {
   }
 
   /**
-   * A referred person checked in. Their pending referral is settled once: rejected by the fraud checks, or
-   * rewarded. The unique indexes on rewarded phone/device back the checks up under concurrency.
+   * A referred person checked in. Nothing is earned at sign-up: the referrer is rewarded only when the friend
+   * actually shows up at their first plan (one neither of them hosts). The pending referral is settled once:
+   * rejected by the fraud checks, or rewarded. The unique indexes on rewarded phone/device back the checks up
+   * under concurrency, and the lifetime limit follows the referrer's phone number (D-228).
    */
   async onCheckIn(
     refereeId: string,
+    eventId: string | null,
     now: Date = new Date(),
-  ): Promise<'rewarded' | 'rejected' | null> {
+  ): Promise<'rewarded' | 'rejected' | 'not_counted' | null> {
+    const hostIds = eventId ? (await this.store.hosts(eventId)).map((h) => h.userId) : [];
     return this.db.transaction(async (tx) => {
       const [r] = await tx
         .select()
@@ -115,6 +135,7 @@ export class ReferralsService {
         .where(and(eq(referrals.refereeId, refereeId), eq(referrals.status, 'pending')))
         .for('update');
       if (!r?.referrerId) return null;
+      if (!countsAsAttendance(hostIds, r.referrerId, refereeId)) return 'not_counted';
       const all = await this.settings.all(tx);
       const [phone, device, count] = await Promise.all([
         tx.$count(
@@ -132,7 +153,15 @@ export class ReferralsService {
           : Promise.resolve(0),
         tx.$count(
           referrals,
-          and(eq(referrals.referrerId, r.referrerId), eq(referrals.status, 'rewarded')),
+          and(
+            r.referrerPhoneHash
+              ? or(
+                  eq(referrals.referrerPhoneHash, r.referrerPhoneHash),
+                  eq(referrals.referrerId, r.referrerId),
+                )
+              : eq(referrals.referrerId, r.referrerId),
+            eq(referrals.status, 'rewarded'),
+          ),
         ),
       ]);
       const reason = rejectReason(r, {

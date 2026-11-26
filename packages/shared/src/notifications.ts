@@ -309,6 +309,21 @@ export const NOTIFICATION_TEMPLATES = {
     body: 'moderation.removedPushBody',
     link: 'safety',
   },
+  // ---------- host conduct (D-228) ----------
+  payment_strike: {
+    category: 'safety',
+    title: 'hostRules.strikePush',
+    body: 'hostRules.strikePushBody',
+    link: 'safety',
+    urgent: true,
+  },
+  hosting_revoked: {
+    category: 'safety',
+    title: 'hostRules.revokedPush',
+    body: 'hostRules.revokedPushBody',
+    link: 'safety',
+    urgent: true,
+  },
   // ---------- cities (F-GRW-03) ----------
   city_launched: {
     category: 'event_updates',
