@@ -21,13 +21,29 @@ The code, infrastructure-as-code, tests and docs are complete (see `FEATURES.md`
 - [ ] MSG91 account, KYC, credits; put `MSG91_AUTH_KEY`, `MSG91_OTP_TEMPLATE_ID`, `MSG91_SMS_FLOW_ID` in the providers secret.
 - [ ] Test delivery to Jio, Airtel, Vi and BSNL numbers from production.
 
-## 3. Payments (Razorpay)
+## 3. Payments (Razorpay or PayU)
+
+Production runs free plans only (`PAYMENTS_PROVIDER=disabled`, D-165) until this section is done. Pick **one** gateway. Everything money-related (escrow payouts from check-ins, refunds, ticket transfers, paid +1s, deposits, disputes; D-229) goes through the gateway port, so the choice only changes the adapter and the settings below.
+
+**Razorpay (implemented):**
 
 - [ ] ⏱ Razorpay account and **KYC** (business documents, bank account, website with the policy pages above).
-- [ ] ⏱ Enable **Route** (linked accounts) for host payouts; hosts complete their own KYC from the hosting dashboard.
+- [ ] ⏱ Enable **Route** (linked accounts, the marketplace product) for split host payouts; hosts complete their own KYC from the hosting dashboard. Ask Razorpay to allow **direct transfers** from your balance too (credit-paid seats and admin-adjusted payouts use them).
 - [ ] Live API keys → `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` in the providers secret.
-- [ ] Webhook at `https://api.<domain>/v1/webhooks/razorpay` with a secret you choose → `RAZORPAY_WEBHOOK_SECRET`; subscribe to payment, refund, transfer and account events.
-- [ ] One real ₹1 plan end to end in production: pay, receipt email, refund, host transfer.
+- [ ] Webhook at `https://api.<domain>/v1/webhooks/payments` (the older `/v1/webhooks/razorpay` works too) with a secret you choose → `RAZORPAY_WEBHOOK_SECRET`; subscribe to `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`, `refund.failed`, `transfer.processed`, `transfer.failed`, `account.activated`, `account.needs_clarification`, `account.rejected`.
+- [ ] Switch on: `PAYMENTS_PROVIDER=razorpay` (and leave `PAYMENTS_FAKE_AUTO_SETTLE` unset) in `infra/railway/production-variables.env`; set the platform fee and payout delay in Admin → Settings.
+
+**PayU (not implemented yet; a developer task before launch):**
+
+- [ ] ⏱ PayU business account and **KYC**; enable **split settlements / marketplace** (PayU "Split Payments") so each host gets a child merchant account with their own KYC.
+- [ ] A developer adds `adapters/payments/payu.payments.ts` implementing the `PaymentsGateway` port (orders via PayU's hash-based payment request, refunds, split settlement to the host's child account, `webhookHeaders` and signature check for PayU's callback hash) plus a fake-compatible test, adds `payu` to `PAYMENTS_PROVIDER`, and maps its callbacks onto the same webhook types. Nothing else in the app changes.
+- [ ] Live merchant key and salt in the providers secret (names chosen by that adapter); webhook / callback URL `https://api.<domain>/v1/webhooks/payments`.
+
+**Either gateway:**
+
+- [ ] Decide whether to switch on `refundable_deposits` (Admin → Feature flags, default off). Forfeited deposits stay with the platform (D-229).
+- [ ] Brief support: held payouts and payment disputes are answered in Admin → Payments (releasing, adjusting and refunding need the `admin` role).
+- [ ] One real ₹1 plan end to end in production: pay, receipt email, check-in, payout transfer after the plan, a refund, a ticket transfer and a paid +1 claimed by a second account.
 
 ## 4. Other provider accounts and keys
 

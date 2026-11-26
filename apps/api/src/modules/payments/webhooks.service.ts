@@ -6,14 +6,20 @@ import {
   type PaymentWebhookEvent,
 } from '../../adapters/payments/payments.port.js';
 import { AppError } from '../../common/errors/app-error.js';
-import { DB, type Database } from '../../infra/database/database.module.js';
+import { DB, type Database, type Tx } from '../../infra/database/database.module.js';
 import { payments, paymentWebhookEvents } from '../../infra/database/schema/index.js';
 import { QUEUE_REGISTRY, type QueueRegistry } from '../../infra/queue/queue.module.js';
 import { QUEUES } from '../../infra/queue/queues.js';
 import { RsvpService } from '../events/rsvp.service.js';
-import { nextReceiptNumber, PaymentsService } from './payments.service.js';
+import {
+  nextReceiptNumber,
+  type PaymentRow,
+  PaymentsService,
+  TICKET_KINDS,
+} from './payments.service.js';
 import { PayoutsService } from './payouts.service.js';
 import { RefundsService } from './refunds.service.js';
+import { TransfersService } from './transfers.service.js';
 
 const MAX_ATTEMPTS = 10;
 const STALE_MS = 2 * 60_000;
@@ -35,6 +41,7 @@ export class WebhooksService {
     private readonly refunds: RefundsService,
     private readonly payouts: PayoutsService,
     private readonly rsvp: RsvpService,
+    private readonly transfers: TransfersService,
   ) {}
 
   /** Returns false for a duplicate delivery (already recorded). Throws on a bad signature. */
@@ -140,9 +147,35 @@ export class WebhooksService {
     }
   }
 
+  /** Records the verified payment on its row (once) and queues the receipt. Null if already settled. */
+  private async markCaptured(
+    tx: Tx,
+    p: PaymentRow,
+    e: PaymentWebhookEvent,
+    now: Date,
+  ): Promise<PaymentRow | null> {
+    const [locked] = await tx.select().from(payments).where(eq(payments.id, p.id)).for('update');
+    if (!locked || !['created', 'failed', 'expired'].includes(locked.status)) return null;
+    const [captured] = await tx
+      .update(payments)
+      .set({
+        status: 'captured',
+        providerPaymentId: e.providerPaymentId ?? null,
+        method: e.method ?? null,
+        capturedAt: now,
+        receiptNumber: await nextReceiptNumber(tx, now),
+      })
+      .where(eq(payments.id, p.id))
+      .returning();
+    if (!captured) return null;
+    await this.payments.announceCaptured(tx, captured);
+    return captured;
+  }
+
   /**
    * Money arrived. The held seat becomes a ticket; a lapsed hold still gets a seat if one is free; otherwise
-   * (or for a second payment for the same plan) the money goes straight back.
+   * (or for a second payment for the same seat) the money goes straight back. A +1 seat gets its claim link, and
+   * a resale moves the seller's seat to the buyer (D-229).
    */
   private async captured(e: PaymentWebhookEvent, now: Date): Promise<boolean> {
     const orderId = e.providerOrderId;
@@ -154,33 +187,45 @@ export class WebhooksService {
       throw new Error(
         `Amount mismatch on ${p.id}: expected ${String(p.amountPaise)}, got ${String(e.amountPaise)}`,
       );
-    const finish = async (
-      tx: Parameters<Parameters<RsvpService['confirmPaid']>[2]>[0],
-      seated: boolean,
-      alreadySeated = false,
-    ) => {
-      const [locked] = await tx.select().from(payments).where(eq(payments.id, p.id)).for('update');
-      if (!locked || !['created', 'failed', 'expired'].includes(locked.status)) return;
-      const [captured] = await tx
-        .update(payments)
-        .set({
-          status: 'captured',
-          providerPaymentId: e.providerPaymentId ?? null,
-          method: e.method ?? null,
-          capturedAt: now,
-          receiptNumber: await nextReceiptNumber(tx, now),
-        })
-        .where(eq(payments.id, p.id))
-        .returning();
+    const capture = (tx: Tx) => this.markCaptured(tx, p, e, now);
+    if (!p.userId) {
+      // The buyer erased their account mid-checkout: record the money and return it.
+      await this.db.transaction(async (tx) => {
+        const captured = await capture(tx);
+        if (captured)
+          await this.refunds.request(tx, captured, captured.amountPaise, 'HOLD_EXPIRED');
+      });
+      return true;
+    }
+    const buyerId = p.userId;
+    if (p.kind === 'resale') {
+      await this.transfers.completeResale(p, capture, now);
+      return true;
+    }
+    if (p.kind === 'plus_one') {
+      const claimHash = p.claimTokenHash;
+      const onSettled = async (tx: Tx, seated: boolean) => {
+        const captured = await capture(tx);
+        if (captured && !seated)
+          await this.refunds.request(tx, captured, captured.amountPaise, 'HOLD_EXPIRED');
+      };
+      if (claimHash)
+        await this.rsvp.confirmGuestSeat(p.eventId, buyerId, claimHash, onSettled, now);
+      else await this.db.transaction((tx) => onSettled(tx, false));
+      return true;
+    }
+    const sameKind: readonly string[] = p.kind === 'deposit' ? ['deposit'] : TICKET_KINDS;
+    const finish = async (tx: Tx, seated: boolean, alreadySeated = false) => {
+      const captured = await capture(tx);
       if (!captured) return;
-      await this.payments.announceCaptured(tx, captured);
       const others = await tx
         .select({ id: payments.id })
         .from(payments)
         .where(
           and(
             eq(payments.eventId, p.eventId),
-            p.userId ? eq(payments.userId, p.userId) : sql`false`,
+            eq(payments.holderUserId, buyerId),
+            inArray(payments.kind, [...sameKind] as PaymentRow['kind'][]),
             inArray(payments.status, ['captured', 'partially_refunded']),
             isNull(payments.ticketReleasedAt),
             sql`${payments.id} <> ${p.id}`,
@@ -193,12 +238,7 @@ export class WebhooksService {
       else if (!seated)
         await this.refunds.request(tx, captured, captured.amountPaise, 'HOLD_EXPIRED');
     };
-    if (!p.userId) {
-      // The buyer erased their account mid-checkout: record the money and return it.
-      await this.db.transaction((tx) => finish(tx, false));
-      return true;
-    }
-    await this.rsvp.confirmPaid(p.eventId, p.userId, finish, now);
+    await this.rsvp.confirmPaid(p.eventId, buyerId, finish, now);
     return true;
   }
 

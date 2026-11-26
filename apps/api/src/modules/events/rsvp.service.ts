@@ -8,7 +8,7 @@ import type {
   RsvpResult,
 } from '@touchgrass/shared';
 import { genderOnly, isPopularPlan } from '@touchgrass/shared';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { randomToken } from '../../common/auth/hashing.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -37,6 +37,7 @@ import {
   rsvpEligibility,
 } from './event.policy.js';
 import { type EventCore, EventStore } from './event-store.service.js';
+import { EventHooks } from './event-hooks.js';
 import { EventViewService } from './event-view.service.js';
 import { PlusOneClaimService, RSVP_GOING_EVENT } from './plus-one/plus-one-claim.service.js';
 import { eventLockKey, WaitlistService } from './waitlist.service.js';
@@ -96,6 +97,7 @@ export class RsvpService {
     private readonly profiles: ProfilesService,
     private readonly plusOnes: PlusOneClaimService,
     private readonly reliability: ReliabilityReader,
+    private readonly hooks: EventHooks,
   ) {}
 
   async rsvp(
@@ -109,6 +111,7 @@ export class RsvpService {
     if (!eligibility.ok) throw REASON_ERRORS[eligibility.reason];
     let outcome: Outcome;
     if (body.status === 'going' && core.pricePaise > 0) throw PAYMENT_REQUIRED;
+    if (body.status === 'going') await this.assertNoDeposit(core, facts);
     if (body.status === 'interested') {
       outcome = await this.markInterested(ctx, core, now);
     } else {
@@ -148,6 +151,7 @@ export class RsvpService {
     const eligibility = rsvpEligibility(facts, core, now);
     if (!eligibility.ok) throw REASON_ERRORS[eligibility.reason];
     if (core.pricePaise > 0) throw PAYMENT_REQUIRED;
+    await this.assertNoDeposit(core, facts);
     const outcome = await this.going(
       ctx,
       core,
@@ -159,6 +163,17 @@ export class RsvpService {
       plusOneClaimUrl: null,
       event: await this.detail(ctx, eventId),
     };
+  }
+
+  /** A popular free plan may ask for a refundable deposit (D-229): then pulling up goes through checkout. */
+  private async assertNoDeposit(core: EventCore, facts: EventViewerFacts): Promise<void> {
+    if (core.pricePaise > 0 || holdsSeat(facts.rsvp)) return;
+    const amountPaise = await this.hooks.depositRequired(core.id);
+    if (amountPaise !== null)
+      throw new AppError('NOT_ELIGIBLE', 'This plan asks for a refundable deposit', {
+        reason: 'DEPOSIT_REQUIRED',
+        amountPaise,
+      });
   }
 
   /** Fresh detail after a change; the viewer context (gender, blocks, squad) cannot have changed, so reuse it. */
@@ -510,14 +525,19 @@ export class RsvpService {
   async holdForCheckout(
     userId: string,
     eventId: string,
-    opts: { fromOffer: boolean },
+    opts: { fromOffer: boolean; deposit?: boolean },
     record: InSeatTx,
     now: Date = new Date(),
   ): Promise<'held' | 'waitlisted'> {
     const { core, ctx, facts } = await this.access.visibleOrThrow(userId, eventId);
     const eligibility = rsvpEligibility(facts, core, now);
     if (!eligibility.ok) throw REASON_ERRORS[eligibility.reason];
-    if (core.pricePaise === 0)
+    // A deposit (D-229) holds a seat on a free plan the way a ticket holds one on a paid plan.
+    if (opts.deposit === true && core.pricePaise > 0)
+      throw new AppError('NOT_ELIGIBLE', 'Paid plans take tickets, not deposits', {
+        reason: 'NOT_PAID_PLAN',
+      });
+    if (opts.deposit !== true && core.pricePaise === 0)
       throw new AppError('CONFLICT', 'This plan is free: just pull up', { reason: 'FREE' });
     const outcome = await this.going(
       ctx,
@@ -594,6 +614,275 @@ export class RsvpService {
         if (released.length > 0 && locked) await this.waitlist.promote(tx, locked, now);
       }),
     );
+  }
+
+  // ---------- paid +1 (D-229): one more seat on the buyer's row, claimed by link like a guest +1 ----------
+
+  /**
+   * Reserves a guest seat on the buyer's own RSVP while they pay (no claim link yet), and records the payment in
+   * the same transaction. Guest seats cannot join women-only or men-only plans.
+   */
+  async holdGuestSeat(
+    userId: string,
+    eventId: string,
+    record: InSeatTx,
+    now: Date = new Date(),
+  ): Promise<void> {
+    const { core } = await this.access.visibleOrThrow(userId, eventId);
+    if (genderOnly(core.visibility) !== null)
+      throw genderOnlyError(core.visibility, 'Guest +1s cannot join women-only or men-only plans');
+    await withRedisLock(this.redis, eventLockKey(eventId), () =>
+      this.db.transaction(async (tx) => {
+        const locked = await this.store.core(eventId, tx, { lock: true });
+        if (!locked || locked.status !== 'published' || now.getTime() >= locked.endsAt.getTime())
+          throw new AppError('EVENT_CLOSED', 'This plan is not taking RSVPs');
+        const [mine] = await tx
+          .select({ status: rsvps.status, guestSeats: rsvps.guestSeats })
+          .from(rsvps)
+          .where(and(eq(rsvps.eventId, eventId), eq(rsvps.userId, userId)))
+          .limit(1);
+        if (mine?.status !== 'going')
+          throw new AppError('NOT_ELIGIBLE', 'Pull up first', { reason: 'NOT_GOING' });
+        if (mine.guestSeats > 0)
+          throw new AppError('CONFLICT', 'You already have a +1 on this plan', {
+            reason: 'ALREADY_HAS_PLUS_ONE',
+          });
+        const counts = await this.store.seatCounts(eventId, tx);
+        const free = await this.waitlist.freeForNewcomer(
+          tx,
+          locked,
+          counts.seats,
+          counts.waitlisted,
+          now,
+        );
+        if (free < 1 || !balancedAllows(locked, counts.byBucket.other, 1))
+          throw new AppError('EVENT_FULL', 'No spot left for a +1', { spotsLeft: free });
+        await tx
+          .update(rsvps)
+          .set({ guestSeats: 1, guestClaimTokenHash: null })
+          .where(and(eq(rsvps.eventId, eventId), eq(rsvps.userId, userId)));
+        await record(tx, locked);
+      }),
+    );
+  }
+
+  /**
+   * The +1 payment was verified: the reserved guest seat gets its claim link. If the reservation lapsed, the seat
+   * comes back when one is free; otherwise `onSettled` hears `false` (and the payment is refunded). Idempotent.
+   */
+  async confirmGuestSeat(
+    eventId: string,
+    userId: string,
+    claimHash: string,
+    onSettled: (tx: Tx, seated: boolean) => Promise<void>,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    return withRedisLock(this.redis, eventLockKey(eventId), () =>
+      this.db.transaction(async (tx) => {
+        const locked = await this.store.core(eventId, tx, { lock: true });
+        if (!locked) throw AppError.notFound('Event');
+        const [mine] = await tx
+          .select({
+            status: rsvps.status,
+            guestSeats: rsvps.guestSeats,
+            hash: rsvps.guestClaimTokenHash,
+          })
+          .from(rsvps)
+          .where(and(eq(rsvps.eventId, eventId), eq(rsvps.userId, userId)))
+          .limit(1);
+        let seated = false;
+        if (mine?.status === 'going' && mine.guestSeats === 1)
+          seated = mine.hash === null || mine.hash === claimHash;
+        else if (
+          mine?.status === 'going' &&
+          mine.guestSeats === 0 &&
+          locked.status === 'published' &&
+          now < locked.endsAt
+        ) {
+          const counts = await this.store.seatCounts(eventId, tx);
+          const free = await this.waitlist.freeForNewcomer(
+            tx,
+            locked,
+            counts.seats,
+            counts.waitlisted,
+            now,
+          );
+          seated = free >= 1 && balancedAllows(locked, counts.byBucket.other, 1);
+        }
+        if (seated)
+          await tx
+            .update(rsvps)
+            .set({ guestSeats: 1, guestClaimTokenHash: claimHash })
+            .where(and(eq(rsvps.eventId, eventId), eq(rsvps.userId, userId)));
+        await onSettled(tx, seated);
+        return seated;
+      }),
+    );
+  }
+
+  /** The +1 checkout was abandoned or lapsed: the reserved (unpaid) guest seat goes back. Idempotent. */
+  async releaseGuestHold(
+    eventId: string,
+    userId: string,
+    onReleased: (tx: Tx) => Promise<void>,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await withRedisLock(this.redis, eventLockKey(eventId), () =>
+      this.db.transaction(async (tx) => {
+        const locked = await this.store.core(eventId, tx, { lock: true });
+        const released = await tx
+          .update(rsvps)
+          .set({ guestSeats: 0 })
+          .where(
+            and(
+              eq(rsvps.eventId, eventId),
+              eq(rsvps.userId, userId),
+              eq(rsvps.guestSeats, 1),
+              isNull(rsvps.guestClaimTokenHash),
+            ),
+          )
+          .returning({ userId: rsvps.userId });
+        await onReleased(tx);
+        if (released.length > 0 && locked) await this.waitlist.promote(tx, locked, now);
+      }),
+    );
+  }
+
+  /** A fresh claim link for an unclaimed guest seat (the old one stops working). */
+  async replaceGuestClaim(
+    eventId: string,
+    userId: string,
+    oldHash: string,
+    newHash: string,
+    tx: Tx,
+  ): Promise<boolean> {
+    const res = await tx
+      .update(rsvps)
+      .set({ guestClaimTokenHash: newHash })
+      .where(
+        and(
+          eq(rsvps.eventId, eventId),
+          eq(rsvps.userId, userId),
+          eq(rsvps.guestSeats, 1),
+          eq(rsvps.guestClaimTokenHash, oldHash),
+        ),
+      )
+      .returning({ userId: rsvps.userId });
+    return res.length > 0;
+  }
+
+  /** Whether someone still has an unclaimed guest seat on a plan. */
+  async hasGuestSeat(eventId: string, userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ guestSeats: rsvps.guestSeats })
+      .from(rsvps)
+      .where(and(eq(rsvps.eventId, eventId), eq(rsvps.userId, userId)))
+      .limit(1);
+    return (row?.guestSeats ?? 0) > 0;
+  }
+
+  // ---------- ticket transfers (D-229) ----------
+
+  /**
+   * Moves a seat from one member to another under the event lock: the old holder loses it and the new one gets
+   * it in the same transaction, so the seat count never changes. `inTx` hears whether the swap happened (the
+   * old holder may have cancelled, or the new one may have joined meanwhile) and records the money side.
+   */
+  async transferSeat(
+    eventId: string,
+    fromId: string,
+    toId: string,
+    inTx: (tx: Tx, swapped: boolean) => Promise<void>,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    const toCtx = await this.access.context(toId);
+    const toFacts = await this.access.facts(toCtx, eventId);
+    return withRedisLock(this.redis, eventLockKey(eventId), () =>
+      this.db.transaction(async (tx) => {
+        const locked = await this.store.core(eventId, tx, { lock: true });
+        if (!locked) throw AppError.notFound('Event');
+        const rows = await tx
+          .select({
+            userId: rsvps.userId,
+            status: rsvps.status,
+            guestSeats: rsvps.guestSeats,
+            bucket: rsvps.genderBucket,
+          })
+          .from(rsvps)
+          .where(and(eq(rsvps.eventId, eventId), inArray(rsvps.userId, [fromId, toId])));
+        const from = rows.find((r) => r.userId === fromId);
+        const to = rows.find((r) => r.userId === toId);
+        const toBucket = genderBucket(toCtx.gender, toCtx.verified);
+        const toTaken =
+          to !== undefined &&
+          (holdsSeat(to.status) || to.status === 'waitlisted' || to.status === 'held');
+        let ok =
+          locked.status === 'published' &&
+          now.getTime() < locked.endsAt.getTime() &&
+          from?.status === 'going' &&
+          from.guestSeats === 0 &&
+          !toTaken &&
+          canViewEvent({ ...toFacts, invited: true }, locked) &&
+          toFacts.hostRole === null &&
+          matchesGenderOnly(locked.visibility, toCtx);
+        if (ok && from && from.bucket !== toBucket) {
+          const counts = await this.store.seatCounts(eventId, tx);
+          ok = balancedAllows(locked, counts.byBucket[toBucket], 1);
+        }
+        if (!ok) {
+          await inTx(tx, false);
+          return false;
+        }
+        await tx
+          .update(rsvps)
+          .set({ status: 'cancelled', cancelledAt: now, lateCancel: false, waitlistedAt: null })
+          .where(and(eq(rsvps.eventId, eventId), eq(rsvps.userId, fromId)));
+        await this.upsertSeat(tx, eventId, toId, toBucket, null, null);
+        await this.waitlist.withdraw(tx, eventId, toId);
+        await this.outbox.add(tx, {
+          aggregateType: 'event',
+          aggregateId: eventId,
+          type: RSVP_CANCELLED_EVENT,
+          payload: {
+            eventId,
+            userId: fromId,
+            late: false,
+            hadSeat: true,
+            wasHeld: false,
+            transferred: true,
+            cancelledAt: now.toISOString(),
+          },
+        });
+        await this.outbox.add(tx, {
+          aggregateType: 'event',
+          aggregateId: eventId,
+          type: RSVP_GOING_EVENT,
+          payload: { eventId, userId: toId, plusOneUserId: null, guest: false, via: 'transfer' },
+        });
+        await inTx(tx, true);
+        return true;
+      }),
+    );
+  }
+
+  /** Whether `userId` could take a seat on this plan from someone else (visibility, blocks, gender rules). */
+  async canReceiveSeat(
+    eventId: string,
+    userId: string,
+  ): Promise<'ok' | 'RECIPIENT_INELIGIBLE' | 'RECIPIENT_ON_PLAN'> {
+    const core = await this.store.core(eventId);
+    if (!core) return 'RECIPIENT_INELIGIBLE';
+    const ctx = await this.access.context(userId);
+    const facts = await this.access.facts(ctx, eventId);
+    if (holdsSeat(facts.rsvp) || facts.rsvp === 'waitlisted' || facts.rsvp === 'held')
+      return 'RECIPIENT_ON_PLAN';
+    if (
+      !canViewEvent({ ...facts, invited: true }, core) ||
+      facts.hostRole !== null ||
+      !matchesGenderOnly(core.visibility, ctx)
+    )
+      return 'RECIPIENT_INELIGIBLE';
+    return 'ok';
   }
 
   private async removeHostRole(tx: Tx, eventId: string, userId: string): Promise<void> {

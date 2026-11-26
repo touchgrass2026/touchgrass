@@ -123,6 +123,11 @@ export const LIMITS = {
     maxRefundCutoffHours: 168,
     /** Perk passes work from the start of the plan's day until it ends plus this long. */
     perkGraceMs: 6 * HOUR_MS,
+    /** Refundable deposit on popular free plans (D-229), when the flag is on. */
+    depositMinPaise: 2_000,
+    depositMaxPaise: 50_000,
+    /** A member can dispute a payment until this long after the plan ends (D-229). */
+    disputeWindowMs: 7 * 24 * HOUR_MS,
   },
   discovery: {
     /** Candidates ranked per feed request (before pagination). */

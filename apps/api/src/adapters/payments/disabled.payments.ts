@@ -5,6 +5,7 @@ import {
   type LinkedAccountInput,
   type PaymentWebhookEvent,
   PaymentsGateway,
+  RAZORPAY_WEBHOOK_HEADERS,
   type ProviderOrder,
   type ProviderPaymentLink,
   type ProviderRefund,
@@ -18,6 +19,7 @@ import {
  */
 export class DisabledPaymentsGateway extends PaymentsGateway {
   readonly publicKeyId = '';
+  readonly webhookHeaders = RAZORPAY_WEBHOOK_HEADERS;
 
   createOrder(_input: CreateOrderInput): Promise<ProviderOrder> {
     return Promise.reject(new Error(this.reason()));

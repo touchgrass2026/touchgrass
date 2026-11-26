@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  type AdminHeldPayoutList,
   type CreateHostAccountBody,
   decodeCursor,
   encodeCursor,
@@ -9,13 +10,15 @@ import {
   type PayoutView,
   TimeIdCursor,
 } from '@touchgrass/shared';
-import { and, desc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { PaymentsGateway } from '../../adapters/payments/payments.port.js';
+import { AuditService } from '../../common/audit/audit.service.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { DB, type Database, type Tx } from '../../infra/database/database.module.js';
 import {
   hostAccounts,
+  paymentDisputes,
   payments,
   payouts,
   payoutTransfers,
@@ -24,7 +27,18 @@ import {
 import { EventSearchService } from '../events/event-search.service.js';
 import { EventStore } from '../events/event-store.service.js';
 import { AppSettingsService } from '../platform/app-settings.service.js';
+import { PeopleService } from '../profiles/people.service.js';
 import { UsersService } from '../users/users.service.js';
+import { CheckInSignals } from './check-in-signals.js';
+import {
+  adjustBlock,
+  allocateTransfers,
+  type EscrowLedger,
+  escrowLedger,
+  payoutHold,
+  releaseBlock,
+} from './payment.policy.js';
+import { TICKET_KINDS } from './payments.service.js';
 
 export const MAX_PAYOUT_ATTEMPTS = 5;
 const PAYOUT_LOOKBACK_MS = 30 * 24 * 3_600_000;
@@ -94,6 +108,9 @@ export class PayoutsService {
     private readonly search: EventSearchService,
     private readonly settings: AppSettingsService,
     private readonly users: UsersService,
+    private readonly checkIns: CheckInSignals,
+    private readonly people: PeopleService,
+    private readonly audit: AuditService,
   ) {}
 
   // ---------- host account (KYC) ----------
@@ -146,11 +163,18 @@ export class PayoutsService {
       .where(eq(hostAccounts.providerAccountId, providerAccountId))
       .returning();
     if (!a) return false;
+    // Only the KYC hold clears itself; holds for an admin's review stay.
     if (status === 'activated')
       await this.db
         .update(payouts)
         .set({ status: 'pending', holdReason: null })
-        .where(and(eq(payouts.hostUserId, a.userId), eq(payouts.status, 'on_hold')));
+        .where(
+          and(
+            eq(payouts.hostUserId, a.userId),
+            eq(payouts.status, 'on_hold'),
+            eq(payouts.holdReason, 'KYC_REQUIRED'),
+          ),
+        );
     return true;
   }
 
@@ -179,57 +203,88 @@ export class PayoutsService {
     return created;
   }
 
+  /**
+   * Escrow ledger for a plan (D-229): every ticket payment (kept money, refunds in flight counted as gone) and
+   * whether whoever holds the seat it backs checked in.
+   */
+  async escrowFor(eventId: string, db: Database | Tx = this.db): Promise<EscrowLedger> {
+    const paid = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.eventId, eventId),
+          inArray(payments.kind, [...TICKET_KINDS]),
+          inArray(payments.status, ['captured', 'partially_refunded', 'refunded']),
+        ),
+      );
+    // Refunds still in flight count as gone: the host is never paid money that is being returned.
+    const pendingRefunds = paid.length
+      ? await db
+          .select({
+            paymentId: refunds.paymentId,
+            n: sql<number>`coalesce(sum(${refunds.amountPaise}), 0)::int`,
+          })
+          .from(refunds)
+          .where(
+            and(
+              inArray(
+                refunds.paymentId,
+                paid.map((p) => p.id),
+              ),
+              inArray(refunds.status, ['pending', 'processing']),
+            ),
+          )
+          .groupBy(refunds.paymentId)
+      : [];
+    const inFlight = new Map(pendingRefunds.map((r) => [r.paymentId, r.n]));
+    const checkedIn = await this.checkIns.checkIns(eventId);
+    return escrowLedger(
+      paid.map((p) => ({
+        paymentId: p.id,
+        amountPaise: p.amountPaise,
+        refundedPaise: Math.min(p.amountPaise, p.refundedPaise + (inFlight.get(p.id) ?? 0)),
+        feeBps: p.feeBps,
+        checkedIn: p.holderUserId !== null && checkedIn.has(p.holderUserId),
+      })),
+    );
+  }
+
+  private async openDisputes(eventId: string, db: Database | Tx = this.db): Promise<number> {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(paymentDisputes)
+      .where(and(eq(paymentDisputes.eventId, eventId), eq(paymentDisputes.status, 'open')));
+    return row?.n ?? 0;
+  }
+
+  /**
+   * Freezes a completed plan's escrow into its payout (once): the host share of checked-in paid seats, minus the
+   * platform fee. Open headcount flags or disputes hold it for an admin; a missing payout account holds it for
+   * KYC (D-229).
+   */
   async createFor(eventId: string): Promise<boolean> {
     const hosts = await this.store.hosts(eventId);
     const core = await this.store.core(eventId);
     const hostId = hosts.find((h) => h.role === 'host')?.userId ?? core?.creatorUserId;
     if (!hostId) return false;
+    const flags = await this.checkIns.openFlags(eventId);
     return this.db.transaction(async (tx) => {
-      const paid = await tx
-        .select()
-        .from(payments)
-        .where(
-          and(
-            eq(payments.eventId, eventId),
-            inArray(payments.status, ['captured', 'partially_refunded', 'refunded']),
-          ),
-        );
-      // Refunds still in flight count as gone: the host is never paid money that is being returned.
-      const pendingRefunds = paid.length
-        ? await tx
-            .select({
-              paymentId: refunds.paymentId,
-              n: sql<number>`coalesce(sum(${refunds.amountPaise}), 0)::int`,
-            })
-            .from(refunds)
-            .where(
-              and(
-                inArray(
-                  refunds.paymentId,
-                  paid.map((p) => p.id),
-                ),
-                inArray(refunds.status, ['pending', 'processing']),
-              ),
-            )
-            .groupBy(refunds.paymentId)
-        : [];
-      const inFlight = new Map(pendingRefunds.map((r) => [r.paymentId, r.n]));
-      const ledger = payoutLedger(
-        paid.map((p) => ({
-          paymentId: p.id,
-          providerPaymentId: p.providerPaymentId,
-          amountPaise: p.amountPaise,
-          refundedPaise: Math.min(p.amountPaise, p.refundedPaise + (inFlight.get(p.id) ?? 0)),
-          feeBps: p.feeBps,
-        })),
-      );
+      const ledger = await this.escrowFor(eventId, tx);
       const [account] = await tx
         .select({ status: hostAccounts.status })
         .from(hostAccounts)
         .where(eq(hostAccounts.userId, hostId));
+      const hold = payoutHold({
+        openFlags: flags.length,
+        openDisputes: await this.openDisputes(eventId, tx),
+        paidSeats: ledger.paidSeats,
+        checkedInSeats: ledger.checkedInSeats,
+        accountActive: account?.status === 'activated',
+        netPaise: ledger.net,
+      });
       const id = uuidv7();
-      const status =
-        ledger.net === 0 ? 'paid' : account?.status === 'activated' ? 'pending' : 'on_hold';
+      const status = hold ? 'on_hold' : ledger.net === 0 ? 'paid' : 'pending';
       const inserted = await tx
         .insert(payouts)
         .values({
@@ -237,28 +292,218 @@ export class PayoutsService {
           eventId,
           hostUserId: hostId,
           status,
-          holdReason: status === 'on_hold' ? 'KYC_REQUIRED' : null,
+          holdReason: hold,
           grossPaise: ledger.gross,
           refundsPaise: ledger.refunds,
           platformFeePaise: ledger.fee,
           gstPaise: ledger.gst,
           netPaise: ledger.net,
+          paidSeats: ledger.paidSeats,
+          checkedInSeats: ledger.checkedInSeats,
+          withheldPaise: ledger.withheld,
+          maxNetPaise: ledger.maxNet,
           paidAt: status === 'paid' ? new Date() : null,
         })
         .onConflictDoNothing()
         .returning({ id: payouts.id });
       if (inserted.length === 0) return false;
-      if (ledger.transfers.length > 0)
-        await tx.insert(payoutTransfers).values(
-          ledger.transfers.map((t) => ({
-            id: uuidv7(),
-            payoutId: id,
-            paymentId: t.paymentId,
-            amountPaise: t.amountPaise,
-            status: 'pending' as const,
-          })),
-        );
+      await this.writeTransfers(tx, id, allocateTransfers(ledger.shares, ledger.net));
       return true;
+    });
+  }
+
+  private async writeTransfers(
+    tx: Tx,
+    payoutId: string,
+    transfers: { paymentId: string; amountPaise: number }[],
+  ): Promise<void> {
+    if (transfers.length > 0)
+      await tx.insert(payoutTransfers).values(
+        transfers.map((t) => ({
+          id: uuidv7(),
+          payoutId,
+          paymentId: t.paymentId,
+          amountPaise: t.amountPaise,
+          status: 'pending' as const,
+        })),
+      );
+  }
+
+  /** A dispute was opened: a payout not yet sent waits for the answer (D-229). */
+  async holdForDispute(tx: Tx, eventId: string): Promise<void> {
+    await tx
+      .update(payouts)
+      .set({ status: 'on_hold', holdReason: 'DISPUTE_OPEN' })
+      .where(
+        and(
+          eq(payouts.eventId, eventId),
+          or(
+            inArray(payouts.status, ['pending', 'failed']),
+            and(eq(payouts.status, 'on_hold'), eq(payouts.holdReason, 'KYC_REQUIRED')),
+          ),
+          sql`NOT EXISTS (SELECT 1 FROM payout_transfers t WHERE t.payout_id = ${payouts.id} AND t.status IN ('processing', 'processed'))`,
+        ),
+      );
+  }
+
+  /**
+   * Money moved after the payout was frozen (a dispute refund): a payout nothing was sent for yet is recomputed.
+   * Returns whether it was.
+   */
+  async rebuild(eventId: string): Promise<boolean> {
+    const removed = await this.db.transaction(async (tx) => {
+      const [p] = await tx.select().from(payouts).where(eq(payouts.eventId, eventId)).for('update');
+      if (!p || !['pending', 'on_hold', 'failed'].includes(p.status)) return false;
+      const sent = await tx
+        .select({ id: payoutTransfers.id })
+        .from(payoutTransfers)
+        .where(
+          and(
+            eq(payoutTransfers.payoutId, p.id),
+            inArray(payoutTransfers.status, ['processing', 'processed']),
+          ),
+        )
+        .limit(1);
+      if (sent.length > 0) return false;
+      await tx.delete(payoutTransfers).where(eq(payoutTransfers.payoutId, p.id));
+      await tx.delete(payouts).where(eq(payouts.id, p.id));
+      return true;
+    });
+    return removed ? this.createFor(eventId) : false;
+  }
+
+  // ---------- admin review (D-229) ----------
+
+  /** Payouts held for review (and for KYC), oldest first, with the evidence an admin needs. */
+  async held(adminId: string): Promise<AdminHeldPayoutList> {
+    const rows = await this.db
+      .select()
+      .from(payouts)
+      .where(eq(payouts.status, 'on_hold'))
+      .orderBy(asc(payouts.createdAt), asc(payouts.id))
+      .limit(100);
+    const views = await this.views(rows);
+    const cards = await this.people.cards(
+      adminId,
+      rows.map((r) => r.hostUserId),
+      { includeSelf: true },
+    );
+    return {
+      items: await Promise.all(
+        rows.map(async (r, i) => {
+          const view = views[i];
+          if (!view) throw new AppError('INTERNAL', 'Payout view vanished');
+          const flags = await this.checkIns.openFlags(r.eventId);
+          return {
+            ...view,
+            host: cards.get(r.hostUserId) ?? {
+              id: r.hostUserId,
+              displayName: '',
+              photo: null,
+              verified: false,
+              mutualFriendCount: 0,
+            },
+            paidSeats: r.paidSeats,
+            checkedInSeats: r.checkedInSeats,
+            withheldPaise: r.withheldPaise,
+            maxNetPaise: r.maxNetPaise ?? r.netPaise,
+            adjustmentNote: r.adjustmentNote,
+            flags: flags.map((f) => ({ ...f, raisedAt: f.raisedAt.toISOString() })),
+            openDisputes: await this.openDisputes(r.eventId),
+          };
+        }),
+      ),
+    };
+  }
+
+  /** Admin: the review is done. The payout goes out (or waits for KYC); recorded in the audit log. */
+  async release(
+    adminId: string,
+    payoutId: string,
+    note: string,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [p] = await tx.select().from(payouts).where(eq(payouts.id, payoutId)).for('update');
+      if (!p) throw AppError.notFound('Payout');
+      const block = releaseBlock({
+        status: p.status,
+        holdReason: p.holdReason,
+        openDisputes: await this.openDisputes(p.eventId, tx),
+      });
+      if (block)
+        throw new AppError('CONFLICT', 'This payout cannot be released', { reason: block });
+      const [account] = await tx
+        .select({ status: hostAccounts.status })
+        .from(hostAccounts)
+        .where(eq(hostAccounts.userId, p.hostUserId));
+      const kyc = p.netPaise > 0 && account?.status !== 'activated';
+      await tx
+        .update(payouts)
+        .set({
+          status: kyc ? 'on_hold' : p.netPaise === 0 ? 'paid' : 'pending',
+          holdReason: kyc ? 'KYC_REQUIRED' : null,
+          paidAt: !kyc && p.netPaise === 0 ? now : null,
+          reviewedAt: now,
+        })
+        .where(eq(payouts.id, p.id));
+      await this.audit.record(
+        {
+          adminUserId: adminId,
+          action: 'payout.release',
+          targetType: 'payout',
+          targetId: p.id,
+          details: { eventId: p.eventId, holdReason: p.holdReason, netPaise: p.netPaise, note },
+        },
+        tx,
+      );
+    });
+  }
+
+  /**
+   * Admin: sets what the host is paid, up to the host share of every paid seat (e.g. the door scanner failed and
+   * people did come). The transfers are re-split; the payout stays where it is until released.
+   */
+  async adjust(adminId: string, payoutId: string, netPaise: number, note: string): Promise<void> {
+    const [p0] = await this.db.select().from(payouts).where(eq(payouts.id, payoutId));
+    if (!p0) throw AppError.notFound('Payout');
+    const ledger = await this.escrowFor(p0.eventId);
+    await this.db.transaction(async (tx) => {
+      const [p] = await tx.select().from(payouts).where(eq(payouts.id, payoutId)).for('update');
+      if (!p) throw AppError.notFound('Payout');
+      const sent = await tx
+        .select({ id: payoutTransfers.id })
+        .from(payoutTransfers)
+        .where(
+          and(
+            eq(payoutTransfers.payoutId, p.id),
+            inArray(payoutTransfers.status, ['processing', 'processed']),
+          ),
+        );
+      const block = adjustBlock({
+        status: p.status,
+        netPaise,
+        maxNetPaise: Math.min(p.maxNetPaise ?? p.netPaise, ledger.maxNet),
+        transfersSent: sent.length,
+      });
+      if (block)
+        throw new AppError('CONFLICT', 'This payout cannot be adjusted', { reason: block });
+      await tx.delete(payoutTransfers).where(eq(payoutTransfers.payoutId, p.id));
+      await this.writeTransfers(tx, p.id, allocateTransfers(ledger.shares, netPaise));
+      await tx
+        .update(payouts)
+        .set({ netPaise, adjustedByUserId: adminId, adjustmentNote: note })
+        .where(eq(payouts.id, p.id));
+      await this.audit.record(
+        {
+          adminUserId: adminId,
+          action: 'payout.adjust',
+          targetType: 'payout',
+          targetId: p.id,
+          details: { eventId: p.eventId, fromPaise: p.netPaise, toPaise: netPaise, note },
+        },
+        tx,
+      );
     });
   }
 

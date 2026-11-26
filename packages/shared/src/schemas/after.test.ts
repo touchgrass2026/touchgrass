@@ -28,6 +28,16 @@ describe('reliability (F-SAF-02)', () => {
     ).toBe('new');
   });
 
+  it('a host cancelling a paid plan weighs like a no-show but starts no cooldown (D-229)', () => {
+    const kept = [ev('check_in', 5), ev('check_in', 6)];
+    const cancelled = reliabilityOutcome([...kept, ev('host_cancel', 7)], NOW);
+    const noShow = reliabilityOutcome([...kept, ev('no_show', 7)], NOW);
+    expect(cancelled.score).toBe(noShow.score);
+    expect(cancelled.tier).toBe('hit_or_miss');
+    expect(cancelled.noShowsRecent).toBe(0);
+    expect(cancelled.cooldownUntil).toBeNull();
+  });
+
   it('maps the decayed kept share to tiers', () => {
     const always = [1, 8, 15, 22].map((d) => ev('check_in', d));
     expect(reliabilityOutcome(always, NOW).tier).toBe('super_reliable');

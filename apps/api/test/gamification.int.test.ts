@@ -651,6 +651,12 @@ describe('referral rewards (F-GRW-01)', () => {
     // Spent again and kept: after the plan, the host's share goes out from the platform balance.
     const kept = await post(me, `/v1/events/${plan.id}/checkout`, { useCredit: true }).expect(201);
     expect(kept.body.kind).toBe('confirmed');
+    // They came: escrow pays checked-in seats (D-229).
+    await h.pool.query(
+      `UPDATE rsvps SET status = 'checked_in', checked_in_at = now(), check_in_method = 'qr'
+       WHERE event_id = $1 AND user_id = $2`,
+      [plan.id, me.id],
+    );
     await h.pool.query(
       `UPDATE events SET status = 'completed', starts_at = now() - interval '3 days', ends_at = now() - interval '2 days' WHERE id = $1`,
       [plan.id],

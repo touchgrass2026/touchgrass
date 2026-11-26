@@ -42,7 +42,7 @@ describe('seed', () => {
     });
     expect(summary).toMatchObject({ venues: 50, events: 100 });
     // Phase 6: hosts, paid plans with payments and payouts, partner venues with perks and staff PINs.
-    expect(summary.payments).toMatchObject({ paidEvents: 6, payouts: 2 });
+    expect(summary.payments).toMatchObject({ paidEvents: 6, payouts: 2, heldPayouts: 1 });
     expect(summary.payments.hostApplications).toBeGreaterThanOrEqual(4);
     expect(summary.payments.payments).toBeGreaterThanOrEqual(20);
     expect(summary.payments.partnerVenues).toBeGreaterThan(0);

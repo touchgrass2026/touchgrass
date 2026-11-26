@@ -16,6 +16,11 @@ export interface PendingGuestSeat {
   slug: string;
 }
 
+export type RedeemHook = (
+  tx: Tx,
+  claim: PendingGuestSeat & { claimHash: string; userId: string },
+) => Promise<void>;
+
 /**
  * Guest +1 seats (F-EVT-07). A member pulling up with a non-member friend holds one extra seat and gets a
  * claim link; the token is stored hashed. Claiming turns that held seat into the new member's own RSVP, so
@@ -29,6 +34,16 @@ export class PlusOneClaimService {
     @Inject(ENV) private readonly env: Env,
     private readonly outbox: OutboxService,
   ) {}
+
+  private readonly redeemHooks: RedeemHook[] = [];
+
+  /**
+   * Runs inside the claim transaction (payments moves a paid +1 ticket into the claimer's name, D-229), so the
+   * seat and whatever backs it change hands together.
+   */
+  onRedeem(hook: RedeemHook): void {
+    this.redeemHooks.push(hook);
+  }
 
   hash(token: string): string {
     return pepperedHash(this.env.TOKEN_HASH_PEPPER, `plus-one:${token}`);
@@ -125,6 +140,8 @@ export class PlusOneClaimService {
         via: 'guest_claim',
       },
     });
+    for (const hook of this.redeemHooks)
+      await hook(tx, { ...pending, claimHash: this.hash(token), userId });
     return pending;
   }
 }

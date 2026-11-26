@@ -246,6 +246,18 @@ export class EventSearchService {
     }));
   }
 
+  /**
+   * Who checked in to a plan, when and how (escrow payouts and dispute evidence, D-229). Reads the primary:
+   * money decisions must see a check-in made a moment ago.
+   */
+  async checkIns(eventId: string): Promise<Map<string, { at: Date; method: string | null }>> {
+    const rows = await this.db
+      .select({ userId: rsvps.userId, at: rsvps.checkedInAt, method: rsvps.checkInMethod })
+      .from(rsvps)
+      .where(and(eq(rsvps.eventId, eventId), eq(rsvps.status, 'checked_in')));
+    return new Map(rows.map((r) => [r.userId, { at: r.at ?? new Date(0), method: r.method }]));
+  }
+
   /** Plans someone checked in to that ended in [since, now), newest first (post-event screen, F-AFT-01). */
   async recentlyAttended(userId: string, since: Date, now: Date, limit: number): Promise<string[]> {
     const res = await this.replica.execute<{ id: string }>(sql`

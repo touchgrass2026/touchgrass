@@ -14,6 +14,8 @@ export const FEATURE_FLAG_DEFAULTS = {
   map_view: true,
   /** Squad stories (Phase 13). */
   stories: true,
+  /** Hosts may ask for a small refundable deposit on popular free plans (D-229). */
+  refundable_deposits: false,
 } as const satisfies Record<string, boolean>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAG_DEFAULTS;

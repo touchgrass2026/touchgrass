@@ -115,6 +115,7 @@ function paymentView(over: Partial<PaymentView> = {}): PaymentView {
     eventStartsAt: '2026-11-07T12:30:00.000Z',
     eventTimezone: 'Asia/Kolkata',
     status: 'created',
+    kind: 'seat',
     amountPaise: 50_000,
     refundedPaise: 0,
     holdExpiresAt: new Date(Date.now() + 8 * 60_000).toISOString(),

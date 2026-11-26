@@ -99,7 +99,7 @@ export const reliabilityEvents = pgTable(
   {
     userId: uuid('user_id').notNull(),
     eventId: uuid('event_id').notNull(),
-    kind: text('kind', { enum: ['check_in', 'no_show', 'late_cancel'] }).notNull(),
+    kind: text('kind', { enum: ['check_in', 'no_show', 'late_cancel', 'host_cancel'] }).notNull(),
     at: ts('at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.eventId, t.kind] })],

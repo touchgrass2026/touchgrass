@@ -79,9 +79,27 @@ export interface PaymentWebhookEvent {
   method?: string;
 }
 
-/** Payments gateway port (F-PAY-01..03). Confirmation of payment comes ONLY from verified webhooks. */
+/** Where a gateway puts the webhook signature and its delivery id (each gateway names them its own way). */
+export interface WebhookHeaders {
+  signature: string;
+  eventId: string | null;
+}
+
+/** Razorpay's webhook headers; the fake gateway signs the same way. */
+export const RAZORPAY_WEBHOOK_HEADERS: WebhookHeaders = {
+  signature: 'x-razorpay-signature',
+  eventId: 'x-razorpay-event-id',
+};
+
+/**
+ * Payments gateway port (F-PAY-01..03). Confirmation of payment comes ONLY from verified webhooks. The port is
+ * gateway-neutral (D-229): orders, refunds, split payouts to a host's linked account and signed webhooks map onto
+ * Razorpay (Orders, Refunds, Route) or PayU (payments, refunds, split settlements) alike; only an adapter knows
+ * the gateway's wire format.
+ */
 export abstract class PaymentsGateway {
   abstract readonly publicKeyId: string;
+  abstract readonly webhookHeaders: WebhookHeaders;
   abstract createOrder(input: CreateOrderInput): Promise<ProviderOrder>;
   abstract createPaymentLink(input: CreatePaymentLinkInput): Promise<ProviderPaymentLink>;
   abstract refund(input: RefundInput): Promise<ProviderRefund>;

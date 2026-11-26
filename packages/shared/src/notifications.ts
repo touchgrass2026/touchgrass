@@ -324,6 +324,37 @@ export const NOTIFICATION_TEMPLATES = {
     link: 'safety',
     urgent: true,
   },
+  // ---------- paid seats (D-229) ----------
+  ticket_transfer_offer: {
+    category: 'event_updates',
+    title: 'notifications.kinds.ticketTransferOffer.title',
+    body: 'notifications.kinds.ticketTransferOffer.body',
+    link: 'transfers/{{transferId}}',
+  },
+  ticket_transfer_done: {
+    category: 'event_updates',
+    title: 'notifications.kinds.ticketTransferDone.title',
+    body: 'notifications.kinds.ticketTransferDone.body',
+    link: 'events/{{eventId}}',
+  },
+  ticket_transfer_declined: {
+    category: 'event_updates',
+    title: 'notifications.kinds.ticketTransferDeclined.title',
+    body: 'notifications.kinds.ticketTransferDeclined.body',
+    link: 'events/{{eventId}}',
+  },
+  plus_one_ticket_claimed: {
+    category: 'event_updates',
+    title: 'notifications.kinds.plusOneTicketClaimed.title',
+    body: 'notifications.kinds.plusOneTicketClaimed.body',
+    link: 'events/{{eventId}}',
+  },
+  payment_dispute_resolved: {
+    category: 'event_updates',
+    title: 'notifications.kinds.paymentDisputeResolved.title',
+    body: 'notifications.kinds.paymentDisputeResolved.body',
+    link: 'payments/{{paymentId}}',
+  },
   // ---------- cities (F-GRW-03) ----------
   city_launched: {
     category: 'event_updates',

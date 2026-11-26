@@ -8,6 +8,7 @@ import {
   parseRazorpayWebhook,
   type PaymentWebhookEvent,
   PaymentsGateway,
+  RAZORPAY_WEBHOOK_HEADERS,
   type ProviderOrder,
   type ProviderPaymentLink,
   type ProviderRefund,
@@ -36,6 +37,8 @@ export class RazorpayPaymentsGateway extends PaymentsGateway {
     this.baseUrl = config.baseUrl ?? 'https://api.razorpay.com';
     this.authHeader = `Basic ${Buffer.from(`${config.keyId}:${config.keySecret}`).toString('base64')}`;
   }
+
+  readonly webhookHeaders = RAZORPAY_WEBHOOK_HEADERS;
 
   get publicKeyId(): string {
     return this.config.keyId;

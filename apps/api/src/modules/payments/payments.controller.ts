@@ -180,20 +180,40 @@ export class CheckoutPageController {
   }
 }
 
-/** Razorpay → us. Signature-verified, recorded once, processed by the worker. */
+/**
+ * Gateway → us. Signature-verified, recorded once, processed by the worker. `/webhooks/payments` reads whichever
+ * headers the configured gateway uses (D-229); `/webhooks/razorpay` stays for the URL already registered there.
+ */
 @ApiTags('payments')
 @Controller({ path: 'webhooks', version: '1' })
 export class WebhooksController {
-  constructor(private readonly webhooks: WebhooksService) {}
+  constructor(
+    private readonly webhooks: WebhooksService,
+    private readonly gateway: PaymentsGateway,
+  ) {}
 
   @Post('razorpay')
   @Public()
   @HttpCode(200)
-  async razorpay(@Req() req: RawBodyRequest<Request>): Promise<{ ok: true }> {
+  razorpay(@Req() req: RawBodyRequest<Request>): Promise<{ ok: true }> {
+    return this.receive(req);
+  }
+
+  @Post('payments')
+  @Public()
+  @HttpCode(200)
+  payments(@Req() req: RawBodyRequest<Request>): Promise<{ ok: true }> {
+    return this.receive(req);
+  }
+
+  private async receive(req: RawBodyRequest<Request>): Promise<{ ok: true }> {
     const raw = req.rawBody?.toString('utf8') ?? '';
-    const signature = req.header('x-razorpay-signature') ?? '';
-    const eventId = req.header('x-razorpay-event-id') ?? null;
-    await this.webhooks.ingest(raw, signature, eventId);
+    const { signature, eventId } = this.gateway.webhookHeaders;
+    await this.webhooks.ingest(
+      raw,
+      req.header(signature) ?? '',
+      eventId ? (req.header(eventId) ?? null) : null,
+    );
     return { ok: true };
   }
 }

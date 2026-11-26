@@ -8,6 +8,7 @@ import {
   parseRazorpayWebhook,
   type PaymentWebhookEvent,
   PaymentsGateway,
+  RAZORPAY_WEBHOOK_HEADERS,
   type ProviderOrder,
   type ProviderPaymentLink,
   type ProviderRefund,
@@ -32,6 +33,7 @@ const id = (prefix: string): string => `${prefix}_fake${randomBytes(7).toString(
  */
 export class FakePaymentsGateway extends PaymentsGateway {
   readonly publicKeyId = 'rzp_test_fake';
+  readonly webhookHeaders = RAZORPAY_WEBHOOK_HEADERS;
   readonly orders = new Map<string, { amountPaise: number; receipt: string; paymentId?: string }>();
   readonly refunds = new Map<string, RefundInput>();
   readonly transfers = new Map<string, TransferInput | DirectTransferInput>();

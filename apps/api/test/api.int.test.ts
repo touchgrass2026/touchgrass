@@ -69,13 +69,15 @@ describe('API app (real Postgres + Redis)', () => {
   });
 
   it('GET /v1/app/config returns flags and versions; flag writes invalidate the cache', async () => {
+    const flags = app.get(FeatureFlagsService);
+    // Suites share the database and run in any order: start from the gate's default.
+    await flags.set('invite_gate', true);
     const before = await request(http).get('/v1/app/config').expect(200);
     expect(before.body).toMatchObject({
       minSupportedVersion: '0.1.0',
       latestVersion: '0.1.0',
       flags: { invite_gate: true },
     });
-    const flags = app.get(FeatureFlagsService);
     await flags.set('invite_gate', false, 'Open signup');
     const after = await request(http).get('/v1/app/config').expect(200);
     expect(after.body.flags.invite_gate).toBe(false);

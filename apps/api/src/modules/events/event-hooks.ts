@@ -27,6 +27,8 @@ export interface EventHookSet {
   lore?: (userId: string, core: EventCore, facts: EventViewerFacts) => Promise<LoreSummary | null>;
   /** The crew a crew session belongs to (F-ENG-02). */
   crew?: (eventId: string) => Promise<{ id: string; name: string } | null>;
+  /** Refundable deposit a free plan asks for right now (payments, D-229), or null. */
+  depositRequired?: (eventId: string) => Promise<number | null>;
 }
 
 @Injectable()
@@ -70,5 +72,10 @@ export class EventHooks {
 
   crew(eventId: string): Promise<{ id: string; name: string } | null> {
     return this.hooks.crew ? this.hooks.crew(eventId) : Promise.resolve(null);
+  }
+
+  /** Without payments no plan asks for a deposit. */
+  depositRequired(eventId: string): Promise<number | null> {
+    return this.hooks.depositRequired ? this.hooks.depositRequired(eventId) : Promise.resolve(null);
   }
 }
