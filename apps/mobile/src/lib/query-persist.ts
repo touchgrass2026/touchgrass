@@ -16,12 +16,15 @@ const OFFLINE_ROOTS = new Set([
   'interests',
   'vibe-tags',
 ]);
-/** Search results and map tiles change with every keystroke and pan; they're not worth the space. */
-const SKIP_SECOND = new Set(['search', 'map']);
+/**
+ * Search results and map tiles change with every keystroke and pan; they're not worth the space. Check-in
+ * tickets rotate every 30 seconds (D-227), so a stored one is always stale.
+ */
+const SKIP_SECOND = new Set(['search', 'map', 'ticket']);
 
 export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Bumped whenever cached shapes change, so an old cache is dropped instead of misread. */
-export const PERSIST_BUSTER = 'p10-2';
+export const PERSIST_BUSTER = 'p10-3';
 
 export function shouldPersist(query: Pick<Query, 'queryKey' | 'state'>): boolean {
   if (query.state.status !== 'success') return false;

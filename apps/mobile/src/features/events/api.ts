@@ -22,6 +22,7 @@ import {
   type HostRole,
 } from '@touchgrass/shared';
 import * as Crypto from 'expo-crypto';
+import * as Location from 'expo-location';
 import { useEffect } from 'react';
 import { z } from 'zod';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
@@ -129,13 +130,40 @@ export function useInvitees(id: string) {
   });
 }
 
+/**
+ * Roughly where the phone is, only when location access was already granted (never asks): it helps flag staged
+ * check-ins (D-227). Rounded to about 110 m before it leaves the phone.
+ */
+async function coarseHere(): Promise<{ lat: string; lng: string } | null> {
+  try {
+    const perm = await Location.getForegroundPermissionsAsync();
+    if (!perm.granted) return null;
+    const pos = await Location.getLastKnownPositionAsync();
+    return pos
+      ? { lat: pos.coords.latitude.toFixed(3), lng: pos.coords.longitude.toFixed(3) }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The rotating check-in ticket (D-227): fetched again as each 30-second code rotates. */
 export function useTicket(id: string, enabled: boolean) {
   const { client } = useApi();
   return useQuery({
     queryKey: EVENT_KEYS.ticket(id),
     enabled,
-    queryFn: ({ signal }) => client.request(`/v1/events/${id}/ticket`, Ticket, { signal }),
-    staleTime: Infinity,
+    queryFn: async ({ signal }) => {
+      const here = await coarseHere();
+      const qs = here ? `?lat=${here.lat}&lng=${here.lng}` : '';
+      return client.request(`/v1/events/${id}/ticket${qs}`, Ticket, { signal });
+    },
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      return Math.max(1000, new Date(data.rotatesAt).getTime() - Date.now() + 250);
+    },
   });
 }
 
@@ -290,7 +318,7 @@ export function useHosts(id: string) {
 
 export function useCheckIn(id: string) {
   const { client } = useApi();
-  return useEventMutation((body: { qr: string } | { point: GeoPoint }) =>
+  return useEventMutation((body: { qr: string } | { code: string } | { point: GeoPoint }) =>
     client.request(`/v1/events/${id}/check-in`, CheckInResult, { method: 'POST', body }),
   );
 }

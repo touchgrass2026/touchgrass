@@ -7,6 +7,8 @@ import {
   type JoinRequestStatus,
   LIMITS,
   type RsvpStatus,
+  type SpotHiddenBy,
+  spotForAttendeesByDefault,
 } from '@touchgrass/shared';
 import { AppError } from '../../common/errors/app-error.js';
 import type { Relationship } from '../profiles/profile.policy.js';
@@ -20,6 +22,10 @@ export interface EventFacts {
   balancedMaxSharePct: number | null;
   mystery: boolean;
   mysteryRevealMinutesBefore: number;
+  /** Paid plans keep the exact spot for people who have paid (D-227). */
+  pricePaise: number;
+  /** The host shows the exact spot only to people holding a seat (D-227). */
+  spotForAttendees: boolean;
   /** Held for review by the text filter (F-SAF-06). */
   held?: boolean;
 }
@@ -150,18 +156,47 @@ export function balancedAllows(
   return bucketSeats + adding <= cap;
 }
 
-/** Plans whose true spot is not public: mystery plans and private (`approval`) plans. */
-export function hidesSpot(e: Pick<EventFacts, 'mystery' | 'visibility'>): boolean {
-  return e.mystery || e.visibility === 'approval';
+/** What decides whether a plan's true spot is public. */
+export type SpotFacts = Pick<
+  EventFacts,
+  'mystery' | 'visibility' | 'pricePaise' | 'spotForAttendees'
+>;
+
+/**
+ * Women-only, men-only, invite-only and private plans keep the exact spot for people pulling up unless the
+ * host says otherwise (D-227).
+ */
+export function defaultSpotForAttendees(visibility: EventVisibility): boolean {
+  return spotForAttendeesByDefault(visibility);
+}
+
+/**
+ * Why a plan's true spot is not public, strongest reason first: a mystery plan (F-EVT-12), a private plan
+ * (D-179), a paid plan (people who have not paid would just walk in, D-227), or a host who shows it only to
+ * people pulling up (D-227). Null when anyone who can see the plan can see its spot.
+ */
+export function spotHiddenBy(e: SpotFacts): SpotHiddenBy | null {
+  if (e.mystery) return 'mystery';
+  if (e.visibility === 'approval') return 'approval';
+  if (e.pricePaise > 0) return 'paid';
+  if (e.spotForAttendees) return 'attendees';
+  return null;
+}
+
+/** Plans whose true spot is not public; they publish a fuzzed centre instead (feeds, maps, share pages). */
+export function hidesSpot(e: SpotFacts): boolean {
+  return spotHiddenBy(e) !== null;
 }
 
 /**
  * The true spot is shown to hosts always. A mystery spot is revealed to people going once the reveal time has
- * come (F-EVT-12); a private plan's spot only to people going (D-179).
+ * come (F-EVT-12); a private plan's spot only to people going (D-179); a paid plan's only to people holding a
+ * seat, which on a paid plan means they have paid (a seat is `held` until the payment is confirmed); a plan
+ * kept for attendees only to people holding a seat (D-227).
  */
 export function isLocationRevealed(
   v: Pick<ViewerFacts, 'hostRole' | 'rsvp'>,
-  e: Pick<EventFacts, 'mystery' | 'visibility' | 'startsAt' | 'mysteryRevealMinutesBefore'>,
+  e: SpotFacts & Pick<EventFacts, 'startsAt' | 'mysteryRevealMinutesBefore'>,
   now: Date,
 ): boolean {
   if (!hidesSpot(e) || v.hostRole) return true;

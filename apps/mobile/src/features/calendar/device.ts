@@ -32,7 +32,12 @@ export function calendarFields(e: EventDetail, t: TFunction, webUrl: string): Ca
   const location =
     loc.kind === 'exact'
       ? [loc.placeName, loc.address].filter(Boolean).join(', ')
-      : t('calendar.mysteryLocation', { area: loc.neighbourhoodName ?? '' });
+      : t(
+          loc.hiddenBy === undefined || loc.hiddenBy === 'mystery'
+            ? 'calendar.mysteryLocation'
+            : 'calendar.hiddenLocation',
+          { area: loc.neighbourhoodName ?? '' },
+        );
   return {
     title: e.title,
     startDate: new Date(e.startsAt),

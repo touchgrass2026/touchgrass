@@ -37,6 +37,16 @@ const person = (id: string, displayName: string) => ({
   mutualFriendCount: 0,
 });
 const host = person(ids.other, 'Rohan K.');
+const QR_LABEL = 'Your check-in QR code. It changes every 30 seconds.';
+const ticketFixture = (code: string, rotatesAt: number) => ({
+  qr: `tg2.${EVENT_ID}.${ids.me}.${String(Math.floor(rotatesAt / 30_000))}.${'a'.repeat(32)}`,
+  code,
+  eventId: EVENT_ID,
+  validFrom: '2026-11-03T12:00:00.000Z',
+  validUntil: '2026-11-03T14:30:00.000Z',
+  rotatesAt: new Date(rotatesAt).toISOString(),
+  rotateEveryMs: 30_000,
+});
 const me = person(ids.me, 'Priya R.');
 
 function eventFixture(
@@ -395,6 +405,39 @@ describe('Event detail', () => {
     await fireEvent.press(screen.getByTestId('claim-spot'));
     await waitFor(() =>
       expect(api.callsTo('POST', `/v1/events/${EVENT_ID}/waitlist/claim`)).toHaveLength(1),
+    );
+  });
+
+  const hiddenSpot = (hiddenBy: 'paid' | 'attendees') => ({
+    kind: 'approximate' as const,
+    center: { lat: 17.45, lng: 78.36 },
+    radiusMeters: 2000,
+    neighbourhoodName: 'Gachibowli',
+    revealsAt: '2026-11-03T10:30:00.000Z',
+    hiddenBy,
+  });
+
+  it('a paid plan names the area and says the spot shows after paying (D-227)', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture({ pricePaise: 49_900, location: hiddenSpot('paid') }),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('event-location-hidden')).toHaveTextContent(
+      'Exact spot shows after you pay',
+    );
+    expect(screen.getByTestId('event-location')).toHaveTextContent('Near Gachibowli');
+    expect(screen.queryByText(/Mystery spot/)).toBeNull();
+  });
+
+  it('an attendees-only plan says the spot shows once you pull up (D-227)', async () => {
+    api.on('GET', `/v1/events/${EVENT_ID}`, {
+      status: 200,
+      body: eventFixture({ location: hiddenSpot('attendees') }),
+    });
+    await renderWithProviders(<EventScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByTestId('event-location-hidden')).toHaveTextContent(
+      'The exact spot shows once you pull up',
     );
   });
 
@@ -1265,19 +1308,71 @@ describe('Plot flow: pin, advanced options and edits', () => {
 });
 
 describe('Tickets, scanning, invites, +1s', () => {
-  it('renders the ticket QR', async () => {
+  it('renders the rotating ticket QR, and its short code on request (D-227)', async () => {
     api.on('GET', `/v1/events/${EVENT_ID}/ticket`, {
       status: 200,
-      body: {
-        qr: `tg1.${EVENT_ID}.${ids.me}.${'a'.repeat(32)}`,
-        eventId: EVENT_ID,
-        validFrom: '2026-11-03T12:00:00.000Z',
-        validUntil: '2026-11-03T14:30:00.000Z',
-      },
+      body: ticketFixture('481206', Date.now() + 30_000),
     });
     await renderWithProviders(<TicketScreen />, { fetchFn: api.fetch });
-    expect(await screen.findByLabelText('Your check-in code')).toBeOnTheScreen();
+    expect(await screen.findByLabelText(QR_LABEL)).toBeOnTheScreen();
     expect(screen.getByText(/^Valid /)).toBeOnTheScreen();
+    expect(
+      screen.getByText(/changes every 30 seconds, so a screenshot will not work/),
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('ticket-code')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Show code instead' }));
+    expect(screen.getByLabelText('Check-in code 4 8 1 2 0 6')).toBeOnTheScreen();
+    expect(screen.getByText('481206')).toBeOnTheScreen();
+    expect(screen.queryByLabelText(QR_LABEL)).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Show QR instead' }));
+    expect(screen.getByLabelText(QR_LABEL)).toBeOnTheScreen();
+  });
+
+  it('fetches the next code when the current one rotates (D-227)', async () => {
+    jest.useFakeTimers();
+    try {
+      api.on('GET', `/v1/events/${EVENT_ID}/ticket`, {
+        status: 200,
+        body: ticketFixture('111111', Date.now() + 30_000),
+      });
+      await renderWithProviders(<TicketScreen />, { fetchFn: api.fetch });
+      await fireEvent.press(await screen.findByTestId('ticket-toggle-code'));
+      expect(screen.getByText('111111')).toBeOnTheScreen();
+      api.on('GET', `/v1/events/${EVENT_ID}/ticket`, {
+        status: 200,
+        body: ticketFixture('222222', Date.now() + 60_000),
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000);
+      });
+      // Not yet: the first code is still current.
+      expect(screen.getByText('111111')).toBeOnTheScreen();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(21_000);
+      });
+      expect(await screen.findByText('222222')).toBeOnTheScreen();
+      expect(api.callsTo('GET', `/v1/events/${EVENT_ID}/ticket`).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('sends a rough location with the ticket only when location is already allowed', async () => {
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValueOnce({
+      granted: true,
+    } as Awaited<ReturnType<typeof Location.getForegroundPermissionsAsync>>);
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValueOnce({
+      coords: { latitude: 17.443612, longitude: 78.351987 },
+    } as Awaited<ReturnType<typeof Location.getLastKnownPositionAsync>>);
+    api.on('GET', `/v1/events/${EVENT_ID}/ticket`, {
+      status: 200,
+      body: ticketFixture('333333', Date.now() + 30_000),
+    });
+    await renderWithProviders(<TicketScreen />, { fetchFn: api.fetch });
+    expect(await screen.findByLabelText(QR_LABEL)).toBeOnTheScreen();
+    const [call] = api.callsTo('GET', `/v1/events/${EVENT_ID}/ticket`);
+    expect(call?.url).toContain('lat=17.444&lng=78.352');
+    expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
   });
 
   it('swaps the code for "You\'re checked in" once a host scans it (D-205)', async () => {
@@ -1290,15 +1385,10 @@ describe('Tickets, scanning, invites, +1s', () => {
         })
         .on('GET', `/v1/events/${EVENT_ID}/ticket`, {
           status: 200,
-          body: {
-            qr: `tg1.${EVENT_ID}.${ids.me}.${'a'.repeat(32)}`,
-            eventId: EVENT_ID,
-            validFrom: '2026-11-03T12:00:00.000Z',
-            validUntil: '2026-11-03T14:30:00.000Z',
-          },
+          body: ticketFixture('481206', Date.now() + 30_000),
         });
       await renderWithProviders(<TicketScreen />, { fetchFn: api.fetch });
-      expect(await screen.findByLabelText('Your check-in code')).toBeOnTheScreen();
+      expect(await screen.findByLabelText(QR_LABEL)).toBeOnTheScreen();
       expect(screen.queryByTestId('ticket-checked-in')).toBeNull();
       // The host scans it; the open ticket notices on its next check.
       api.on('GET', `/v1/events/${EVENT_ID}`, {
@@ -1310,7 +1400,7 @@ describe('Tickets, scanning, invites, +1s', () => {
       });
       expect(await screen.findByTestId('ticket-checked-in')).toBeOnTheScreen();
       expect(screen.getByText("You're checked in")).toBeOnTheScreen();
-      expect(screen.queryByLabelText('Your check-in code')).toBeNull();
+      expect(screen.queryByLabelText(QR_LABEL)).toBeNull();
       // Once in, it stops asking.
       const asked = api.callsTo('GET', `/v1/events/${EVENT_ID}`).length;
       await act(async () => {
@@ -1351,6 +1441,23 @@ describe('Tickets, scanning, invites, +1s', () => {
     );
     await fireEvent.press(screen.getByTestId('manual-check-in'));
     expect(await screen.findByTestId('scan-result')).toHaveTextContent('Rohan K. checked in');
+  });
+
+  it('a typed six-digit code is sent as a short code, and an expired one says so (D-227)', async () => {
+    api.on('POST', `/v1/events/${EVENT_ID}/check-in`, {
+      status: 409,
+      body: {
+        error: { code: 'TICKET_EXPIRED', message: 'x', details: { reason: 'TICKET_EXPIRED' } },
+      },
+    });
+    await renderWithProviders(<ScanScreen />, { fetchFn: api.fetch });
+    await fireEvent.changeText(screen.getByTestId('manual-code'), '481206');
+    await fireEvent.press(screen.getByTestId('manual-check-in'));
+    expect(await screen.findByTestId('scan-result')).toHaveTextContent(
+      'That code has expired. Ask them to show the new one.',
+    );
+    const [call] = api.callsTo('POST', `/v1/events/${EVENT_ID}/check-in`);
+    expect(call?.body).toEqual({ code: '481206' });
   });
 
   it('invites squad members', async () => {

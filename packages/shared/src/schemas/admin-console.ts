@@ -3,6 +3,7 @@ import { SUPPORTED_LANGUAGES } from '../constants';
 import { AdminRole, CityLaunchStatus, EventStatus, EventType } from '../enums';
 import { GeoPoint } from './common';
 import { LocalizedName } from './catalog';
+import { CheckInFlag, CheckInFlagKind } from './check-in';
 
 /**
  * Who may open each admin section (F-WEB-03). super_admin implicitly holds every role. The API's `@Roles`
@@ -195,6 +196,11 @@ export const AdminEventQuery = z.object({
     .transform((v) => v === 'true')
     .optional(),
   q: z.string().trim().min(1).max(80).optional(),
+  /** Only plans with check-in flags nobody has reviewed yet (D-227). */
+  flagged: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(25),
 });
@@ -216,6 +222,8 @@ export const AdminEventRow = z.object({
   pricePaise: z.number().int(),
   held: z.boolean(),
   featured: Featured.nullable(),
+  /** Fake-headcount flags not reviewed yet (D-227). */
+  checkInFlags: z.array(CheckInFlagKind).default([]),
 });
 export type AdminEventRow = z.infer<typeof AdminEventRow>;
 export const AdminEventPage = z.object({
@@ -229,6 +237,9 @@ export const AdminEventDetail = AdminEventRow.extend({
   endsAt: z.iso.datetime(),
   visibility: z.string(),
   cancelledReason: z.string().nullable(),
+  checkedIn: z.number().int().default(0),
+  /** Every fake-headcount flag on the plan, reviewed or not (D-227). */
+  flags: z.array(CheckInFlag).default([]),
 });
 export type AdminEventDetail = z.infer<typeof AdminEventDetail>;
 

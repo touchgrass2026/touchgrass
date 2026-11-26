@@ -1,6 +1,8 @@
 import { feeBreakdown, type GeoPoint } from '@touchgrass/shared';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
+import { mysteryCenter } from '../modules/events/mystery.js';
+import { SEED_MYSTERY_SECRET } from './events.seed.js';
 import { pepperedHash, randomToken } from '../common/auth/hashing.js';
 import type { Tx } from '../infra/database/database.module.js';
 import {
@@ -196,7 +198,8 @@ export async function seedPayments(
       location: point,
       address: venue.address,
       placeName: venue.name,
-      approxCenter: point,
+      // Paid plans keep the exact spot for people who paid (D-227): the public centre is fuzzed.
+      approxCenter: mysteryCenter(eventId, point, null, SEED_MYSTERY_SECRET),
       startsAt,
       endsAt,
       capacity: 12,

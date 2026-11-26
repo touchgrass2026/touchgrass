@@ -118,6 +118,11 @@ const EventFields = z.object({
     .max(24 * 60)
     .default(120),
   allowPlusOnes: z.boolean().default(false),
+  /**
+   * Show the exact spot only to people holding a seat (D-227). Paid plans always do; left out, women-only,
+   * men-only, invite-only and private plans default to it.
+   */
+  spotForAttendees: z.boolean().optional(),
   /** Group chat for people pulling up (paid plans: those who paid). Hosts can switch it off (D-156). */
   chatEnabled: z.boolean().default(true),
   /** Paid plans only; defaults to full refunds until 24 h before (F-PAY-02). */
@@ -194,6 +199,23 @@ export type UpdateEventBody = z.infer<typeof UpdateEventBody>;
 export const CancelEventBody = z.object({ reason: z.string().trim().max(500).default('') });
 export type CancelEventBody = z.infer<typeof CancelEventBody>;
 
+/**
+ * Women-only, men-only, invite-only and private plans show the exact spot only to people pulling up unless the
+ * host says otherwise (D-227). The plot form and the API share this default.
+ */
+export function spotForAttendeesByDefault(visibility: EventVisibility): boolean {
+  return (
+    visibility === 'women_only' ||
+    visibility === 'men_only' ||
+    visibility === 'invite_only' ||
+    visibility === 'approval'
+  );
+}
+
+/** Why a plan keeps its exact spot from someone (D-227). */
+export const SpotHiddenBy = z.enum(['mystery', 'approval', 'paid', 'attendees']);
+export type SpotHiddenBy = z.infer<typeof SpotHiddenBy>;
+
 /** Location as the viewer is allowed to see it. Mystery events show only an approximate area until revealed. */
 export const EventLocationView = z.discriminatedUnion('kind', [
   z.object({
@@ -209,8 +231,11 @@ export const EventLocationView = z.discriminatedUnion('kind', [
     radiusMeters: z.number().int(),
     neighbourhoodName: z.string().nullable(),
     revealsAt: z.iso.datetime(),
-    /** Why the spot is hidden: a mystery plan before its reveal, or a private plan until the host lets you in. */
-    hiddenBy: z.enum(['mystery', 'approval']).optional(),
+    /**
+     * Why the spot is hidden: a mystery plan before its reveal, a private plan until the host lets you in, a
+     * paid plan until you have paid, or a plan whose host shows it only to people pulling up (D-227).
+     */
+    hiddenBy: SpotHiddenBy.optional(),
   }),
 ]);
 export type EventLocationView = z.infer<typeof EventLocationView>;
@@ -312,6 +337,8 @@ export const EventDetail = EventSummary.extend({
   allowPlusOnes: z.boolean(),
   /** The host keeps a group chat for this plan (D-156). */
   chatEnabled: z.boolean(),
+  /** The exact spot shows only to people holding a seat (D-227). */
+  spotForAttendees: z.boolean().optional(),
   balancedMaxSharePct: z.number().int().nullable(),
   /** Percentage (0–100) of going attendees coming without squad or +1 (F-EVT-10). */
   soloPercent: z.number().int(),
@@ -390,23 +417,44 @@ export type InviteeList = z.infer<typeof InviteeList>;
 export const AddHostBody = z.object({ userId: z.uuid(), role: HostRole.exclude(['host']) });
 export type AddHostBody = z.infer<typeof AddHostBody>;
 
+/**
+ * A check-in ticket (D-227): the QR payload and the short code are signed for this person, this plan and a
+ * 30-second step, so they rotate and a screenshot stops working. Fetch a fresh one at `rotatesAt`.
+ */
 export const Ticket = z.object({
   qr: z.string(),
+  /** Short numeric code for when the camera can't read the QR; rotates with it. */
+  code: z.string().regex(/^\d{6}$/),
   eventId: z.uuid(),
   validFrom: z.iso.datetime(),
   validUntil: z.iso.datetime(),
+  rotatesAt: z.iso.datetime(),
+  rotateEveryMs: z.number().int().positive(),
 });
 export type Ticket = z.infer<typeof Ticket>;
+/** Optional coarse location sent with a ticket request; it only feeds the fake-headcount checks (D-227). */
+export const TicketQuery = z.object({
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+});
+export type TicketQuery = z.infer<typeof TicketQuery>;
+export const TicketCode = z.string().regex(/^\d{6}$/);
 export const CheckInBody = z.union([
-  z.object({ qr: z.string().min(10).max(500) }),
+  /** A host scans a ticket QR; `point` is where the host's phone is, when it can tell. */
+  z.object({ qr: z.string().min(10).max(500), point: GeoPoint.optional() }),
+  /** A host types the short code. */
+  z.object({ code: TicketCode, point: GeoPoint.optional() }),
+  /** The person checks themselves in at the spot. */
   z.object({ point: GeoPoint }),
 ]);
 export type CheckInBody = z.infer<typeof CheckInBody>;
+export const CheckInMethod = z.enum(['qr', 'geofence', 'code']);
+export type CheckInMethod = z.infer<typeof CheckInMethod>;
 export const CheckInResult = z.object({
   userId: z.uuid(),
   displayName: z.string(),
   checkedInAt: z.iso.datetime(),
-  method: z.enum(['qr', 'geofence']),
+  method: CheckInMethod,
 });
 export type CheckInResult = z.infer<typeof CheckInResult>;
 
@@ -429,6 +477,8 @@ export const PublicEventView = z.discriminatedUnion('access', [
     spotsLeft: z.number().int(),
     pricePaise: z.number().int(),
     mystery: z.boolean(),
+    /** Why the share page can only name the area (D-227); null when the plan's spot is public in the app. */
+    spotHidden: SpotHiddenBy.nullable().default(null),
     status: EventStatus,
   }),
   z.object({

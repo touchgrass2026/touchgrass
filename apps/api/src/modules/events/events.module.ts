@@ -18,6 +18,8 @@ import { UsersModule } from '../users/users.module.js';
 import { VenuesModule } from '../venues/venues.module.js';
 import { ReliabilityReaderModule } from '../reliability/reliability-reader.js';
 import { HostRatingReaderModule } from '../feedback/host-rating-reader.js';
+import { SessionDeviceReaderModule } from '../auth/session-device-reader.js';
+import { CheckInReaderModule } from './check-in-reader.js';
 import { CheckInService } from './check-in.service.js';
 import { EventAccessService } from './event-access.service.js';
 import { EventActivityHandlers } from './event-activity.handlers.js';
@@ -55,6 +57,8 @@ import { WaitlistService } from './waitlist.service.js';
     PlusOneClaimModule,
     ReliabilityReaderModule,
     HostRatingReaderModule,
+    CheckInReaderModule,
+    SessionDeviceReaderModule,
   ],
   controllers: [
     EventsController,
@@ -80,6 +84,7 @@ import { WaitlistService } from './waitlist.service.js';
   ],
   exports: [
     AdminEventsService,
+    CheckInService,
     EventHooks,
     EventInvitesService,
     EventViewsService,
@@ -102,6 +107,7 @@ export class EventsModule implements OnModuleInit {
     private readonly accountData: AccountDataRegistry,
     private readonly store: EventStore,
     private readonly joinRequests: EventJoinRequestsService,
+    private readonly checkIns: CheckInService,
   ) {}
 
   onModuleInit(): void {
@@ -123,9 +129,11 @@ export class EventsModule implements OnModuleInit {
       export: async (userId) => ({
         ...(await this.events.exportFor(userId)),
         joinRequests: await this.joinRequests.exportFor(userId),
+        checkIns: await this.checkIns.exportFor(userId),
       }),
       erase: async (userId, tx) => {
         await this.joinRequests.eraseFor(userId, tx);
+        await this.checkIns.eraseFor(userId, tx);
         const touched = await this.events.eraseFor(userId, tx);
         // Cached cores are refreshed once the purge has committed.
         return async () => {

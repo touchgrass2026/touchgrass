@@ -96,6 +96,8 @@ export const events = pgTable('events', {
   mysteryRevealMinutesBefore: integer('mystery_reveal_minutes_before').notNull().default(120),
   allowPlusOnes: boolean('allow_plus_ones').notNull().default(false),
   chatEnabled: boolean('chat_enabled').notNull().default(true),
+  /** The exact spot shows only to people holding a seat (D-227); paid plans always behave this way. */
+  spotForAttendees: boolean('spot_for_attendees').notNull().default(false),
   indoor: boolean('indoor').notNull().default(false),
   accessibility: jsonb('accessibility').$type<AccessibilityJson>().notNull(),
   creatorUserId: uuid('creator_user_id').notNull(),
@@ -176,7 +178,7 @@ export const rsvps = pgTable(
     guestClaimTokenHash: text('guest_claim_token_hash').unique(),
     waitlistedAt: ts('waitlisted_at'),
     checkedInAt: ts('checked_in_at'),
-    checkInMethod: text('check_in_method', { enum: ['qr', 'geofence'] }),
+    checkInMethod: text('check_in_method', { enum: ['qr', 'geofence', 'code'] }),
     cancelledAt: ts('cancelled_at'),
     lateCancel: boolean('late_cancel').notNull().default(false),
     ...timestamps,
@@ -193,3 +195,33 @@ export const waitlistOffers = pgTable('waitlist_offers', {
   expiresAt: ts('expires_at').notNull(),
   ...timestamps,
 });
+
+/** Every check-in with who did it and coarse signals (D-227); owned by `events`. Personal data. */
+export const checkInLog = pgTable('check_in_log', {
+  id: uuid('id').primaryKey(),
+  eventId: uuid('event_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  method: text('method', { enum: ['qr', 'geofence', 'code'] }).notNull(),
+  actor: text('actor', { enum: ['self', 'host', 'venue_staff'] }).notNull(),
+  actorUserId: uuid('actor_user_id'),
+  venueId: uuid('venue_id'),
+  deviceHash: text('device_hash'),
+  coarseLocation: geographyPoint('coarse_location'),
+  distanceM: integer('distance_m'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+/** Fake-headcount flags for admin review (D-227); owned by `events`. */
+export const eventCheckInFlags = pgTable(
+  'event_check_in_flags',
+  {
+    eventId: uuid('event_id').notNull(),
+    kind: text('kind', { enum: ['shared_device', 'far_from_spot'] }).notNull(),
+    count: integer('count').notNull(),
+    flaggedAt: ts('flagged_at').notNull().defaultNow(),
+    reviewedAt: ts('reviewed_at'),
+    reviewedBy: uuid('reviewed_by'),
+    ...timestamps,
+  },
+  (t) => [primaryKey({ columns: [t.eventId, t.kind] })],
+);

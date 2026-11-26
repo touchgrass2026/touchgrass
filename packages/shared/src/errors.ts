@@ -43,6 +43,7 @@ export const ErrorCode = z.enum([
   'PAYMENT_PROVIDER_ERROR',
   'NOT_FREE_NOW',
   'LORE_CLOSED',
+  'TICKET_EXPIRED',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
@@ -88,6 +89,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   PAYMENT_PROVIDER_ERROR: 502,
   NOT_FREE_NOW: 409,
   LORE_CLOSED: 410,
+  TICKET_EXPIRED: 409,
 };
 
 export const ErrorEnvelope = z.object({

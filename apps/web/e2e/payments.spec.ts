@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { API, token } from './api-helpers';
+import { API, partnerVenues, token } from './api-helpers';
 
 /** Seeded venue staff PIN for partner venues (apps/api/src/seed/payments.seed.ts). */
 const STAFF_PIN = '2468';
@@ -75,38 +75,45 @@ test('venue staff redeem a perk pass once with the venue PIN', async ({ page, re
   const m = members(info.project.name);
   const host = await token(request, m.host);
   const guest = await token(request, m.guest);
-  // Partner venues with a small-group perk, found through the seeded paid plans held there.
-  const venueIds = new Set<string>();
-  for (let n = 0; n < 6; n += 1) {
-    const res = await request.get(`${API}/v1/events/by-slug/seedpd${String(n).padStart(3, '0')}`, {
-      headers: auth(guest),
-    });
-    if (!res.ok()) continue;
-    const e = (await res.json()) as {
-      perks: { perk: { venueId: string; minGroupSize: number } }[];
-    };
-    for (const p of e.perks) if (p.perk.minGroupSize <= 2) venueIds.add(p.perk.venueId);
-  }
-  // Each project uses its own venue so wrong-PIN counts (per venue) never add up across projects.
-  const venueId = [...venueIds].sort()[info.project.name === 'mobile' ? 1 : 0];
-  expect(venueId).toBeDefined();
+  // Seeded partner venues (paid plans no longer name their venue before you pay, D-227). Each project walks
+  // them from its own end so wrong-PIN counts (per venue) never add up across projects.
+  const partners = [
+    ...(await partnerVenues(request, guest, 'Third Wave Coffee')),
+    ...(await partnerVenues(request, guest, 'Climbing Wall')),
+  ];
+  if (info.project.name === 'mobile') partners.reverse();
   const interests = (await (await request.get(`${API}/v1/interests`)).json()) as {
     items: { id: string }[];
   };
   const start = Date.now() + 60 * 60_000;
-  const plotted = await request.post(`${API}/v1/events`, {
-    headers: { ...auth(host), 'Idempotency-Key': `e2e-plot-${String(start)}-${info.project.name}` },
-    data: {
-      title: 'Chai and chess',
-      categoryInterestId: interests.items[0]?.id,
-      where: { venueId },
-      startsAt: new Date(start).toISOString(),
-      endsAt: new Date(start + 2 * 3_600_000).toISOString(),
-      capacity: 6,
-    },
-  });
-  expect(plotted.status()).toBe(201);
-  const plan = (await plotted.json()) as { id: string };
+  // The first venue with a perk for a group of two (the host and the guest).
+  let plan: { id: string } | null = null;
+  for (const [k, venueId] of partners.entries()) {
+    const plotted = await request.post(`${API}/v1/events`, {
+      headers: {
+        ...auth(host),
+        'Idempotency-Key': `e2e-plot-${String(start)}-${info.project.name}-${String(k)}`,
+      },
+      data: {
+        title: 'Chai and chess',
+        categoryInterestId: interests.items[0]?.id,
+        where: { venueId },
+        startsAt: new Date(start).toISOString(),
+        endsAt: new Date(start + 2 * 3_600_000).toISOString(),
+        capacity: 6,
+      },
+    });
+    expect(plotted.status()).toBe(201);
+    const candidate = (await plotted.json()) as {
+      id: string;
+      perks: { perk: { minGroupSize: number } }[];
+    };
+    if (candidate.perks.some((p) => p.perk.minGroupSize <= 2)) {
+      plan = candidate;
+      break;
+    }
+  }
+  if (!plan) throw new Error('No seeded partner venue with a perk for two');
   const going = await request.put(`${API}/v1/events/${plan.id}/rsvp`, {
     headers: {
       ...auth(guest),

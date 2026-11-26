@@ -8,6 +8,7 @@ import {
   type GeoPoint,
   LIMITS,
   type PersonCard,
+  spotForAttendeesByDefault,
   UpdateEventBody,
 } from '@touchgrass/shared';
 import { useQueryClient } from '@tanstack/react-query';
@@ -139,6 +140,8 @@ interface FormState {
   partialPct: string;
   /** Group chat for people pulling up (D-156). */
   chatEnabled: boolean;
+  /** Exact spot only for people pulling up (D-227); null follows the plan type's default. */
+  spotForAttendees: boolean | null;
 }
 
 /** The sheets the setting rows open. */
@@ -215,6 +218,7 @@ function initialState(): FormState {
     cutoffHours: '24',
     partialPct: '50',
     chatEnabled: true,
+    spotForAttendees: null,
   };
 }
 
@@ -247,6 +251,7 @@ function fromEvent(e: EventDetail): FormState {
     cutoffHours: String(e.refundPolicy?.cutoffHours ?? 24),
     partialPct: String(e.refundPolicy?.partialPct ?? 50),
     chatEnabled: e.chatEnabled,
+    spotForAttendees: e.spotForAttendees ?? null,
   };
 }
 
@@ -491,6 +496,7 @@ function PlotForm({
       // Paid plans have no +1s: every seat is a ticket.
       allowPlusOnes: paidPlan ? false : form.allowPlusOnes,
       chatEnabled: form.chatEnabled,
+      spotForAttendees: form.spotForAttendees ?? spotForAttendeesByDefault(form.visibility),
       ...(coverTouched ? { coverMediaId: cover.id } : {}),
       indoor: form.indoor,
       accessibility: {
@@ -648,6 +654,9 @@ function PlotForm({
     label: localized(v.name, i18n.language),
   }));
   const vibeNames = vibeOptions.filter((o) => form.vibeTagIds.includes(o.id)).map((o) => o.label);
+  // Paid plans always keep the exact spot for people who paid (D-227).
+  const spotKept =
+    paidPlan || (form.spotForAttendees ?? spotForAttendeesByDefault(form.visibility));
   const optionsOn = [
     form.soloFriendly,
     form.smallGroup,
@@ -658,6 +667,7 @@ function PlotForm({
     form.accessibleRestroom,
     form.quietSpace,
     form.chatEnabled,
+    spotKept,
   ].filter(Boolean).length;
   const durationText = form.durationHours.trim()
     ? t('events.plotUiHours', { n: form.durationHours.trim() })
@@ -1067,6 +1077,16 @@ function PlotForm({
                 set('chatEnabled', v);
               }}
               testID="plot-chat"
+            />
+            <SwitchRow
+              label={t('events.spotForAttendees')}
+              hint={t('events.spotForAttendeesHint')}
+              value={spotKept}
+              disabled={paidPlan}
+              onChange={(v) => {
+                set('spotForAttendees', v);
+              }}
+              testID="plot-spot-for-attendees"
             />
           </>
         ) : null}

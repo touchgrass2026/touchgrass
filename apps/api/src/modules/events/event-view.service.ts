@@ -29,6 +29,7 @@ import {
   isLocationRevealed,
   revealTime,
   rsvpEligibility,
+  spotHiddenBy,
 } from './event.policy.js';
 import {
   type EventCore,
@@ -210,6 +211,7 @@ export class EventViewService {
       minGroupSize: core.minGroupSize,
       allowPlusOnes: core.allowPlusOnes,
       chatEnabled: core.chatEnabled,
+      spotForAttendees: core.spotForAttendees,
       balancedMaxSharePct: core.balancedMaxSharePct,
       soloPercent,
       cancelledReason: core.cancelledReason,
@@ -304,6 +306,7 @@ export class EventViewService {
       spotsLeft: Math.max(0, core.capacity - counts.seats),
       pricePaise: core.pricePaise,
       mystery: core.mystery,
+      spotHidden: spotHiddenBy(core),
       status: core.status,
     };
   }
@@ -357,7 +360,7 @@ export class EventViewService {
       radiusMeters: MYSTERY_AREA_RADIUS_M,
       neighbourhoodName,
       revealsAt: revealTime(c).toISOString(),
-      hiddenBy: c.mystery ? 'mystery' : 'approval',
+      hiddenBy: spotHiddenBy(c) ?? 'mystery',
     };
   }
 

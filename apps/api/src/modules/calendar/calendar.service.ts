@@ -96,8 +96,14 @@ export class CalendarService {
     const loc = e.location;
     if (loc.kind === 'exact')
       return [loc.placeName, loc.address].filter((x): x is string => Boolean(x)).join(', ');
+    // Only a mystery plan is a mystery; other hidden spots (private, paid, attendees-only) just name the area.
     return fillParams(
-      translate('calendar.mysteryLocation', lang),
+      translate(
+        loc.hiddenBy === 'mystery' || loc.hiddenBy === undefined
+          ? 'calendar.mysteryLocation'
+          : 'calendar.hiddenLocation',
+        lang,
+      ),
       { area: loc.neighbourhoodName ?? '' },
       lang,
     );

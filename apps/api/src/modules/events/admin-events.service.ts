@@ -29,9 +29,10 @@ import { AuditService } from '../../common/audit/audit.service.js';
 import { type CityScope, inScope } from '../../common/auth/admin-scope.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { DB, type Database } from '../../infra/database/database.module.js';
-import { eventHosts, events, rsvps } from '../../infra/database/schema/index.js';
+import { eventCheckInFlags, eventHosts, events, rsvps } from '../../infra/database/schema/index.js';
 import { CitiesService } from '../cities/cities.service.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
+import { CheckInReader } from './check-in-reader.js';
 import { EventStore } from './event-store.service.js';
 import { EventsService } from './events.service.js';
 
@@ -50,6 +51,7 @@ export class AdminEventsService {
     private readonly cities: CitiesService,
     private readonly profiles: ProfilesService,
     private readonly audit: AuditService,
+    private readonly checkIns: CheckInReader,
   ) {}
 
   async list(
@@ -78,6 +80,9 @@ export class AdminEventsService {
           ? or(isNull(events.featuredUntil), lt(events.featuredUntil, now))
           : undefined,
       q.q ? ilike(events.title, `%${q.q.replace(LIKE_ESCAPE, (c) => `\\${c}`)}%`) : undefined,
+      q.flagged === true
+        ? sql`EXISTS (SELECT 1 FROM ${eventCheckInFlags} f WHERE f.event_id = ${events.id} AND f.reviewed_at IS NULL)`
+        : undefined,
       after
         ? or(
             lt(events.startsAt, new Date(after.t)),
@@ -112,13 +117,41 @@ export class AdminEventsService {
     const core = await this.events.requireStaff(eventId, scope);
     const [row] = await this.rows([eventId], now);
     if (!row) throw AppError.notFound('Event');
+    const [checkedIn, flags] = await Promise.all([
+      this.checkIns.checkedInCount(eventId),
+      this.checkIns.flags(eventId),
+    ]);
     return {
       ...row,
       description: core.description,
       endsAt: core.endsAt.toISOString(),
       visibility: core.visibility,
       cancelledReason: core.cancelledReason,
+      checkedIn,
+      flags,
     };
+  }
+
+  /** A reviewer looked at the plan's check-in flags (D-227); a flag that grows later opens again. */
+  async reviewCheckInFlags(adminUserId: string, eventId: string, scope: CityScope): Promise<void> {
+    const core = await this.events.requireStaff(eventId, scope);
+    await this.db.transaction(async (tx) => {
+      const reviewed = await tx
+        .update(eventCheckInFlags)
+        .set({ reviewedAt: new Date(), reviewedBy: adminUserId })
+        .where(and(eq(eventCheckInFlags.eventId, eventId), isNull(eventCheckInFlags.reviewedAt)))
+        .returning({ kind: eventCheckInFlags.kind, count: eventCheckInFlags.count });
+      await this.audit.record(
+        {
+          adminUserId,
+          action: 'events.check_in_flags.review',
+          targetType: 'event',
+          targetId: eventId,
+          details: { cityId: core.cityId, flags: reviewed },
+        },
+        tx,
+      );
+    });
   }
 
   private async rows(ids: string[], now: Date): Promise<AdminEventRow[]> {
@@ -126,10 +159,11 @@ export class AdminEventsService {
     const cores = (await Promise.all(ids.map((id) => this.store.core(id)))).flatMap((c) =>
       c ? [c] : [],
     );
-    const [cityRows, names, counts] = await Promise.all([
+    const [cityRows, names, counts, flags] = await Promise.all([
       this.cities.list(),
       this.profiles.displayNames([...new Set(cores.map((c) => c.creatorUserId))]),
       this.store.seatCountsMany(ids),
+      this.checkIns.openFlagKinds(ids),
     ]);
     const cityNames = new Map(cityRows.map((c) => [c.id, c.name]));
     return cores.map((c) => ({
@@ -153,6 +187,7 @@ export class AdminEventsService {
         c.featuredUntil.getTime() > now.getTime()
           ? { until: c.featuredUntil.toISOString(), rank: c.featuredRank }
           : null,
+      checkInFlags: flags.get(c.id) ?? [],
     }));
   }
 

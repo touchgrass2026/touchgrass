@@ -1,5 +1,5 @@
 import type { EventVisibility, GeoPoint } from '@touchgrass/shared';
-import { offsetPoint } from '@touchgrass/shared';
+import { offsetPoint, spotForAttendeesByDefault } from '@touchgrass/shared';
 import { eq, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import type { Tx } from '../infra/database/database.module.js';
@@ -13,12 +13,13 @@ import {
   rsvps,
   venues,
 } from '../infra/database/schema/index.js';
+import { hidesSpot } from '../modules/events/event.policy.js';
 import { mysteryCenter } from '../modules/events/mystery.js';
 import { HYDERABAD_NEIGHBOURHOODS } from './hyderabad.js';
 import { seedPersona } from './taxonomy.js';
 
 /** Dev-only key for seeded mystery offsets (production events use SIGNED_URL_SECRET). */
-const SEED_MYSTERY_SECRET = 'touchgrass-dev-seed-mystery-offsets';
+export const SEED_MYSTERY_SECRET = 'touchgrass-dev-seed-mystery-offsets';
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -210,9 +211,16 @@ export async function seedEvents(
       location: venue.point,
       address: venue.address,
       placeName: venue.name,
-      approxCenter: mystery
+      // Plans that hide their spot (mystery, private, women-only, invite-only; D-227) publish a fuzzed centre.
+      approxCenter: hidesSpot({
+        mystery,
+        visibility,
+        pricePaise: 0,
+        spotForAttendees: spotForAttendeesByDefault(visibility),
+      })
         ? mysteryCenter(id, venue.point, centroid, SEED_MYSTERY_SECRET)
         : venue.point,
+      spotForAttendees: spotForAttendeesByDefault(visibility),
       startsAt,
       endsAt,
       capacity,

@@ -33,7 +33,7 @@ import {
   type EventViewerFacts,
   type ViewerContext,
 } from '../events/event-access.service.js';
-import { canViewEvent } from '../events/event.policy.js';
+import { canViewEvent, hidesSpot, spotHiddenBy } from '../events/event.policy.js';
 import {
   type CandidateArea,
   type CandidateFilters,
@@ -564,9 +564,11 @@ export class DiscoveryService {
             id: c.id,
             slug: c.slug,
             title: c.title,
-            // The public centre: exact for normal plans, fuzzed for mystery plans (drawn as a circle).
+            // The public centre: exact for normal plans, fuzzed for plans that hide their spot (mystery,
+            // private, paid, attendees-only; D-227), drawn as a circle that contains the spot.
             center: { lat: r.lat, lng: r.lng },
-            radiusMeters: c.mystery ? MYSTERY_AREA_RADIUS_M : 0,
+            radiusMeters: hidesSpot(c) ? MYSTERY_AREA_RADIUS_M : 0,
+            hiddenBy: spotHiddenBy(c),
             mystery: c.mystery,
             startsAt: c.startsAt.toISOString(),
             emoji: category?.emoji ?? null,

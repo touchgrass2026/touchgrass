@@ -51,6 +51,7 @@ import { VenuesService } from '../venues/venues.service.js';
 import { EventAccessService } from './event-access.service.js';
 import {
   canViewEvent,
+  defaultSpotForAttendees,
   genderBucket,
   genderOnlyError,
   hidesSpot,
@@ -150,8 +151,10 @@ export class EventsService {
       });
 
     const id = uuidv7();
-    // Mystery and private plans publish a fuzzed centre, so feeds and maps never give the spot away.
-    const approx = hidesSpot(body)
+    const spotForAttendees = body.spotForAttendees ?? defaultSpotForAttendees(body.visibility);
+    // Plans that hide their spot (mystery, private, paid, attendees-only) publish a fuzzed centre, so feeds,
+    // maps and share pages never give the spot away (D-227).
+    const approx = hidesSpot({ ...body, spotForAttendees })
       ? mysteryCenter(id, where.point, where.centroid, this.env.SIGNED_URL_SECRET)
       : where.point;
     const status = body.publish ? 'published' : 'draft';
@@ -187,6 +190,7 @@ export class EventsService {
         mysteryRevealMinutesBefore: body.mysteryRevealMinutesBefore,
         allowPlusOnes: body.allowPlusOnes,
         chatEnabled: body.chatEnabled,
+        spotForAttendees,
         indoor: body.indoor,
         accessibility: body.accessibility,
         creatorUserId: userId,
@@ -285,6 +289,14 @@ export class EventsService {
       ]);
     if (body.startsAt) this.assertTiming(startsAt, now);
     const visibility = body.visibility ?? before.visibility;
+    // Switching to a plan type that keeps its spot for attendees turns that on unless the host says otherwise.
+    const spotForAttendees =
+      body.spotForAttendees ??
+      (body.visibility !== undefined &&
+      body.visibility !== before.visibility &&
+      defaultSpotForAttendees(body.visibility)
+        ? true
+        : before.spotForAttendees);
     const share =
       body.balancedMaxSharePct !== undefined
         ? body.balancedMaxSharePct
@@ -333,7 +345,7 @@ export class EventsService {
           });
         const mystery = body.mystery ?? locked.mystery;
         const point = where?.point ?? beforeExact?.point ?? locked.approxCenter;
-        const hidden = hidesSpot({ mystery, visibility });
+        const hidden = hidesSpot({ mystery, visibility, pricePaise: price, spotForAttendees });
         const needsApprox = where !== null || hidden !== hidesSpot(locked);
         const approx = needsApprox
           ? hidden
@@ -375,6 +387,7 @@ export class EventsService {
             mysteryRevealMinutesBefore: body.mysteryRevealMinutesBefore,
             allowPlusOnes: body.allowPlusOnes,
             chatEnabled: body.chatEnabled,
+            spotForAttendees,
             indoor: body.indoor,
             accessibility: body.accessibility,
             pricePaise: body.pricePaise,

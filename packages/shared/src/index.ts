@@ -40,3 +40,4 @@ export * from './schemas/stories';
 export * from './schemas/comments';
 export * from './schemas/waitlist';
 export * from './schemas/customer';
+export * from './schemas/check-in';

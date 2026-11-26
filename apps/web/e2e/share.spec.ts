@@ -71,6 +71,18 @@ test('mystery plans show only the area, never the spot', async ({ page }) => {
   expect(description).toMatch(/Mystery spot near/);
 });
 
+test('paid plans name only the area and say the exact spot comes after paying (D-227)', async ({
+  page,
+}) => {
+  // Seeded paid plans are held at partner venues (apps/api/src/seed/payments.seed.ts).
+  await page.goto('/e/seedpd000');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByTestId('share-spot-note')).toHaveText('Exact spot shows after you pay.');
+  const html = await page.content();
+  for (const leak of ['Main Road', 'Third Wave', 'Climbing Wall', 'Rooftop Studio'])
+    expect(html).not.toContain(leak);
+});
+
 test('cancelled plans say so; unknown plans 404', async ({ page }) => {
   await page.goto(`/e/${CANCELLED}`);
   await expect(page.getByRole('status')).toHaveText('This plan was cancelled.');

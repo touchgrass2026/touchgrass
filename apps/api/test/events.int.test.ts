@@ -696,7 +696,7 @@ describe('check-in (F-EVT-14)', () => {
       { eventId: e.id, userId: a.id, method: 'qr', onTime: true },
     ]);
     // Someone not going cannot be checked in, even with a validly signed ticket.
-    const forged = h.app.get(CheckInService).ticketCode(e.id, b.id);
+    const forged = h.app.get(CheckInService).ticketAt(e.id, b.id, new Date()).qr;
     expect((await scan(host, forged).expect(409)).body.error.details).toEqual({
       reason: 'NOT_GOING',
     });
@@ -1071,7 +1071,7 @@ describe('mystery plans never leak the spot (F-EVT-12)', () => {
     const { Redis } = await import('ioredis');
     const { inject } = await import('vitest');
     const redis = new Redis(inject('redisUrl'));
-    const cached = await redis.get(`cache:event:v3:${e.id}`);
+    const cached = await redis.get(`cache:event:v4:${e.id}`);
     await redis.quit();
     expect(cached).not.toBeNull();
     expect(cached).not.toContain(ADDRESS);

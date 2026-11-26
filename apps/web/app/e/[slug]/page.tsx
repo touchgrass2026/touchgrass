@@ -13,7 +13,10 @@ interface Props {
   searchParams: Promise<{ i?: string; lang?: string }>;
 }
 
-/** Link previews never include an address; mystery and private plans say even less (F-EVT-12/17). */
+/**
+ * Link previews never include an address; mystery and private plans say even less (F-EVT-12/17), and paid or
+ * attendees-only plans say the exact spot comes later (D-227).
+ */
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const e = await publicEvent(slug);
@@ -108,6 +111,14 @@ export default async function EventSharePage({ params, searchParams }: Props) {
                 : placeLabel(e.areaName, e.cityName)}
               {e.mystery ? (
                 <span className="block text-base text-muted">{t.share.mysteryNote}</span>
+              ) : e.spotHidden === 'paid' ? (
+                <span className="block text-base text-muted" data-testid="share-spot-note">
+                  {t.share.paidNote}
+                </span>
+              ) : e.spotHidden === 'attendees' || e.spotHidden === 'approval' ? (
+                <span className="block text-base text-muted" data-testid="share-spot-note">
+                  {t.share.attendeesNote}
+                </span>
               ) : null}
             </dd>
           </dl>

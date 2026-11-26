@@ -1,20 +1,21 @@
 import { haversineMeters, LIMITS } from '@touchgrass/shared';
 import { describe, expect, it } from 'vitest';
-import type { Env } from '../../config/env.js';
-import { CheckInService } from './check-in.service.js';
 import { canInvite } from './event-invites.service.js';
 import {
   balancedAllows,
   canViewEvent,
   checkInWindowOpen,
+  defaultSpotForAttendees,
   type EventFacts,
   genderBucket,
+  hidesSpot,
   holdsSeat,
   isLateCancel,
   isLocationRevealed,
   materialChanges,
   revealTime,
   rsvpEligibility,
+  spotHiddenBy,
   type ViewerFacts,
   waitlistMode,
 } from './event.policy.js';
@@ -33,6 +34,8 @@ const event = (o: Partial<EventFacts> = {}): EventFacts => ({
   balancedMaxSharePct: null,
   mystery: false,
   mysteryRevealMinutesBefore: 120,
+  pricePaise: 0,
+  spotForAttendees: false,
   ...o,
 });
 
@@ -314,29 +317,61 @@ describe('who may invite (F-EVT-04)', () => {
   });
 });
 
-describe('tickets and slugs', () => {
-  const svc = new CheckInService(
-    null as never,
-    { SIGNED_URL_SECRET: 'ticket-secret-ticket-secret-ticket-secret' } as Env,
-    null as never,
-    null as never,
-    null as never,
-    null as never,
-  );
-  const ev = '0192f3a4-5b6c-7d8e-9f01-23456789abcd';
-  const user = '0192f3a4-5b6c-7d8e-9f01-23456789abce';
-  it('round-trips a signed ticket and rejects tampering', () => {
-    const code = svc.ticketCode(ev, user);
-    expect(svc.parseTicket(code)).toEqual({ eventId: ev, userId: user });
-    expect(svc.parseTicket(code.replace(user, ev))).toBeNull();
-    expect(svc.parseTicket(`${code.slice(0, -1)}${code.endsWith('0') ? '1' : '0'}`)).toBeNull();
-    expect(svc.parseTicket('nonsense')).toBeNull();
-  });
+describe('slugs', () => {
   it('slugs are 8 unambiguous base62 characters', () => {
     // Enough samples that every alphabet character shows up, so a stray ambiguous one cannot slip through.
     const all = Array.from({ length: 2000 }, () => randomSlug()).join('');
     expect(all).toMatch(/^[A-Za-z2-9]+$/);
     expect(all).not.toMatch(/[01OIlo]/);
     expect(randomSlug()).toHaveLength(8);
+  });
+});
+
+describe('hidden spots (D-227)', () => {
+  const going = { hostRole: null, rsvp: 'going' } as const;
+  const outsider = { hostRole: null, rsvp: null } as const;
+  it('a free public plan shows its spot to everyone who can see it', () => {
+    expect(spotHiddenBy(event())).toBeNull();
+    expect(hidesSpot(event())).toBe(false);
+    expect(isLocationRevealed(outsider, event(), NOW)).toBe(true);
+  });
+  it('a paid plan hides its spot from anyone without a paid seat', () => {
+    const paid = event({ pricePaise: 50_000 });
+    expect(spotHiddenBy(paid)).toBe('paid');
+    expect(isLocationRevealed(outsider, paid, NOW)).toBe(false);
+    for (const rsvp of ['held', 'waitlisted', 'interested', 'cancelled'] as const)
+      expect(isLocationRevealed({ hostRole: null, rsvp }, paid, NOW)).toBe(false);
+  });
+  it('people holding a seat on a paid plan (they have paid) and hosts see the spot', () => {
+    const paid = event({ pricePaise: 50_000 });
+    expect(isLocationRevealed(going, paid, NOW)).toBe(true);
+    expect(isLocationRevealed({ hostRole: null, rsvp: 'checked_in' }, paid, NOW)).toBe(true);
+    expect(isLocationRevealed({ hostRole: 'co_host', rsvp: null }, paid, NOW)).toBe(true);
+  });
+  it('a host can keep a free plan’s spot for people pulling up', () => {
+    const kept = event({ spotForAttendees: true });
+    expect(spotHiddenBy(kept)).toBe('attendees');
+    expect(isLocationRevealed(outsider, kept, NOW)).toBe(false);
+    expect(isLocationRevealed(going, kept, NOW)).toBe(true);
+  });
+  it('mystery outranks private, private outranks paid, paid outranks attendees-only', () => {
+    expect(
+      spotHiddenBy(
+        event({ mystery: true, visibility: 'approval', pricePaise: 1, spotForAttendees: true }),
+      ),
+    ).toBe('mystery');
+    expect(spotHiddenBy(event({ visibility: 'approval', pricePaise: 1 }))).toBe('approval');
+    expect(spotHiddenBy(event({ pricePaise: 1, spotForAttendees: true }))).toBe('paid');
+  });
+  it('a paid mystery plan still waits for the reveal, even for people who paid', () => {
+    const e = event({ mystery: true, pricePaise: 50_000 });
+    expect(isLocationRevealed(going, e, NOW)).toBe(false);
+    expect(isLocationRevealed(going, e, revealTime(e))).toBe(true);
+  });
+  it('women-only, men-only, invite-only and private plans keep the spot for attendees by default', () => {
+    for (const v of ['women_only', 'men_only', 'invite_only', 'approval'] as const)
+      expect(defaultSpotForAttendees(v)).toBe(true);
+    for (const v of ['public', 'friends_of_friends', 'balanced'] as const)
+      expect(defaultSpotForAttendees(v)).toBe(false);
   });
 });

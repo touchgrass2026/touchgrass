@@ -7,7 +7,10 @@ import { Button, Screen, Text, TextField } from '../../../../components/ui';
 import { useCheckIn } from '../../../../src/features/events/api';
 import { errorMessage } from '../../../../src/lib/errors';
 
-/** Hosts scan tickets at the door (F-EVT-14). A typed-in code works when the camera cannot. */
+/**
+ * Hosts scan tickets at the door (F-EVT-14). Tickets rotate every 30 seconds (D-227), so a screenshot fails
+ * with "expired". The six-digit code under a ticket works when the camera cannot read it.
+ */
 export default function ScanScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
@@ -23,7 +26,8 @@ export default function ScanScreen() {
     busy.current = true;
     last.current = qr;
     try {
-      const r = await checkIn.mutateAsync({ qr });
+      // Six digits are the short code under the QR; anything else is a scanned or pasted QR payload.
+      const r = await checkIn.mutateAsync(/^\d{6}$/.test(qr) ? { code: qr } : { qr });
       setResult({ ok: true, text: t('events.scanned', { name: r.displayName }) });
     } catch (err) {
       setResult({ ok: false, text: errorMessage(t, err) ?? '' });
@@ -73,11 +77,12 @@ export default function ScanScreen() {
         value={manual}
         onChangeText={setManual}
         autoCapitalize="none"
+        inputMode="numeric"
         testID="manual-code"
       />
       <Button
         label={t('events.checkInCode')}
-        disabled={manual.trim().length < 10}
+        disabled={manual.trim().length < 6}
         loading={checkIn.isPending}
         testID="manual-check-in"
         onPress={() => {

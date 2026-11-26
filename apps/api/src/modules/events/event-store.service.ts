@@ -44,6 +44,8 @@ export interface EventCore {
   mysteryRevealMinutesBefore: number;
   allowPlusOnes: boolean;
   chatEnabled: boolean;
+  /** The exact spot shows only to people holding a seat (D-227). */
+  spotForAttendees: boolean;
   refundPolicy: RefundPolicyJson | null;
   indoor: boolean;
   accessibility: { stepFree: boolean; accessibleRestroom: boolean; quietSpace: boolean };
@@ -115,6 +117,7 @@ export class EventStore {
       mysteryRevealMinutesBefore: events.mysteryRevealMinutesBefore,
       allowPlusOnes: events.allowPlusOnes,
       chatEnabled: events.chatEnabled,
+      spotForAttendees: events.spotForAttendees,
       refundPolicy: events.refundPolicy,
       indoor: events.indoor,
       accessibility: events.accessibility,
@@ -139,7 +142,7 @@ export class EventStore {
     opts: { lock?: boolean; fresh?: boolean } = {},
   ): Promise<EventCore | null> {
     if (!opts.lock && !opts.fresh && db === this.db) {
-      const hit = await this.redis.get(`cache:event:v3:${id}`);
+      const hit = await this.redis.get(`cache:event:v4:${id}`);
       if (hit) {
         const c = JSON.parse(hit) as Cached;
         return {
@@ -155,7 +158,7 @@ export class EventStore {
     if (!row) return null;
     const core = EventStore.toCore(row);
     if (!opts.lock)
-      await this.redis.set(`cache:event:v3:${id}`, JSON.stringify(core), 'EX', CACHE_TTL);
+      await this.redis.set(`cache:event:v4:${id}`, JSON.stringify(core), 'EX', CACHE_TTL);
     return core;
   }
 
@@ -188,7 +191,7 @@ export class EventStore {
   }
 
   async invalidate(id: string): Promise<void> {
-    await this.redis.del(`cache:event:v3:${id}`);
+    await this.redis.del(`cache:event:v4:${id}`);
   }
 
   /** The true spot. Callers must have established the viewer may see it (isLocationRevealed). */
@@ -213,6 +216,31 @@ export class EventStore {
     const res = await this.db.execute<{ ok: boolean }>(sql`
       SELECT ST_DWithin(location, ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography, ${meters}) AS ok FROM events WHERE id = ${id}`);
     return res.rows[0]?.ok === true;
+  }
+
+  /** Metres from the true spot to a point, computed in PostGIS without returning the spot (D-227). */
+  async distanceTo(id: string, point: GeoPoint): Promise<number | null> {
+    const res = await this.db.execute<{ d: number | null }>(sql`
+      SELECT ST_Distance(location, ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography)::int AS d FROM events WHERE id = ${id}`);
+    return res.rows[0]?.d ?? null;
+  }
+
+  /** Published plans at a venue that overlap [from, to), soonest first (the venue's door list, D-227). */
+  async atVenueBetween(venueId: string, from: Date, to: Date): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.venueId, venueId),
+          eq(events.status, 'published'),
+          sql`${events.startsAt} < ${to.toISOString()}::timestamptz`,
+          sql`${events.endsAt} > ${from.toISOString()}::timestamptz`,
+          sql`${events.heldAt} IS NULL`,
+        ),
+      )
+      .orderBy(events.startsAt, events.id);
+    return rows.map((r) => r.id);
   }
 
   async hosts(

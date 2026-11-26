@@ -12,6 +12,7 @@ import {
 import {
   cancelEventAction,
   featureEventAction,
+  reviewCheckInFlagsAction,
   unfeatureEventAction,
   updateEventAction,
 } from '../actions';
@@ -38,6 +39,36 @@ export default async function EventAdminPage({ params }: { params: Promise<{ id:
         {e.held ? ` · ${c.held}` : ''}
       </p>
       {e.cancelledReason ? <p>{e.cancelledReason}</p> : null}
+      <section aria-labelledby="check-in-flags" className="flex flex-col gap-2">
+        <h2 id="check-in-flags" className="text-xl font-bold">
+          {c.checkInFlags}
+        </h2>
+        <p data-testid="checked-in-count">
+          {c.checkedInCount.replace('{{count}}', String(e.checkedIn))}
+        </p>
+        {e.flags.length === 0 ? (
+          <p>{c.noFlags}</p>
+        ) : (
+          <ul className="flex flex-col gap-1" data-testid="check-in-flags">
+            {e.flags.map((f) => (
+              <li key={f.kind} className={f.reviewedAt ? '' : 'font-semibold'}>
+                {c.flagKinds[f.kind].replace('{{count}}', String(f.count))}
+                {f.reviewedAt
+                  ? ` · ${c.flagReviewed.replace('{{time}}', istDateTime.format(new Date(f.reviewedAt)))}`
+                  : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+        {e.flags.some((f) => f.reviewedAt === null) ? (
+          <form action={reviewCheckInFlagsAction}>
+            <input type="hidden" name="id" value={e.id} />
+            <button type="submit" className={secondaryButton} data-testid="review-flags">
+              {c.markReviewed}
+            </button>
+          </form>
+        ) : null}
+      </section>
       {e.featured ? (
         <p data-testid="featured-status" className="font-semibold">
           {c.featured

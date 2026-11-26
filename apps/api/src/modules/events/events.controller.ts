@@ -38,6 +38,7 @@ import {
   RsvpBody,
   RsvpResult,
   Ticket,
+  TicketQuery,
   UpdateEventBody,
 } from '@touchgrass/shared';
 import { z } from 'zod';
@@ -295,13 +296,18 @@ export class EventsController {
     await this.events.removeHost(user.userId, id, userId);
   }
 
+  /** A fresh rotating ticket (D-227); the app asks again every 30 s while the ticket is open. */
   @Get(':id/ticket')
+  @RateLimit({ name: 'ticket', limit: 600, windowSeconds: 3600, by: 'user' })
+  @ApiZodQuery(TicketQuery)
   @ApiZodResponse(200, Ticket)
   ticket(
     @CurrentUser() user: AuthPrincipal,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodPipe(TicketQuery)) q: Dto.TicketQuery,
   ): Promise<Dto.Ticket> {
-    return this.checkIns.ticket(user.userId, id);
+    const point = q.lat !== undefined && q.lng !== undefined ? { lat: q.lat, lng: q.lng } : null;
+    return this.checkIns.ticket(user.userId, id, { sessionId: user.sessionId, point });
   }
 
   @Post(':id/check-in')
@@ -314,7 +320,7 @@ export class EventsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body(new ZodPipe(CheckInBody)) body: Dto.CheckInBody,
   ): Promise<Dto.CheckInResult> {
-    return this.checkIns.checkIn(user.userId, id, body);
+    return this.checkIns.checkIn(user.userId, id, body, { sessionId: user.sessionId });
   }
 }
 

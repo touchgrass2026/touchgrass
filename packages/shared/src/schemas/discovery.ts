@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Interest } from './catalog';
 import { GeoPoint } from './common';
-import { EventSummary, FriendsGoing, NO_FRIENDS_GOING, Venue } from './events';
+import { EventSummary, FriendsGoing, NO_FRIENDS_GOING, SpotHiddenBy, Venue } from './events';
 import { CrewSummary } from './engagement';
 import { PersonCard, RelationshipStatus } from './social';
 
@@ -169,9 +169,11 @@ export const MapPin = z.object({
   slug: z.string(),
   title: z.string(),
   center: GeoPoint,
-  /** 0 for exact pins; the fuzz radius for unrevealed mystery plans (drawn as a circle). */
+  /** 0 for exact pins; the fuzz radius for plans that hide their spot (drawn as a circle, D-227). */
   radiusMeters: z.number().int(),
   mystery: z.boolean(),
+  /** Why the pin is an area rather than the spot (D-227); null for exact pins. */
+  hiddenBy: SpotHiddenBy.nullable().default(null),
   startsAt: z.iso.datetime(),
   emoji: z.string().nullable(),
   /** The plan's category, for the pin's hue and glyph (D-204); mystery pins still draw a neutral lock. */

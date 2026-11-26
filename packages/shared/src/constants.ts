@@ -93,7 +93,25 @@ export const LIMITS = {
     areaRadiusMeters: 2000,
     defaultRevealBeforeMs: 2 * HOUR_MS,
   },
-  checkIn: { geofenceMeters: 150, windowBeforeMs: 30 * MINUTE_MS, windowAfterMs: 2 * HOUR_MS },
+  checkIn: {
+    geofenceMeters: 150,
+    windowBeforeMs: 30 * MINUTE_MS,
+    windowAfterMs: 2 * HOUR_MS,
+    /** Check-in QR codes and their short codes rotate this often (D-227). */
+    ticketStepMs: 30_000,
+    /** A code from the step just before still scans, so a code shown as it rotates is not refused. */
+    ticketGraceSteps: 1,
+    ticketCodeDigits: 6,
+    /** This many different people checked in from one phone flags the plan for review. */
+    sharedDeviceFlagAt: 3,
+    /** Check-ins this far from the spot count as far away; this many of them flag the plan. */
+    farFromSpotMeters: 1000,
+    farFromSpotFlagAt: 2,
+    /** Coarse locations are rounded to this many decimal places (about 110 m). */
+    coarseDecimals: 3,
+    /** How long a venue's door view stays signed in after the staff PIN. */
+    doorSessionMs: 12 * HOUR_MS,
+  },
   waitlist: { claimWindowMs: 30 * MINUTE_MS, lastMinuteThresholdMs: 6 * HOUR_MS },
   payments: {
     /** A spot is held this long while someone pays (F-PAY-01). */

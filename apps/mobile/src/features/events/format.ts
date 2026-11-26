@@ -78,7 +78,30 @@ export function formatTime(iso: string, language: string, timeZone = 'Asia/Kolka
 export function locationLabel(t: T, location: EventLocationView): string {
   if (location.kind === 'exact')
     return location.placeName ? `${location.placeName} · ${location.address}` : location.address;
-  return t('events.mysteryArea', { area: location.neighbourhoodName ?? 'Hyderabad' });
+  const area = location.neighbourhoodName ?? 'Hyderabad';
+  // Only mystery plans are a mystery; private, paid and attendees-only plans just name the area (D-227).
+  return location.hiddenBy === undefined || location.hiddenBy === 'mystery'
+    ? t('events.mysteryArea', { area })
+    : t('events.nearArea', { area });
+}
+
+/** Why the exact spot is not shown yet, in the viewer's words (null when it is shown). */
+export function hiddenSpotNote(
+  t: T,
+  location: EventLocationView,
+  formatReveal: (iso: string) => string,
+): string | null {
+  if (location.kind === 'exact') return null;
+  switch (location.hiddenBy) {
+    case 'approval':
+      return t('events.privateSpotHidden');
+    case 'paid':
+      return t('events.paidSpotHidden');
+    case 'attendees':
+      return t('events.attendeesSpotHidden');
+    default:
+      return t('events.mysteryRevealsAt', { time: formatReveal(location.revealsAt) });
+  }
 }
 
 export function capacityLabel(

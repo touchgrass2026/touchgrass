@@ -31,7 +31,11 @@ export default async function EventsPage({
     Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined && v !== '')),
   );
   const qs = new URLSearchParams(
-    Object.entries({ ...q, featured: q.featured === undefined ? undefined : String(q.featured) })
+    Object.entries({
+      ...q,
+      featured: q.featured === undefined ? undefined : String(q.featured),
+      flagged: q.flagged === undefined ? undefined : String(q.flagged),
+    })
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => [k, String(v)]),
   );
@@ -97,6 +101,16 @@ export default async function EventsPage({
           />
           {c.featuredOnly}
         </label>
+        <label className="flex min-h-11 items-center gap-2 font-semibold">
+          <input
+            type="checkbox"
+            name="flagged"
+            value="true"
+            defaultChecked={q.flagged === true}
+            className="size-5"
+          />
+          {c.flaggedOnly}
+        </label>
         <button type="submit" className={primaryButton}>
           {c.search}
         </button>
@@ -134,6 +148,14 @@ export default async function EventsPage({
                       </span>
                     ) : null}
                     {e.held ? <span className="ml-2 text-sm">{c.held}</span> : null}
+                    {e.checkInFlags.length > 0 ? (
+                      <span
+                        className="ml-2 rounded-full border-2 border-[var(--tg-danger)] px-2 text-sm font-semibold"
+                        data-testid={`event-flags-${e.id}`}
+                      >
+                        {c.checkInFlags}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="p-2">{e.cityName}</td>
                   <td className="p-2">{c.types[e.type]}</td>

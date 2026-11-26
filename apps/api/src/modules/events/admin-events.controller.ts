@@ -144,4 +144,17 @@ export class AdminEventsController {
   ): Promise<void> {
     await this.admin.unfeature(me.userId, id, await this.scope.scope(me));
   }
+
+  /** Mark the plan's fake-headcount flags as reviewed (D-227). */
+  @Post(':id/check-in-flags/review')
+  @HttpCode(200)
+  @ApiZodResponse(200, AdminEventDetail)
+  async reviewCheckInFlags(
+    @CurrentUser() me: AuthPrincipal,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<Dto.AdminEventDetail> {
+    const scope = await this.scope.scope(me);
+    await this.admin.reviewCheckInFlags(me.userId, id, scope);
+    return this.admin.detail(id, scope);
+  }
 }

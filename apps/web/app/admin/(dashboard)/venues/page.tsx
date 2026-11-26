@@ -69,6 +69,15 @@ export default async function VenuesPage({
                 {v.neighbourhoodName ? ` · ${v.neighbourhoodName}` : ''} · {t.redemptions}:{' '}
                 {v.redemptions} · {v.hasStaffPin ? t.pinSet : t.noPin}
               </p>
+              {v.hasStaffPin ? (
+                <Link
+                  href={`/door/${v.id}`}
+                  className="min-h-11 self-start font-semibold underline"
+                  data-testid={`door-link-${v.id}`}
+                >
+                  {t.doorLink}
+                </Link>
+              ) : null}
               <form action={partnerAction} className="grid gap-3 sm:grid-cols-2">
                 <input type="hidden" name="id" value={v.id} />
                 <label

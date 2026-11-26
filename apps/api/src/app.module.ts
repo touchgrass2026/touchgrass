@@ -33,6 +33,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RemindersModule } from './modules/reminders/reminders.module.js';
 import { HostingModule } from './modules/hosting/hosting.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
+import { DoorModule } from './modules/door/door.module.js';
 import { PerksModule } from './modules/perks/perks.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { ChatModule } from './modules/chat/chat.module.js';
@@ -94,6 +95,7 @@ export class AppModule {
         PaymentsModule,
         HostingModule,
         PerksModule,
+        DoorModule,
         FeedbackModule,
         LoreModule,
         StoriesModule,

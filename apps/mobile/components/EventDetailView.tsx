@@ -16,6 +16,7 @@ import {
   capacityLabel,
   formatTime,
   formatWhen,
+  hiddenSpotNote,
   locationLabel,
   rsvpLabel,
 } from '../src/features/events/format';
@@ -293,9 +294,7 @@ export function EventDetailView({
           </IconText>
           {loc.kind === 'approximate' ? (
             <Text variant="caption" tone="muted" testID="event-location-hidden">
-              {loc.hiddenBy === 'approval'
-                ? t('events.privateSpotHidden')
-                : t('events.mysteryRevealsAt', { time: formatWhen(loc.revealsAt, i18n.language) })}
+              {hiddenSpotNote(t, loc, (iso) => formatWhen(iso, i18n.language))}
             </Text>
           ) : null}
           {open ? <DirectionsButton location={loc} /> : null}

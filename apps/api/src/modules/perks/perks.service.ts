@@ -28,13 +28,13 @@ import { perkRedemptions, venuePerks } from '../../infra/database/schema/index.j
 import { REDIS } from '../../infra/redis/redis.module.js';
 import type { EventViewerFacts } from '../events/event-access.service.js';
 import { EventAccessService } from '../events/event-access.service.js';
-import { holdsSeat } from '../events/event.policy.js';
+import { holdsSeat, isLocationRevealed } from '../events/event.policy.js';
 import { type EventCore, EventStore } from '../events/event-store.service.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
+import { STAFF_PIN_FAILURES_PER_HOUR, staffPinFailKey } from '../venues/staff-pin.js';
 import { VenuesService } from '../venues/venues.service.js';
 
 type PerkRow = typeof venuePerks.$inferSelect;
-const PIN_FAILURES_PER_HOUR = 10;
 const NameCursor = z.object({ name: z.string(), id: z.uuid() });
 
 export type PerkBlock = 'NOT_GOING' | 'GROUP_TOO_SMALL' | 'NOT_TODAY' | 'PERK_EXPIRED' | 'CLOSED';
@@ -117,7 +117,8 @@ export class PerksService {
     facts: EventViewerFacts,
     now: Date = new Date(),
   ): Promise<EventPerk[]> {
-    if (!core.venueId) return [];
+    // A perk names its venue, so it shows only to people who may see the spot (mystery, paid, D-227).
+    if (!core.venueId || !isLocationRevealed(facts, core, now)) return [];
     const info = (await this.venues.partnerInfo([core.venueId])).get(core.venueId);
     if (!info?.isPartner) return [];
     const perks = await this.activePerks(core.venueId);
@@ -153,7 +154,8 @@ export class PerksService {
   ): Promise<PerkPass> {
     const { core, facts } = await this.access.visibleOrThrow(userId, eventId);
     const [perk] = await this.db.select().from(venuePerks).where(eq(venuePerks.id, perkId));
-    if (!perk || perk.venueId !== core.venueId) throw AppError.notFound('Perk');
+    if (!perk || perk.venueId !== core.venueId || !isLocationRevealed(facts, core, now))
+      throw AppError.notFound('Perk');
     const info = (await this.venues.partnerInfo([perk.venueId])).get(perk.venueId);
     if (!info?.isPartner) throw AppError.notFound('Perk');
     const counts = await this.store.seatCounts(eventId);
@@ -292,9 +294,9 @@ export class PerksService {
     if (!row) throw AppError.notFound('Perk pass');
     const [perk] = await this.db.select().from(venuePerks).where(eq(venuePerks.id, row.perkId));
     if (!perk) throw AppError.notFound('Perk pass');
-    const lockKey = `perk-pin-fail:${perk.venueId}`;
+    const lockKey = staffPinFailKey(perk.venueId);
     const failures = Number((await this.redis.get(lockKey)) ?? 0);
-    if (failures >= PIN_FAILURES_PER_HOUR)
+    if (failures >= STAFF_PIN_FAILURES_PER_HOUR)
       throw new AppError('RATE_LIMITED', 'Too many wrong PINs. Try again in an hour.');
     if (!(await this.venues.checkStaffPin(perk.venueId, body.pin))) {
       await this.redis.multi().incr(lockKey).expire(lockKey, 3600).exec();

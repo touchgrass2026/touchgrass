@@ -113,3 +113,17 @@ export async function createCuratedAction(form: FormData): Promise<void> {
     redirect(`/admin/events/${created.id}`);
   });
 }
+
+/** A reviewer looked at the plan's check-in flags (D-227). */
+export async function reviewCheckInFlagsAction(form: FormData): Promise<void> {
+  await guarded(async () => {
+    const eventId = id.parse(form.get('id'));
+    await adminApi(
+      `/v1/admin/events/${eventId}/check-in-flags/review`,
+      AdminEventDetail,
+      { method: 'POST' },
+      `/admin/events/${eventId}`,
+    );
+    revalidatePath(`/admin/events/${eventId}`);
+  });
+}
