@@ -58,6 +58,14 @@ name: Plot a plan and manage it
 # The main button is pinned at the bottom, so it needs no scrolling.
 - tapOn:
     id: plot-submit
+# First-time hosts agree once to "No payments outside TouchGrass" (D-228); later runs skip it.
+- runFlow:
+    when:
+      visible:
+        id: host-rules-agree
+    commands:
+      - tapOn:
+          id: host-rules-agree
 - assertVisible: 'Maestro chai walk'
 - assertVisible: "You're hosting."
 - scrollUntilVisible:

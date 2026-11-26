@@ -31,6 +31,12 @@ name: Squad, requests and reporting
     direction: DOWN
 - tapOn: 'Report profile'
 - tapOn: 'Spam'
-- tapOn: 'Send report'
+# The money reasons (D-228) push the button below the fold on small screens.
+- scrollUntilVisible:
+    element:
+      id: report-submit
+    direction: DOWN
+- tapOn:
+    id: report-submit
 - assertVisible: 'Thanks. We are on it.'
 - tapOn: 'Done'
